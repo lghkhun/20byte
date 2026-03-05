@@ -38,6 +38,16 @@ No cross-organization access is allowed.
 | CS | Chat | Create | Attach | None |
 | Advertiser | None | None | None | None |
 
+Organization member management policy:
+
+- Owner can list members and assign roles: `ADMIN`, `CS`, `ADVERTISER`
+- Admin can list members and assign roles: `CS`, `ADVERTISER`
+- CS can access inbox/chat modules but cannot access onboarding/settings
+- Advertiser can access dashboard analytics only and cannot access inbox/chat modules
+- CS and Advertiser cannot list or manage organization members
+- Non-owner roles cannot modify existing `OWNER` or `ADMIN` memberships
+- System must prevent removing/demoting the last `OWNER` in an organization
+
 ---
 
 # 4. Webhook Security

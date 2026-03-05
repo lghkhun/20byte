@@ -199,10 +199,34 @@ Install dependencies:
 npm install
 ```
 
+Start local infrastructure (MySQL + Redis):
+
+```
+docker compose up -d
+```
+
+Default host ports:
+- MySQL: `3307` (container tetap `3306`)
+- Redis: `6379`
+
+If you want MySQL on `3306`, set `MYSQL_PORT=3306` in `.env`.
+
+Stop infrastructure:
+
+```
+docker compose down
+```
+
+Reset infrastructure volumes:
+
+```
+docker compose down -v
+```
+
 Setup database migrations:
 
 ```
-npx prisma migrate dev
+npx prisma migrate dev --name init_schema_v1
 ```
 
 Generate Prisma client:
@@ -297,6 +321,13 @@ DOC_10_DEPLOYMENT_AND_ENVIRONMENT.md
 DOC_11_TASKLIST.md  
 DOC_12_UI_DESIGN_SYSTEM.md  
 DOC_13_CODEX_MASTER_PROMPT.md  
+DOC_14_DATABASE_SCHEMA_V1.md  
+DOC_15_API_CONTRACT.md  
+DOC_16_EVENT_SYSTEM.md  
+DOC_17_STORAGE_STRATEGY.md  
+DOC_18_SECURITY_MODEL.md  
+DOC_19_BILLING_FUTURE.md  
+DOC_20_SUBSCRIPTION_MODEL.md  
 
 Codex reads these documents to understand the system architecture and development roadmap.
 

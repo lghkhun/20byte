@@ -66,6 +66,10 @@ NEXTAUTH_URL=
 WHATSAPP_ACCESS_TOKEN=
 WHATSAPP_PHONE_NUMBER_ID=
 WHATSAPP_WEBHOOK_VERIFY_TOKEN=
+WHATSAPP_APP_SECRET=
+WHATSAPP_TOKEN_ENCRYPTION_KEY=
+WHATSAPP_EMBEDDED_APP_ID=
+WHATSAPP_EMBEDDED_CONFIG_ID=
 
 ABLY_API_KEY=
 
@@ -126,6 +130,10 @@ WhatsApp Cloud API requires:
 WHATSAPP_ACCESS_TOKEN
 WHATSAPP_PHONE_NUMBER_ID
 WHATSAPP_WEBHOOK_VERIFY_TOKEN
+WHATSAPP_APP_SECRET
+WHATSAPP_TOKEN_ENCRYPTION_KEY
+WHATSAPP_EMBEDDED_APP_ID
+WHATSAPP_EMBEDDED_CONFIG_ID
 ```
 
 These values are obtained from:
@@ -133,6 +141,12 @@ These values are obtained from:
 Meta Developer Console.
 
 Access tokens must be encrypted in database storage.
+
+`WHATSAPP_TOKEN_ENCRYPTION_KEY` is used for encryption-at-rest in `WaAccount.accessTokenEnc`.
+
+`WHATSAPP_EMBEDDED_APP_ID` and `WHATSAPP_EMBEDDED_CONFIG_ID` are used by embedded-signup bootstrap API.
+
+`WHATSAPP_APP_SECRET` is required to verify `X-Hub-Signature-256` for webhook requests.
 
 ---
 

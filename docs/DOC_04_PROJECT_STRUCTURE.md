@@ -80,6 +80,7 @@ Structure example:
 
 ```
 /app
+  /register
   /login
   /onboarding
   /dashboard
@@ -92,6 +93,7 @@ Structure example:
 
 Explanation:
 
+register → registration page  
 login → authentication page  
 onboarding → WhatsApp connection wizard  
 dashboard → analytics view  

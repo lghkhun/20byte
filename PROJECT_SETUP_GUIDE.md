@@ -114,7 +114,10 @@ Edit `.env`.
 Minimum configuration:
 
 ```
-DATABASE_URL=mysql://root:password@localhost:3306/20byte
+MYSQL_PORT=3307
+REDIS_PORT=6379
+
+DATABASE_URL=mysql://root:password@localhost:3307/20byte
 
 REDIS_URL=redis://localhost:6379
 
@@ -146,8 +149,6 @@ docker-compose.yml
 Example configuration:
 
 ```
-version: "3.9"
-
 services:
 
   mysql:
@@ -158,7 +159,7 @@ services:
       MYSQL_ROOT_PASSWORD: password
       MYSQL_DATABASE: 20byte
     ports:
-      - "3306:3306"
+      - "${MYSQL_PORT:-3307}:3306"
     volumes:
       - mysql_data:/var/lib/mysql
 
@@ -167,7 +168,7 @@ services:
     container_name: 20byte_redis
     restart: always
     ports:
-      - "6379:6379"
+      - "${REDIS_PORT:-6379}:6379"
     volumes:
       - redis_data:/data
 
@@ -185,6 +186,10 @@ Start MySQL and Redis.
 ```
 docker compose up -d
 ```
+
+Note:
+- Default MySQL host port is `3307` to avoid conflict with local MySQL service on `3306`.
+- If `3306` is free and you prefer it, set `MYSQL_PORT=3306`.
 
 This command runs containers in the background.
 
@@ -375,7 +380,7 @@ Development follows a **documentation-driven approach**.
 
 Codex must read:
 
-DOC_00 → DOC_13
+DOC_00 → DOC_20
 
 before writing code.
 
