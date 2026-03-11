@@ -1,20 +1,9 @@
-import { NextRequest, NextResponse } from "next/server";
+import type { NextRequest } from "next/server";
 
+import { errorResponse, successResponse } from "@/lib/api/http";
 import { requireApiSession } from "@/lib/auth/middleware";
 import { createInboxRealtimeTokenRequest } from "@/server/services/realtimeService";
 import { ServiceError } from "@/server/services/serviceError";
-
-function errorResponse(status: number, code: string, message: string) {
-  return NextResponse.json(
-    {
-      error: {
-        code,
-        message
-      }
-    },
-    { status }
-  );
-}
 
 export async function GET(request: NextRequest) {
   const auth = requireApiSession(request);
@@ -26,15 +15,11 @@ export async function GET(request: NextRequest) {
 
   try {
     const tokenRequest = await createInboxRealtimeTokenRequest(auth.session.userId, orgId);
-
-    return NextResponse.json(
+    return successResponse(
       {
-        data: {
-          tokenRequest
-        },
-        meta: {}
+        tokenRequest
       },
-      { status: 200 }
+      200
     );
   } catch (error) {
     if (error instanceof ServiceError) {
@@ -44,4 +29,3 @@ export async function GET(request: NextRequest) {
     return errorResponse(500, "ABLY_TOKEN_REQUEST_FAILED", "Failed to create Ably token request.");
   }
 }
-

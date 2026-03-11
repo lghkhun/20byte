@@ -1,8 +1,9 @@
 import { buildChatMediaObjectKey } from "@/lib/storage/mediaObjectKey";
-import { uploadToR2 } from "@/lib/storage/r2Client";
-
-const IMAGE_AND_DOCUMENT_SIZE_LIMIT_BYTES = 10 * 1024 * 1024;
-const VIDEO_SIZE_LIMIT_BYTES = 50 * 1024 * 1024;
+import { uploadToR2 } from "@/lib/r2/client";
+import {
+  assertAllowedInboundFileSize,
+  assertAllowedInboundMimeType
+} from "@/server/services/storage/mediaPolicy";
 
 type WhatsAppMediaInfo = {
   url: string;
@@ -60,24 +61,6 @@ function parseWhatsAppErrorMessage(body: unknown): string | null {
   return typeof message === "string" ? message : null;
 }
 
-function maxSizeByMimeType(mimeType: string | undefined): number {
-  if (mimeType && mimeType.toLowerCase().startsWith("video/")) {
-    return VIDEO_SIZE_LIMIT_BYTES;
-  }
-
-  return IMAGE_AND_DOCUMENT_SIZE_LIMIT_BYTES;
-}
-
-function assertAllowedFileSize(mimeType: string | undefined, fileSize: number | undefined): void {
-  if (!fileSize || fileSize <= 0) {
-    return;
-  }
-
-  const maxSize = maxSizeByMimeType(mimeType);
-  if (fileSize > maxSize) {
-    throw new Error(`Media file exceeds size limit for ${mimeType ?? "unknown"} (${fileSize} bytes).`);
-  }
-}
 
 async function getWhatsAppMediaInfo(mediaId: string, accessToken: string): Promise<WhatsAppMediaInfo> {
   const response = await fetch(`https://graph.facebook.com/v20.0/${encodeURIComponent(mediaId)}`, {
@@ -144,11 +127,13 @@ export async function transferWhatsAppMediaToR2(input: TransferWhatsAppMediaInpu
 
   const mediaInfo = await getWhatsAppMediaInfo(mediaId, accessToken);
   const preferredMimeType = mediaInfo.mimeType ?? input.mimeType;
-  assertAllowedFileSize(preferredMimeType, mediaInfo.fileSize);
+  assertAllowedInboundMimeType(preferredMimeType);
+  assertAllowedInboundFileSize(preferredMimeType, mediaInfo.fileSize);
 
   const downloaded = await downloadWhatsAppMedia(mediaInfo.url, accessToken);
   const resolvedMimeType = downloaded.mimeType ?? preferredMimeType ?? null;
-  assertAllowedFileSize(resolvedMimeType ?? undefined, downloaded.fileSize);
+  assertAllowedInboundMimeType(resolvedMimeType ?? undefined);
+  assertAllowedInboundFileSize(resolvedMimeType ?? undefined, downloaded.fileSize);
 
   const objectKey = buildChatMediaObjectKey({
     orgId: input.orgId,
@@ -170,4 +155,3 @@ export async function transferWhatsAppMediaToR2(input: TransferWhatsAppMediaInpu
     fileSize: downloaded.fileSize ?? mediaInfo.fileSize ?? null
   };
 }
-

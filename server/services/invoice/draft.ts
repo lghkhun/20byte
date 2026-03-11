@@ -1,0 +1,238 @@
+import { InvoiceStatus } from "@prisma/client";
+
+import { prisma } from "@/lib/db/prisma";
+import { publishInvoiceCreatedEvent, publishInvoiceUpdatedEvent } from "@/lib/ably/publisher";
+import { writeAuditLogSafe } from "@/server/services/auditLogService";
+import { requireInvoiceAccess } from "@/server/services/invoice/access";
+import {
+  computeDraftInputDerived,
+  createDraftInvoiceWithRetry,
+  generateDraftPdfAndPersist,
+  listOrgBankAccounts,
+  loadDraftCustomerContext,
+  normalizeConversationId
+} from "@/server/services/invoice/draftInternals";
+import type {
+  CreateDraftInvoiceInput,
+  EditInvoiceItemsInput,
+  InvoiceDraftResult,
+  InvoiceItemsEditResult
+} from "@/server/services/invoice/invoiceTypes";
+import { normalize, normalizeCurrency, normalizeItems, normalizeMilestones } from "@/server/services/invoice/invoiceUtils";
+import { ServiceError } from "@/server/services/serviceError";
+
+export async function createDraftInvoice(input: CreateDraftInvoiceInput): Promise<InvoiceDraftResult> {
+  const orgId = normalize(input.orgId);
+  const customerId = normalize(input.customerId);
+  const conversationId = normalizeConversationId(input.conversationId);
+  const currency = normalizeCurrency(input.currency);
+
+  if (!orgId) {
+    throw new ServiceError(400, "MISSING_ORG_ID", "orgId is required.");
+  }
+
+  if (!customerId) {
+    throw new ServiceError(400, "MISSING_CUSTOMER_ID", "customerId is required.");
+  }
+
+  await requireInvoiceAccess(input.actorUserId, orgId);
+
+  const customer = await loadDraftCustomerContext({
+    orgId,
+    customerId,
+    conversationId: conversationId ?? undefined
+  });
+  const { normalizedItems, subtotalCents, totalCents, normalizedMilestones } = computeDraftInputDerived(input);
+  const bankAccounts = await listOrgBankAccounts(orgId);
+
+  const created = await createDraftInvoiceWithRetry({
+    orgId,
+    customerId,
+    conversationId: conversationId ?? undefined,
+    actorUserId: input.actorUserId,
+    kind: input.kind,
+    currency,
+    dueDate: input.dueDate ?? undefined,
+    bankAccounts,
+    normalizedItems,
+    normalizedMilestones,
+    subtotalCents,
+    totalCents
+  });
+
+  await generateDraftPdfAndPersist({
+    orgId,
+    created,
+    customer,
+    currency,
+    dueDate: input.dueDate ?? undefined,
+    normalizedItems,
+    bankAccounts
+  });
+
+  await writeAuditLogSafe({
+    orgId,
+    actorUserId: input.actorUserId,
+    action: "invoice.created",
+    entityType: "invoice",
+    entityId: created.id,
+    meta: {
+      invoiceNo: created.invoiceNo,
+      customerId,
+      conversationId: conversationId ?? null,
+      totalCents: created.totalCents
+    }
+  });
+
+  void publishInvoiceCreatedEvent({
+    orgId,
+    invoiceId: created.id,
+    status: created.status
+  });
+
+  return created;
+}
+
+export async function editInvoiceItems(input: EditInvoiceItemsInput): Promise<InvoiceItemsEditResult> {
+  const orgId = normalize(input.orgId);
+  const invoiceId = normalize(input.invoiceId);
+  if (!orgId) {
+    throw new ServiceError(400, "MISSING_ORG_ID", "orgId is required.");
+  }
+
+  if (!invoiceId) {
+    throw new ServiceError(400, "MISSING_INVOICE_ID", "invoiceId is required.");
+  }
+
+  await requireInvoiceAccess(input.actorUserId, orgId);
+
+  const invoice = await prisma.invoice.findFirst({
+    where: {
+      id: invoiceId,
+      orgId
+    },
+    select: {
+      id: true,
+      kind: true,
+      status: true,
+      invoiceNo: true
+    }
+  });
+
+  if (!invoice) {
+    throw new ServiceError(404, "INVOICE_NOT_FOUND", "Invoice does not exist.");
+  }
+
+  if (invoice.status !== InvoiceStatus.DRAFT) {
+    throw new ServiceError(400, "INVOICE_NOT_EDITABLE", "Only draft invoices can be edited.");
+  }
+
+  const normalizedItems = normalizeItems(input.items);
+  const subtotalCents = normalizedItems.reduce((accumulator, item) => accumulator + item.amountCents, 0);
+  const totalCents = subtotalCents;
+  const normalizedMilestones = normalizeMilestones(invoice.kind, totalCents, input.milestones);
+
+  const updated = await prisma.$transaction(async (tx) => {
+    await tx.invoiceItem.deleteMany({
+      where: {
+        orgId,
+        invoiceId: invoice.id
+      }
+    });
+
+    await tx.paymentMilestone.deleteMany({
+      where: {
+        orgId,
+        invoiceId: invoice.id
+      }
+    });
+
+    const invoiceInTx = await tx.invoice.findFirst({
+      where: {
+        id: invoice.id,
+        orgId
+      },
+      select: {
+        id: true
+      }
+    });
+
+    if (!invoiceInTx) {
+      throw new ServiceError(404, "INVOICE_NOT_FOUND", "Invoice does not exist.");
+    }
+
+    await tx.invoice.update({
+      where: {
+        id: invoiceInTx.id
+      },
+      data: {
+        subtotalCents,
+        totalCents,
+        items: {
+          create: normalizedItems.map((item) => ({
+            ...item,
+            orgId
+          }))
+        },
+        milestones: {
+          create: normalizedMilestones.map((milestone) => ({
+            ...milestone,
+            orgId
+          }))
+        }
+      }
+    });
+
+    const refreshed = await tx.invoice.findFirst({
+      where: {
+        id: invoice.id,
+        orgId
+      },
+      select: {
+        id: true,
+        invoiceNo: true,
+        subtotalCents: true,
+        totalCents: true,
+        milestones: {
+          select: {
+            id: true,
+            type: true,
+            amountCents: true,
+            dueDate: true,
+            status: true
+          },
+          orderBy: {
+            type: "asc"
+          }
+        },
+        updatedAt: true
+      }
+    });
+
+    if (!refreshed) {
+      throw new ServiceError(404, "INVOICE_NOT_FOUND", "Invoice does not exist.");
+    }
+
+    return refreshed;
+  });
+
+  await writeAuditLogSafe({
+    orgId,
+    actorUserId: input.actorUserId,
+    action: "invoice.items_updated",
+    entityType: "invoice",
+    entityId: updated.id,
+    meta: {
+      invoiceNo: updated.invoiceNo,
+      totalCents: updated.totalCents
+    }
+  });
+
+  void publishInvoiceUpdatedEvent({
+    orgId,
+    invoiceId: updated.id,
+    status: InvoiceStatus.DRAFT
+  });
+
+  return updated;
+}

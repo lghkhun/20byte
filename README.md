@@ -211,6 +211,16 @@ Default host ports:
 
 If you want MySQL on `3306`, set `MYSQL_PORT=3306` in `.env`.
 
+Start application containers for pre-deployment checks (web + worker):
+
+```
+docker compose --profile app up -d --build
+```
+
+Connection mode note:
+- Host mode (`npm run dev`): use `.env` URLs (`DATABASE_URL=mysql://root:password@localhost:3307/20byte`, `REDIS_URL=redis://localhost:6379`).
+- Container mode (`docker compose --profile app ...`): `web`/`worker` use internal Docker DNS (`mysql:3306`, `redis:6379`) from `docker-compose.yml`.
+
 Stop infrastructure:
 
 ```
@@ -223,6 +233,18 @@ Reset infrastructure volumes:
 docker compose down -v
 ```
 
+Run quality and compliance checks:
+
+```
+npm run quality:check
+```
+
+This command runs:
+- lint
+- typecheck
+- unit tests
+- cross-org write-path coverage audit
+
 Setup database migrations:
 
 ```
@@ -234,6 +256,25 @@ Generate Prisma client:
 ```
 npx prisma generate
 ```
+
+Seed dummy end-to-end data (org, members, inbox, invoices, proofs, shortlinks):
+
+```
+npm run db:seed
+```
+
+Seed scope includes:
+- onboarding/org setup (`Org`, `OrgPlan`, `OrgMember`, bank accounts, `WaAccount`)
+- inbox + CRM (`Customer`, `Conversation`, `Message` for text/image/video/audio/template/system, tags, notes)
+- invoice lifecycle (`DRAFT`, `SENT`, `PARTIALLY_PAID`, `PAID`, `VOID` + milestones/items/proofs)
+- CTWA attribution (`Shortlink`, enabled/disabled links, `ShortlinkClick`)
+- audit trail + catalog (`AuditLog`, `ServiceCatalogItem`)
+
+Seed login accounts:
+- `owner@seed.20byte.local` / `DemoPass123!`
+- `admin@seed.20byte.local` / `DemoPass123!`
+- `cs@seed.20byte.local` / `DemoPass123!`
+- `advertiser@seed.20byte.local` / `DemoPass123!`
 
 Run development server:
 
@@ -261,7 +302,13 @@ The worker processes background tasks such as:
 Start the worker:
 
 ```
-node worker/index.ts
+npm run worker:start
+```
+
+Alternative command:
+
+```
+tsx worker/main.ts
 ```
 
 ---
@@ -281,6 +328,11 @@ NEXTAUTH_URL=
 WHATSAPP_ACCESS_TOKEN=
 WHATSAPP_PHONE_NUMBER_ID=
 WHATSAPP_WEBHOOK_VERIFY_TOKEN=
+WHATSAPP_APP_SECRET=
+WHATSAPP_TOKEN_ENCRYPTION_KEY=
+WHATSAPP_EMBEDDED_APP_ID=
+WHATSAPP_EMBEDDED_CONFIG_ID=
+WHATSAPP_MOCK_MODE=true
 
 ABLY_API_KEY=
 
@@ -296,6 +348,11 @@ APP_URL=
 Never commit `.env` to git.
 
 Use `.env.example` instead.
+
+Notes:
+
+- `WHATSAPP_ACCESS_TOKEN` and `WHATSAPP_PHONE_NUMBER_ID` are placeholder values for local/dev.
+- Active runtime credentials are stored encrypted in `WaAccount` after Embedded Signup.
 
 ---
 

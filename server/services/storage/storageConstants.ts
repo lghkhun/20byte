@@ -1,0 +1,3 @@
+export const DEFAULT_STORAGE_QUOTA_MB = 2048;
+export const DEFAULT_RETENTION_DAYS = 90;
+export const CLEANUP_BATCH_SIZE = 200;

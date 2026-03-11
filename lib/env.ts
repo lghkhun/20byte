@@ -9,6 +9,7 @@ type OptionalEnvKey =
   | "MYSQL_PORT"
   | "REDIS_PORT"
   | "ABLY_API_KEY"
+  | "SHORTLINK_BASE_URL"
   | "R2_ACCOUNT_ID"
   | "R2_ACCESS_KEY_ID"
   | "R2_SECRET_ACCESS_KEY"
@@ -20,7 +21,8 @@ type OptionalEnvKey =
   | "WHATSAPP_APP_SECRET"
   | "WHATSAPP_TOKEN_ENCRYPTION_KEY"
   | "WHATSAPP_EMBEDDED_APP_ID"
-  | "WHATSAPP_EMBEDDED_CONFIG_ID";
+  | "WHATSAPP_EMBEDDED_CONFIG_ID"
+  | "WHATSAPP_MOCK_MODE";
 
 export type AppEnv = Record<RequiredEnvKey, string> &
   Partial<Record<OptionalEnvKey, string>> & {
@@ -40,6 +42,7 @@ const OPTIONAL_ENV_KEYS: OptionalEnvKey[] = [
   "MYSQL_PORT",
   "REDIS_PORT",
   "ABLY_API_KEY",
+  "SHORTLINK_BASE_URL",
   "R2_ACCOUNT_ID",
   "R2_ACCESS_KEY_ID",
   "R2_SECRET_ACCESS_KEY",
@@ -51,7 +54,8 @@ const OPTIONAL_ENV_KEYS: OptionalEnvKey[] = [
   "WHATSAPP_APP_SECRET",
   "WHATSAPP_TOKEN_ENCRYPTION_KEY",
   "WHATSAPP_EMBEDDED_APP_ID",
-  "WHATSAPP_EMBEDDED_CONFIG_ID"
+  "WHATSAPP_EMBEDDED_CONFIG_ID",
+  "WHATSAPP_MOCK_MODE"
 ];
 
 let cachedEnv: AppEnv | null = null;

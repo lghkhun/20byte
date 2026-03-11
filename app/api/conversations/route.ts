@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from "next/server";
+import { type NextRequest, NextResponse } from "next/server";
 import { ConversationStatus } from "@prisma/client";
 
 import { requireApiSession } from "@/lib/auth/middleware";

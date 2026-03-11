@@ -1,6 +1,9 @@
 import { MessageType } from "@prisma/client";
 
+import { extractInvisibleAttributionMarker } from "@/lib/ctwa/invisibleMarker";
 import { prisma } from "@/lib/db/prisma";
+import { acquireIdempotencyLock } from "@/lib/redis/idempotency";
+import { normalizePossibleE164 } from "@/lib/whatsapp/e164";
 import { enqueueWhatsAppMediaDownloadJob } from "@/server/queues/mediaQueue";
 import { storeInboundMessage } from "@/server/services/messageService";
 import { ServiceError } from "@/server/services/serviceError";
@@ -104,12 +107,21 @@ type ParsedInboundMessage = {
   waMessageId: string;
   customerPhoneE164: string;
   customerDisplayName?: string;
+  shortlinkCode?: string;
   type: MessageType;
   text?: string;
   mediaId?: string;
   mimeType?: string;
   fileName?: string;
   fileSize?: number;
+};
+
+type InboundMessageStoreResult = Awaited<ReturnType<typeof storeInboundMessage>>;
+
+type ProcessInboundMessagesDeps = {
+  acquireLock: (key: string, ttlSeconds: number) => Promise<boolean>;
+  storeInbound: (message: ParsedInboundMessage) => Promise<InboundMessageStoreResult>;
+  enqueueMediaDownload: (messageId: string) => Promise<void>;
 };
 
 function mapWebhookMessageType(message: WebhookInboundMessage): MessageType | null {
@@ -135,7 +147,7 @@ function toInboundMessage(
   contactByWaId: Map<string, string | undefined>
 ): ParsedInboundMessage | null {
   const waMessageId = message.id?.trim();
-  const customerPhoneE164 = message.from?.trim();
+  const customerPhoneE164 = normalizePossibleE164(message.from);
   const mappedType = mapWebhookMessageType(message);
 
   if (!waMessageId || !customerPhoneE164 || !mappedType) {
@@ -144,13 +156,15 @@ function toInboundMessage(
 
   const customerDisplayName = contactByWaId.get(customerPhoneE164);
   if (mappedType === MessageType.TEXT) {
+    const marker = extractInvisibleAttributionMarker(message.text?.body);
     return {
       orgId,
       waMessageId,
       customerPhoneE164,
       customerDisplayName,
+      shortlinkCode: marker.shortlinkCode,
       type: MessageType.TEXT,
-      text: message.text?.body
+      text: marker.cleanText
     };
   }
 
@@ -218,7 +232,7 @@ async function extractInboundMessages(payload: WebhookPayload): Promise<ParsedIn
         continue;
       }
 
-      const waAccount = await prisma.waAccount.findFirst({
+      const waAccount = await prisma.waAccount.findUnique({
         where: {
           phoneNumberId
         },
@@ -233,7 +247,7 @@ async function extractInboundMessages(payload: WebhookPayload): Promise<ParsedIn
 
       const contactByWaId = new Map<string, string | undefined>();
       for (const contact of change.value?.contacts ?? []) {
-        const waId = contact.wa_id?.trim();
+        const waId = normalizePossibleE164(contact.wa_id);
         if (!waId) {
           continue;
         }
@@ -253,11 +267,22 @@ async function extractInboundMessages(payload: WebhookPayload): Promise<ParsedIn
   return messages;
 }
 
-export async function processWhatsAppWebhookPayload(rawPayload: unknown): Promise<WebhookProcessResult> {
-  const payload = parseWebhookPayload(rawPayload);
-  assertWhatsAppWebhookPayload(payload);
+async function enqueueMediaDownloadIfFirst(messageId: string): Promise<void> {
+  const lockKey = `idempotency:whatsapp:media-enqueue:${messageId}`;
+  const acquired = await acquireIdempotencyLock(lockKey, 60 * 60 * 24);
+  if (!acquired) {
+    return;
+  }
 
-  const inboundMessages = await extractInboundMessages(payload);
+  await enqueueWhatsAppMediaDownloadJob({
+    messageId
+  });
+}
+
+export async function processInboundMessagesWithDeps(
+  inboundMessages: ParsedInboundMessage[],
+  deps: ProcessInboundMessagesDeps
+): Promise<WebhookProcessResult> {
   if (inboundMessages.length === 0) {
     return {
       receivedMessageCount: 0,
@@ -274,25 +299,19 @@ export async function processWhatsAppWebhookPayload(rawPayload: unknown): Promis
   let ignoredMessageCount = 0;
 
   for (const inboundMessage of inboundMessages) {
-    const result = await storeInboundMessage({
-      orgId: inboundMessage.orgId,
-      customerPhoneE164: inboundMessage.customerPhoneE164,
-      customerDisplayName: inboundMessage.customerDisplayName,
-      waMessageId: inboundMessage.waMessageId,
-      type: inboundMessage.type,
-      text: inboundMessage.text,
-      mediaId: inboundMessage.mediaId,
-      mimeType: inboundMessage.mimeType,
-      fileName: inboundMessage.fileName,
-      fileSize: inboundMessage.fileSize
-    });
+    const lockKey = `idempotency:whatsapp:inbound:${inboundMessage.waMessageId}`;
+    const acquired = await deps.acquireLock(lockKey, 60 * 60 * 24);
+    if (!acquired) {
+      duplicateMessageIds.push(inboundMessage.waMessageId);
+      continue;
+    }
+
+    const result = await deps.storeInbound(inboundMessage);
 
     if (result.duplicate) {
       duplicateMessageIds.push(inboundMessage.waMessageId);
       if (inboundMessage.mediaId && result.messageId) {
-        await enqueueWhatsAppMediaDownloadJob({
-          messageId: result.messageId
-        });
+        await deps.enqueueMediaDownload(result.messageId);
       }
       continue;
     }
@@ -300,9 +319,7 @@ export async function processWhatsAppWebhookPayload(rawPayload: unknown): Promis
     if (result.stored) {
       acceptedMessageIds.push(inboundMessage.waMessageId);
       if (inboundMessage.mediaId && result.messageId) {
-        await enqueueWhatsAppMediaDownloadJob({
-          messageId: result.messageId
-        });
+        await deps.enqueueMediaDownload(result.messageId);
       }
       continue;
     }
@@ -318,4 +335,29 @@ export async function processWhatsAppWebhookPayload(rawPayload: unknown): Promis
     acceptedMessageIds,
     duplicateMessageIds
   };
+}
+
+export async function processWhatsAppWebhookPayload(rawPayload: unknown): Promise<WebhookProcessResult> {
+  const payload = parseWebhookPayload(rawPayload);
+  assertWhatsAppWebhookPayload(payload);
+
+  const inboundMessages = await extractInboundMessages(payload);
+  return processInboundMessagesWithDeps(inboundMessages, {
+    acquireLock: acquireIdempotencyLock,
+    storeInbound: async (inboundMessage) =>
+      storeInboundMessage({
+        orgId: inboundMessage.orgId,
+        customerPhoneE164: inboundMessage.customerPhoneE164,
+        customerDisplayName: inboundMessage.customerDisplayName,
+        shortlinkCode: inboundMessage.shortlinkCode,
+        waMessageId: inboundMessage.waMessageId,
+        type: inboundMessage.type,
+        text: inboundMessage.text,
+        mediaId: inboundMessage.mediaId,
+        mimeType: inboundMessage.mimeType,
+        fileName: inboundMessage.fileName,
+        fileSize: inboundMessage.fileSize
+      }),
+    enqueueMediaDownload: enqueueMediaDownloadIfFirst
+  });
 }

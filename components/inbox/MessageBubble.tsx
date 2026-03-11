@@ -1,153 +1,44 @@
 "use client";
 
-import { useState } from "react";
-import Image from "next/image";
-
-import { MessageItem } from "@/components/inbox/types";
+import { MediaContent } from "@/components/inbox/bubble/MediaContent";
+import { formatTime, renderMediaLabel } from "@/components/inbox/bubble/utils";
+import type { MessageItem } from "@/components/inbox/types";
+import { Button } from "@/components/ui/button";
 
 type MessageBubbleProps = {
+  density?: "compact" | "comfy";
+  isEmphasized?: boolean;
   message: MessageItem;
+  onSelectProofMessage?: (messageId: string) => void;
+  onRetryOutboundMessage?: (messageId: string) => void;
 };
 
-function formatTime(value: string): string {
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) {
-    return "-";
-  }
-
-  return new Intl.DateTimeFormat("en-US", {
-    hour: "2-digit",
-    minute: "2-digit"
-  }).format(date);
-}
-
-function renderMediaLabel(message: MessageItem): string | null {
-  if (message.type === "IMAGE") {
-    return "Image";
-  }
-
-  if (message.type === "VIDEO") {
-    return "Video";
-  }
-
-  if (message.type === "AUDIO") {
-    return "Audio";
-  }
-
-  if (message.type === "DOCUMENT") {
-    return message.fileName ? `Document: ${message.fileName}` : "Document";
-  }
-
-  return null;
-}
-
-function ImagePreview({ message }: { message: MessageItem }) {
-  const [failed, setFailed] = useState(false);
-  if (!message.mediaUrl || failed) {
-    return (
-      <div className="mb-2 rounded-lg border border-border bg-background/40 px-3 py-2 text-xs text-muted-foreground">
-        Image unavailable
-      </div>
-    );
-  }
-
-  return (
-    <Image
-      src={message.mediaUrl}
-      alt={message.fileName ?? "Image attachment"}
-      width={640}
-      height={480}
-      unoptimized
-      className="mb-2 max-h-64 w-full rounded-lg border border-border object-cover"
-      onError={() => setFailed(true)}
-    />
-  );
-}
-
-function VideoPreview({ message }: { message: MessageItem }) {
-  const [failed, setFailed] = useState(false);
-  if (!message.mediaUrl || failed) {
-    return (
-      <div className="mb-2 rounded-lg border border-border bg-background/40 px-3 py-2 text-xs text-muted-foreground">
-        Video unavailable
-      </div>
-    );
-  }
-
-  return (
-    <video
-      controls
-      preload="metadata"
-      className="mb-2 max-h-72 w-full rounded-lg border border-border bg-black/50"
-      onError={() => setFailed(true)}
-    >
-      <source src={message.mediaUrl} type={message.mimeType ?? undefined} />
-      Your browser does not support video playback.
-    </video>
-  );
-}
-
-function AudioPreview({ message }: { message: MessageItem }) {
-  const [failed, setFailed] = useState(false);
-  if (!message.mediaUrl || failed) {
-    return (
-      <div className="mb-2 rounded-lg border border-border bg-background/40 px-3 py-2 text-xs text-muted-foreground">
-        Audio unavailable
-      </div>
-    );
-  }
-
-  return (
-    <audio
-      controls
-      preload="metadata"
-      className="mb-2 w-full rounded-lg border border-border bg-background/50"
-      onError={() => setFailed(true)}
-    >
-      <source src={message.mediaUrl} type={message.mimeType ?? undefined} />
-      Your browser does not support audio playback.
-    </audio>
-  );
-}
-
-function DocumentDownload({ message }: { message: MessageItem }) {
-  if (!message.mediaUrl) {
-    return (
-      <div className="mb-2 rounded-lg border border-border bg-background/40 px-3 py-2 text-xs text-muted-foreground">
-        Document unavailable
-      </div>
-    );
-  }
-
-  return (
-    <a
-      href={message.mediaUrl}
-      target="_blank"
-      rel="noreferrer"
-      download={message.fileName ?? undefined}
-      className="mb-2 inline-flex rounded-md border border-border bg-background/60 px-3 py-2 text-xs font-medium text-foreground hover:bg-background"
-    >
-      Download {message.fileName ?? "document"}
-    </a>
-  );
-}
-
-export function MessageBubble({ message }: MessageBubbleProps) {
+export function MessageBubble({
+  density = "comfy",
+  isEmphasized = false,
+  message,
+  onSelectProofMessage,
+  onRetryOutboundMessage
+}: MessageBubbleProps) {
   const isOutbound = message.direction === "OUTBOUND";
   const mediaLabel = renderMediaLabel(message);
+  const canUseAsProof =
+    !isOutbound && (message.type === "IMAGE" || message.type === "DOCUMENT") && Boolean(message.mediaUrl) && Boolean(onSelectProofMessage);
 
   return (
     <div className={isOutbound ? "flex justify-end" : "flex justify-start"}>
       <article
         className={
           isOutbound
-            ? "max-w-[78%] rounded-2xl border border-emerald-500/40 bg-emerald-500/10 px-3 py-2"
-            : "max-w-[78%] rounded-2xl border border-border bg-background/70 px-3 py-2"
+            ? `max-w-[90%] sm:max-w-[78%] rounded-2xl rounded-br-md border border-primary/35 bg-primary/[0.14] ${
+                density === "compact" ? "px-3 py-2.5" : "px-4 py-3"
+              } ${isEmphasized ? "inbox-pop-in" : ""} shadow-sm transition-all duration-150`
+            : `max-w-[90%] sm:max-w-[78%] rounded-2xl rounded-bl-md border border-border/80 bg-card/95 ${
+                density === "compact" ? "px-3 py-2.5" : "px-4 py-3"
+              } ${isEmphasized ? "inbox-pop-in" : ""} shadow-sm transition-all duration-150`
         }
       >
-        {message.type === "SYSTEM" ? (
-          <p className="mb-1 text-[11px] uppercase tracking-wide text-info">System</p>
-        ) : null}
+        {message.type === "SYSTEM" ? <p className="mb-1 text-[11px] uppercase tracking-wide text-primary">System</p> : null}
 
         {message.templateName ? (
           <p className="mb-1 text-xs text-muted-foreground">
@@ -156,25 +47,63 @@ export function MessageBubble({ message }: MessageBubbleProps) {
           </p>
         ) : null}
 
-        {message.type === "IMAGE" ? <ImagePreview message={message} /> : null}
-        {message.type === "VIDEO" ? <VideoPreview message={message} /> : null}
-        {message.type === "AUDIO" ? <AudioPreview message={message} /> : null}
-        {message.type === "DOCUMENT" ? <DocumentDownload message={message} /> : null}
+        {isOutbound && message.sendStatus ? (
+          <div className="mb-1">
+            <span className="inline-flex rounded-full border border-border/70 bg-background/60 px-2 py-0.5 text-[11px] text-muted-foreground">
+              {message.sendStatus}
+              {message.sendAttemptCount > 0 ? ` • attempt ${message.sendAttemptCount}` : ""}
+            </span>
+          </div>
+        ) : null}
 
-        {mediaLabel &&
-        message.type !== "IMAGE" &&
-        message.type !== "VIDEO" &&
-        message.type !== "AUDIO" &&
-        message.type !== "DOCUMENT" ? (
+        <MediaContent message={message} />
+
+        {mediaLabel && message.type !== "IMAGE" && message.type !== "VIDEO" && message.type !== "AUDIO" && message.type !== "DOCUMENT" ? (
           <p className="mb-1 text-xs text-muted-foreground">
             {mediaLabel}
             {message.mediaUrl ? ` - ${message.mediaUrl}` : ""}
           </p>
         ) : null}
 
-        {message.text ? <p className="text-sm text-foreground whitespace-pre-wrap">{message.text}</p> : null}
+        {message.text ? <p className="whitespace-pre-wrap text-sm leading-relaxed text-foreground">{message.text}</p> : null}
 
-        <p className="mt-1 text-[11px] text-muted-foreground">{formatTime(message.createdAt)}</p>
+        {canUseAsProof ? (
+          <div className="mt-2">
+            <Button
+              type="button"
+              variant="secondary"
+              size="sm"
+              onClick={() => onSelectProofMessage?.(message.id)}
+              className="h-7 rounded-md border border-border/70 px-2.5 text-[11px]"
+            >
+              Use as payment proof
+            </Button>
+          </div>
+        ) : null}
+
+        {isOutbound && message.sendStatus === "FAILED" ? (
+          <div className="mt-2 space-y-1">
+            <p className="rounded-md border border-destructive/30 bg-destructive/10 px-2 py-1 text-[11px] text-destructive">
+              {message.sendError ?? "Failed to send message."}
+            </p>
+            {message.retryable ? (
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                onClick={() => onRetryOutboundMessage?.(message.id)}
+                className="h-7 rounded-md border-destructive/40 px-2.5 text-[11px] text-destructive hover:bg-destructive/10"
+              >
+                Retry send
+              </Button>
+            ) : null}
+          </div>
+        ) : null}
+
+        <div className="mt-1 flex items-center justify-end gap-1 text-[11px] text-muted-foreground">
+          <span>{formatTime(message.createdAt)}</span>
+          {isOutbound ? <span className="font-semibold text-emerald-500">✓✓</span> : null}
+        </div>
       </article>
     </div>
   );

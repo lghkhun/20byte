@@ -1,17 +1,10 @@
-import { processWhatsAppWebhookJob } from "@/server/jobs/processWhatsAppWebhookJob";
+import { processWhatsAppWebhookJob } from "@/worker/jobs/processWhatsAppWebhookJob";
 import { dequeueWhatsAppWebhookJob } from "@/server/queues/webhookQueue";
+import { withRetry } from "@/lib/retry/withRetry";
 
 let running = false;
 
 const IDLE_TIMEOUT_SECONDS = 5;
-const RETRY_DELAY_MS = 1000;
-
-function delay(ms: number): Promise<void> {
-  return new Promise((resolve) => {
-    setTimeout(resolve, ms);
-  });
-}
-
 export async function startWhatsAppWebhookProcessor(): Promise<void> {
   if (running) {
     return;
@@ -22,16 +15,24 @@ export async function startWhatsAppWebhookProcessor(): Promise<void> {
 
   while (running) {
     try {
-      const job = await dequeueWhatsAppWebhookJob(IDLE_TIMEOUT_SECONDS);
+      const job = await withRetry(
+        "whatsapp-webhook-dequeue",
+        () => dequeueWhatsAppWebhookJob(IDLE_TIMEOUT_SECONDS),
+        { retries: 3, baseDelayMs: 500, factor: 2, jitter: true }
+      );
       if (!job) {
         continue;
       }
 
-      await processWhatsAppWebhookJob(job.payload);
+      await withRetry("whatsapp-webhook-process", () => processWhatsAppWebhookJob(job.payload), {
+        retries: 3,
+        baseDelayMs: 1000,
+        factor: 2,
+        jitter: true
+      });
     } catch (error) {
       const message = error instanceof Error ? error.message : "Unknown error";
       console.error(`[worker] whatsapp webhook processor error: ${message}`);
-      await delay(RETRY_DELAY_MS);
     }
   }
 }

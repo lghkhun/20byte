@@ -1,353 +1,353 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 
 import { ChatWindow } from "@/components/inbox/ChatWindow";
-import { ConversationHeader } from "@/components/inbox/ConversationHeader";
+import { AttachProofShortcutModal } from "@/components/inbox/AttachProofShortcutModal";
 import { ConversationListPanel } from "@/components/inbox/ConversationListPanel";
-import { ConversationItem, ConversationListFilter, MessageItem } from "@/components/inbox/types";
-import { subscribeToOrgMessageEvents } from "@/lib/realtime/ablyClient";
-
-type OrgSummary = {
-  id: string;
-  name: string;
-  role: string;
-};
-
-type ListConversationsResponse = {
-  data?: {
-    conversations?: ConversationItem[];
-  };
-  meta?: {
-    page?: number;
-    limit?: number;
-    total?: number;
-  };
-  error?: {
-    message?: string;
-  };
-};
-
-type ConversationFetchResponse = {
-  data?: {
-    conversation?: ConversationItem;
-  };
-  error?: {
-    message?: string;
-  };
-};
-
-type OrganizationsResponse = {
-  data?: {
-    organizations?: OrgSummary[];
-  };
-  error?: {
-    message?: string;
-  };
-};
-
-type ListMessagesResponse = {
-  data?: {
-    messages?: MessageItem[];
-  };
-  meta?: {
-    page?: number;
-    limit?: number;
-    total?: number;
-  };
-  error?: {
-    message?: string;
-  };
-};
-
-type SendMessageResponse = {
-  data?: {
-    message?: {
-      messageId: string;
-    };
-  };
-  error?: {
-    message?: string;
-  };
-};
+import { CrmContextPanel } from "@/components/inbox/CrmContextPanel";
+import { QuickReplyModal } from "@/components/inbox/QuickReplyModal";
+import { ShortcutHelpModal } from "@/components/inbox/ShortcutHelpModal";
+import { useInboxSelectedConversationPersistence } from "@/components/inbox/workspace/useInboxSelectedConversationPersistence";
+import { useInboxWorkspaceController } from "@/components/inbox/workspace/useInboxWorkspaceController";
+import { MobileCrmOverlay } from "@/components/inbox/workspace/MobileCrmOverlay";
+import { useInboxWorkspacePreferences } from "@/components/inbox/workspace/useInboxWorkspacePreferences";
+import { InvoiceDrawer } from "@/components/invoices/InvoiceDrawer";
+import { Button } from "@/components/ui/button";
+import { EmptyStatePanel, ErrorStatePanel } from "@/components/ui/state-panels";
+import { Minimize2, PanelRightClose, PanelRightOpen } from "lucide-react";
 
 export function InboxWorkspace() {
-  const [orgId, setOrgId] = useState<string | null>(null);
-  const [filter, setFilter] = useState<ConversationListFilter>("UNASSIGNED");
-  const [conversations, setConversations] = useState<ConversationItem[]>([]);
-  const [selectedConversationId, setSelectedConversationId] = useState<string | null>(null);
-  const [selectedConversation, setSelectedConversation] = useState<ConversationItem | null>(null);
-  const [isLoadingList, setIsLoadingList] = useState(false);
-  const [isLoadingConversation, setIsLoadingConversation] = useState(false);
-  const [messages, setMessages] = useState<MessageItem[]>([]);
-  const [isLoadingMessages, setIsLoadingMessages] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [messageError, setMessageError] = useState<string | null>(null);
-  const [metaTotal, setMetaTotal] = useState<number>(0);
+  const { density, isCrmPanelVisible, isFocusMode, setIsFocusMode } = useInboxWorkspacePreferences();
+  const {
+    orgId,
+    error,
+    isLoadingList,
+    conversations,
+    selectedConversationId,
+    setSelectedConversationId,
+    filter,
+    statusFilter,
+    setFilter,
+    setStatusFilter,
+    loadConversation,
+    loadConversations,
+    selectedConversation,
+    isUpdatingConversationStatus,
+    messages,
+    isLoadingMessages,
+    messageError,
+    sendTextMessage,
+    sendAttachmentMessage,
+    sendTemplateMessage,
+    toggleSelectedConversationStatus,
+    retryOutboundMessage,
+    setSelectedProofMessageId,
+    setProofFeedback,
+    activeOrgRole,
+    isLoadingConversation,
+    isAssigning,
+    assignError,
+    tags,
+    notes,
+    crmInvoices,
+    crmActivity,
+    isLoadingCrm,
+    crmError,
+    createTagForCustomer,
+    assignTagForCustomer,
+    createCustomerNoteEntry,
+    selectedProofMessageId,
+    isAttachingProof,
+    proofFeedback,
+    attachSelectedMessageAsProof,
+    openInvoiceDrawer,
+    assignSelectedConversationToMe,
+    sendInvoiceFromPanel,
+    markInvoicePaidFromPanel,
+    isSendingInvoice,
+    isMarkingInvoicePaid,
+    invoiceActionError,
+    invoiceActionSuccess,
+    isQuickReplyModalOpen,
+    setIsQuickReplyModalOpen,
+    sendQuickReply,
+    isShortcutHelpOpen,
+    setIsShortcutHelpOpen,
+    isProofShortcutModalOpen,
+    setIsProofShortcutModalOpen,
+    isInvoiceDrawerOpen,
+    setIsInvoiceDrawerOpen
+  } = useInboxWorkspaceController();
 
-  const loadMessages = useCallback(
-    async (conversationId: string) => {
-      if (!orgId) {
-        return;
-      }
+  useInboxSelectedConversationPersistence({
+    orgId,
+    selectedConversationId,
+    conversations,
+    setSelectedConversationId,
+    loadConversation
+  });
 
-      setIsLoadingMessages(true);
-      setMessageError(null);
-      try {
-        const response = await fetch(
-          `/api/messages?orgId=${encodeURIComponent(orgId)}&conversationId=${encodeURIComponent(conversationId)}&page=1&limit=30`
-        );
-        const payload = (await response.json().catch(() => null)) as ListMessagesResponse | null;
-        if (!response.ok) {
-          setMessageError(payload?.error?.message ?? "Failed to load messages.");
-          return;
-        }
-
-        setMessages(payload?.data?.messages ?? []);
-      } catch {
-        setMessageError("Network error while loading messages.");
-      } finally {
-        setIsLoadingMessages(false);
-      }
-    },
-    [orgId]
-  );
-
-  const loadConversation = useCallback(
-    async (conversationId: string) => {
-      if (!orgId) {
-        return;
-      }
-
-      setIsLoadingConversation(true);
-      setError(null);
-      try {
-        const response = await fetch(`/api/conversations/${encodeURIComponent(conversationId)}?orgId=${encodeURIComponent(orgId)}`);
-        const payload = (await response.json().catch(() => null)) as ConversationFetchResponse | null;
-        if (!response.ok) {
-          setError(payload?.error?.message ?? "Failed to fetch conversation.");
-          return;
-        }
-
-        setSelectedConversation(payload?.data?.conversation ?? null);
-        await loadMessages(conversationId);
-      } catch {
-        setError("Network error while fetching conversation.");
-      } finally {
-        setIsLoadingConversation(false);
-      }
-    },
-    [loadMessages, orgId]
-  );
-
-  const loadConversations = useCallback(async () => {
-    if (!orgId) {
+  const [mobilePane, setMobilePane] = useState<"list" | "chat">("list");
+  const [isMobileCrmOpen, setIsMobileCrmOpen] = useState(false);
+  useEffect(() => {
+    if (selectedConversationId) {
+      setMobilePane("chat");
       return;
     }
 
-    setIsLoadingList(true);
-    setError(null);
-    try {
-      const response = await fetch(
-        `/api/conversations?orgId=${encodeURIComponent(orgId)}&filter=${encodeURIComponent(filter)}&status=OPEN&page=1&limit=20`
-      );
-      const payload = (await response.json().catch(() => null)) as ListConversationsResponse | null;
-      if (!response.ok) {
-        setError(payload?.error?.message ?? "Failed to load conversations.");
-        return;
-      }
-
-      const rows = payload?.data?.conversations ?? [];
-      setConversations(rows);
-      setMetaTotal(payload?.meta?.total ?? rows.length);
-
-      if (rows.length === 0) {
-        setSelectedConversationId(null);
-        setSelectedConversation(null);
-        setMessages([]);
-        return;
-      }
-
-      const nextConversationId = selectedConversationId && rows.some((row) => row.id === selectedConversationId)
-        ? selectedConversationId
-        : rows[0].id;
-      setSelectedConversationId(nextConversationId);
-      await loadConversation(nextConversationId);
-    } catch {
-      setError("Network error while loading conversations.");
-    } finally {
-      setIsLoadingList(false);
-    }
-  }, [filter, loadConversation, orgId, selectedConversationId]);
-
+    setMobilePane("list");
+  }, [selectedConversationId]);
   useEffect(() => {
-    let active = true;
-
-    const loadOrganizations = async () => {
-      try {
-        const response = await fetch("/api/orgs");
-        const payload = (await response.json().catch(() => null)) as OrganizationsResponse | null;
-        if (!response.ok) {
-          if (active) {
-            setError(payload?.error?.message ?? "Failed to load organizations.");
-          }
-          return;
-        }
-
-        const orgs = payload?.data?.organizations ?? [];
-        if (active) {
-          setOrgId(orgs[0]?.id ?? null);
-        }
-      } catch {
-        if (active) {
-          setError("Network error while loading organizations.");
-        }
-      }
-    };
-
-    void loadOrganizations();
-    return () => {
-      active = false;
-    };
-  }, []);
-
-  useEffect(() => {
-    void loadConversations();
-  }, [loadConversations]);
-
-  useEffect(() => {
-    if (!orgId) {
-      return;
+    if (mobilePane !== "chat") {
+      setIsMobileCrmOpen(false);
     }
+  }, [mobilePane]);
 
-    let active = true;
-    let cleanup: (() => void) | null = null;
-    let refreshTimer: ReturnType<typeof setTimeout> | null = null;
-
-    const scheduleRefresh = () => {
-      if (refreshTimer) {
-        clearTimeout(refreshTimer);
-      }
-
-      refreshTimer = setTimeout(() => {
-        if (!active) {
-          return;
-        }
-
-        void loadConversations();
-      }, 250);
-    };
-
-    const startSubscription = async () => {
-      try {
-        cleanup = await subscribeToOrgMessageEvents({
-          orgId,
-          onMessageNew: () => {
-            scheduleRefresh();
-          }
-        });
-      } catch (error) {
-        const message = error instanceof Error ? error.message : "Unknown realtime subscribe error";
-        console.error(`[realtime] inbox subscription failed: ${message}`);
-      }
-    };
-
-    void startSubscription();
-
-    return () => {
-      active = false;
-      if (refreshTimer) {
-        clearTimeout(refreshTimer);
-      }
-
-      if (cleanup) {
-        cleanup();
-      }
-    };
-  }, [loadConversations, orgId]);
-
-  const workspaceSubtitle = useMemo(() => {
-    if (!orgId) {
-      return "No organization available.";
-    }
-
-    return `${metaTotal} conversations`;
-  }, [metaTotal, orgId]);
-
-  const sendTextMessage = useCallback(
-    async (text: string) => {
-      if (!orgId || !selectedConversationId) {
-        return;
-      }
-
-      setMessageError(null);
-      const response = await fetch("/api/messages/send", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json"
-        },
-        body: JSON.stringify({
-          orgId,
-          conversationId: selectedConversationId,
-          type: "TEXT",
-          text
-        })
-      });
-
-      const payload = (await response.json().catch(() => null)) as SendMessageResponse | null;
-      if (!response.ok) {
-        setMessageError(payload?.error?.message ?? "Failed to send message.");
-        return;
-      }
-
-      await loadMessages(selectedConversationId);
-      await loadConversations();
-    },
-    [loadConversations, loadMessages, orgId, selectedConversationId]
-  );
+  const gridLayoutClass = "grid gap-4 lg:grid-cols-[380px_minmax(0,1fr)] 2xl:grid-cols-[380px_minmax(0,1fr)_auto]";
 
   return (
-    <section className="space-y-4">
-      <header className="space-y-1">
-        <h1 className="text-2xl font-semibold tracking-tight">Inbox Workspace</h1>
-        <p className="text-sm text-muted-foreground">{workspaceSubtitle}</p>
-      </header>
-
+    <section className="min-h-[calc(100vh-6.75rem)] rounded-3xl border border-border/70 bg-gradient-to-br from-background via-background to-accent/20 p-2 shadow-lg shadow-black/5">
       {!orgId ? (
-        <div className="rounded-xl border border-border bg-surface/70 p-4">
-          <p className="text-sm text-muted-foreground">Create an organization first to use inbox modules.</p>
-        </div>
+        <EmptyStatePanel
+          title="No Organization Found"
+          message="Create an organization first to access inbox modules."
+        />
+      ) : null}
+
+      {orgId && error && !isLoadingList ? (
+        <ErrorStatePanel title="Inbox Load Error" message={error} />
       ) : null}
 
       {orgId ? (
-        <div className="grid gap-4 xl:grid-cols-[minmax(300px,380px)_minmax(0,1.2fr)_minmax(320px,1fr)]">
-          <ConversationListPanel
-            conversations={conversations}
-            selectedConversationId={selectedConversationId}
-            filter={filter}
-            isLoading={isLoadingList}
-            error={error}
-            onFilterChange={(nextFilter) => setFilter(nextFilter)}
-            onSelectConversation={(conversationId) => {
-              setSelectedConversationId(conversationId);
-              void loadConversation(conversationId);
-            }}
-            onRefresh={() => {
-              void loadConversations();
-            }}
-          />
+        isFocusMode ? (
+          <div className="grid gap-4">
+            <div className="flex items-center justify-end">
+              <button
+                type="button"
+                onClick={() => setIsFocusMode(false)}
+                className="inline-flex h-9 items-center gap-2 rounded-lg border border-border bg-card/80 px-3 text-xs font-medium text-foreground hover:bg-accent"
+                title="Exit focus mode (Ctrl+Shift+F)"
+              >
+                <Minimize2 className="h-4 w-4" />
+                Exit Focus
+              </button>
+            </div>
 
-          <ChatWindow
-            messages={messages}
-            isLoading={isLoadingMessages}
-            isConversationSelected={Boolean(selectedConversationId)}
-            error={messageError}
-            onSendText={sendTextMessage}
-          />
+            <ChatWindow
+              density={density}
+              conversation={selectedConversation}
+              isUpdatingConversationStatus={isUpdatingConversationStatus}
+              messages={messages}
+              isLoading={isLoadingMessages}
+              isConversationSelected={Boolean(selectedConversationId)}
+              error={messageError}
+              onSendText={sendTextMessage}
+              onSendAttachment={sendAttachmentMessage}
+              onSendTemplate={sendTemplateMessage}
+              onToggleConversationStatus={toggleSelectedConversationStatus}
+              onRetryOutboundMessage={retryOutboundMessage}
+              onSelectProofMessage={(messageId) => {
+                setSelectedProofMessageId(messageId);
+                setProofFeedback(null);
+              }}
+            />
+          </div>
+        ) : (
+        <div>
+          <div className="mb-3 flex items-center gap-2 rounded-xl border border-border/80 bg-card/85 p-1.5 shadow-sm lg:hidden">
+            <Button
+              type="button"
+              variant={mobilePane === "list" ? "secondary" : "ghost"}
+              size="sm"
+              className="h-8 flex-1 rounded-lg"
+              onClick={() => setMobilePane("list")}
+            >
+              Conversations
+            </Button>
+            <Button
+              type="button"
+              variant={mobilePane === "chat" ? "secondary" : "ghost"}
+              size="sm"
+              className="h-8 flex-1 rounded-lg"
+              onClick={() => setMobilePane("chat")}
+            >
+              Chat
+            </Button>
+          </div>
 
-          <ConversationHeader conversation={selectedConversation} isLoading={isLoadingConversation} />
+          <div className={gridLayoutClass}>
+            <div
+              className={`h-[calc(100vh-6.75rem)] overflow-hidden rounded-2xl border border-border/80 bg-card/90 shadow-sm ${
+                mobilePane === "chat" ? "hidden lg:block" : ""
+              } ${mobilePane === "list" ? "inbox-fade-slide" : ""}`}
+            >
+              <ConversationListPanel
+                density={density}
+                conversations={conversations}
+                selectedConversationId={selectedConversationId}
+                filter={filter}
+                status={statusFilter}
+                isLoading={isLoadingList}
+                error={error}
+                onFilterChange={(nextFilter) => setFilter(nextFilter)}
+                onStatusChange={(nextStatus) => setStatusFilter(nextStatus)}
+                onSelectConversation={(conversationId) => {
+                  setSelectedConversationId(conversationId);
+                  setMobilePane("chat");
+                  void loadConversation(conversationId);
+                }}
+                onRefresh={() => {
+                  void loadConversations();
+                }}
+              />
+            </div>
+
+            <div className={`${mobilePane === "list" ? "hidden lg:block" : ""} ${mobilePane === "chat" ? "inbox-fade-slide" : ""}`}>
+              <div className="mb-2 flex items-center justify-between gap-2 lg:hidden">
+                <Button type="button" variant="ghost" size="sm" className="h-8" onClick={() => setMobilePane("list")}>
+                  Back to conversations
+                </Button>
+                <Button
+                  type="button"
+                  variant="secondary"
+                  size="sm"
+                  className="h-8 gap-1.5"
+                  onClick={() => setIsMobileCrmOpen((current) => !current)}
+                >
+                  {isMobileCrmOpen ? <PanelRightClose className="h-3.5 w-3.5" /> : <PanelRightOpen className="h-3.5 w-3.5" />}
+                  CRM
+                </Button>
+              </div>
+              <ChatWindow
+                density={density}
+                conversation={selectedConversation}
+                isUpdatingConversationStatus={isUpdatingConversationStatus}
+                messages={messages}
+                isLoading={isLoadingMessages}
+                isConversationSelected={Boolean(selectedConversationId)}
+                error={messageError}
+                onSendText={sendTextMessage}
+                onSendAttachment={sendAttachmentMessage}
+                onSendTemplate={sendTemplateMessage}
+                onToggleConversationStatus={toggleSelectedConversationStatus}
+                onRetryOutboundMessage={retryOutboundMessage}
+                onSelectProofMessage={(messageId) => {
+                  setSelectedProofMessageId(messageId);
+                  setProofFeedback(null);
+                }}
+              />
+            </div>
+
+            <div
+              className={`hidden h-[calc(100vh-6.75rem)] overflow-hidden transition-all duration-300 ease-out 2xl:block ${
+                isCrmPanelVisible ? "w-[360px] opacity-100" : "w-0 opacity-0"
+              }`}
+              aria-hidden={!isCrmPanelVisible}
+            >
+              <div
+                className={`inbox-scroll h-full overflow-auto rounded-2xl border border-border/80 bg-card/85 p-4 shadow-sm transition-all duration-300 ${
+                  isCrmPanelVisible ? "translate-x-0" : "translate-x-4"
+                }`}
+              >
+                <CrmContextPanel
+                  conversation={selectedConversation}
+                  activeOrgRole={activeOrgRole}
+                  isLoading={isLoadingConversation}
+                  isAssigning={isAssigning}
+                  assignError={assignError}
+                  tags={tags}
+                  notes={notes}
+                  invoices={crmInvoices}
+                  activity={crmActivity}
+                  isLoadingCrm={isLoadingCrm}
+                  crmError={crmError}
+                  onCreateTag={createTagForCustomer}
+                  onAssignTag={assignTagForCustomer}
+                  onCreateNote={createCustomerNoteEntry}
+                  selectedProofMessageId={selectedProofMessageId}
+                  isAttachingProof={isAttachingProof}
+                  proofFeedback={proofFeedback}
+                  onAttachProof={attachSelectedMessageAsProof}
+                  onOpenInvoiceDrawer={openInvoiceDrawer}
+                  onAssignToMe={() => {
+                    void assignSelectedConversationToMe();
+                  }}
+                  onSendInvoice={sendInvoiceFromPanel}
+                  onMarkInvoicePaid={markInvoicePaidFromPanel}
+                  isSendingInvoice={isSendingInvoice}
+                  isMarkingInvoicePaid={isMarkingInvoicePaid}
+                  invoiceActionError={invoiceActionError}
+                  invoiceActionSuccess={invoiceActionSuccess}
+                />
+              </div>
+            </div>
+          </div>
+
+          <MobileCrmOverlay
+            open={isMobileCrmOpen}
+            onClose={() => setIsMobileCrmOpen(false)}
+            conversation={selectedConversation}
+            activeOrgRole={activeOrgRole}
+            isLoadingConversation={isLoadingConversation}
+            isAssigning={isAssigning}
+            assignError={assignError}
+            tags={tags}
+            notes={notes}
+            invoices={crmInvoices}
+            activity={crmActivity}
+            isLoadingCrm={isLoadingCrm}
+            crmError={crmError}
+            onCreateTag={createTagForCustomer}
+            onAssignTag={assignTagForCustomer}
+            onCreateNote={createCustomerNoteEntry}
+            selectedProofMessageId={selectedProofMessageId}
+            isAttachingProof={isAttachingProof}
+            proofFeedback={proofFeedback}
+            onAttachProof={attachSelectedMessageAsProof}
+            onOpenInvoiceDrawer={openInvoiceDrawer}
+            onAssignToMe={() => {
+              void assignSelectedConversationToMe();
+            }}
+            onSendInvoice={sendInvoiceFromPanel}
+            onMarkInvoicePaid={markInvoicePaidFromPanel}
+            isSendingInvoice={isSendingInvoice}
+            isMarkingInvoicePaid={isMarkingInvoicePaid}
+            invoiceActionError={invoiceActionError}
+            invoiceActionSuccess={invoiceActionSuccess}
+          />
         </div>
+        )
       ) : null}
+
+      <QuickReplyModal
+        open={isQuickReplyModalOpen}
+        onClose={() => setIsQuickReplyModalOpen(false)}
+        onPick={sendQuickReply}
+      />
+
+      <ShortcutHelpModal
+        open={isShortcutHelpOpen}
+        onClose={() => setIsShortcutHelpOpen(false)}
+      />
+
+      <AttachProofShortcutModal
+        open={isProofShortcutModalOpen}
+        isSubmitting={isAttachingProof}
+        onClose={() => setIsProofShortcutModalOpen(false)}
+        onSubmit={async (invoiceId, milestoneType) => {
+          await attachSelectedMessageAsProof(invoiceId, milestoneType);
+          setIsProofShortcutModalOpen(false);
+        }}
+      />
+
+      <InvoiceDrawer
+        open={isInvoiceDrawerOpen}
+        orgId={orgId}
+        customerId={selectedConversation?.customerId ?? null}
+        conversationId={selectedConversation?.id ?? null}
+        onClose={() => setIsInvoiceDrawerOpen(false)}
+      />
     </section>
   );
 }

@@ -192,7 +192,7 @@ PAID
 
 # 8. Invoice Status
 
-Invoice status is derived from milestones.
+Invoice status uses persisted DB enum values (see DOC 14 schema).
 
 Possible statuses:
 
@@ -200,7 +200,7 @@ DRAFT
 SENT  
 PARTIALLY_PAID  
 PAID  
-OVERDUE
+VOID
 
 Status rules:
 
@@ -208,7 +208,12 @@ DRAFT → invoice created but not sent
 SENT → invoice shared with customer  
 PARTIALLY_PAID → some milestones paid  
 PAID → all milestones paid  
-OVERDUE → due date passed
+VOID → invoice cancelled/voided
+
+UI note:
+
+OVERDUE may still be shown as a derived badge in UI when due date has passed and status is not PAID/VOID.
+This is a presentation state, not a persisted DB enum value.
 
 ---
 
@@ -321,14 +326,13 @@ Rules:
 
 Owner can mark paid without proof.
 
-Other roles must attach proof.
+Admin/CS must attach proof before mark paid.
 
 Roles allowed to mark paid:
 
 Owner  
-Admin
-
-CS may attach proof but not mark paid.
+Admin  
+CS
 
 ---
 
@@ -439,7 +443,7 @@ Chat conversation
 → Customer pays  
 → Customer sends proof  
 → CS attaches proof  
-→ Admin marks paid
+→ Admin/CS marks paid (proof required) or Owner override
 
 Everything happens inside the chat workspace.
 

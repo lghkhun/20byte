@@ -50,14 +50,14 @@ function extensionFromMimeType(mimeType: string | undefined): string | null {
 }
 
 function resolveExtension(mimeType: string | undefined, fileName: string | undefined): string {
-  const fromFileName = extensionFromFileName(fileName);
-  if (fromFileName) {
-    return fromFileName;
-  }
-
   const fromMimeType = extensionFromMimeType(mimeType);
   if (fromMimeType) {
     return fromMimeType;
+  }
+
+  const fromFileName = extensionFromFileName(fileName);
+  if (fromFileName) {
+    return fromFileName;
   }
 
   return "bin";
@@ -84,3 +84,17 @@ export function buildChatMediaObjectKey(input: BuildChatMediaObjectKeyInput): st
   return `media/${orgId}/${conversationId}/${messageId}.${extension}`;
 }
 
+type BuildInvoicePdfObjectKeyInput = {
+  orgId: string;
+  invoiceId: string;
+};
+
+export function buildInvoicePdfObjectKey(input: BuildInvoicePdfObjectKeyInput): string {
+  const orgId = normalizePathPart(input.orgId);
+  const invoiceId = normalizePathPart(input.invoiceId);
+  if (!orgId || !invoiceId) {
+    throw new Error("Missing required identifiers for invoice PDF object key.");
+  }
+
+  return `invoice/${orgId}/${invoiceId}.pdf`;
+}

@@ -70,6 +70,7 @@ WHATSAPP_APP_SECRET=
 WHATSAPP_TOKEN_ENCRYPTION_KEY=
 WHATSAPP_EMBEDDED_APP_ID=
 WHATSAPP_EMBEDDED_CONFIG_ID=
+WHATSAPP_MOCK_MODE=
 
 ABLY_API_KEY=
 
@@ -80,7 +81,15 @@ R2_BUCKET=
 R2_PUBLIC_URL=
 
 APP_URL=
+SHORTLINK_BASE_URL=
+
+MYSQL_IMAGE=
+REDIS_IMAGE=
 ```
+
+For Docker app profile, copy baseline from:
+
+`.env.docker.example`
 
 ---
 
@@ -124,7 +133,7 @@ cleanup queue
 
 # 6. WhatsApp Configuration
 
-WhatsApp Cloud API requires:
+WhatsApp Cloud API variables:
 
 ```
 WHATSAPP_ACCESS_TOKEN
@@ -147,6 +156,13 @@ Access tokens must be encrypted in database storage.
 `WHATSAPP_EMBEDDED_APP_ID` and `WHATSAPP_EMBEDDED_CONFIG_ID` are used by embedded-signup bootstrap API.
 
 `WHATSAPP_APP_SECRET` is required to verify `X-Hub-Signature-256` for webhook requests.
+
+For current embedded-signup architecture and Docker runtime:
+
+- `WHATSAPP_ACCESS_TOKEN` and `WHATSAPP_PHONE_NUMBER_ID` are optional placeholders in `.env` and `.env.example`.
+- Runtime outbound messaging uses encrypted credentials stored in `WaAccount.accessTokenEnc` + `WaAccount.phoneNumberId`.
+- Before Meta verification is complete, local/dev may run with `WHATSAPP_MOCK_MODE=true` to bypass live Cloud API calls.
+- `docker-compose.yml` provides safe defaults for `WHATSAPP_WEBHOOK_VERIFY_TOKEN`, `WHATSAPP_APP_SECRET`, `WHATSAPP_TOKEN_ENCRYPTION_KEY`, `WHATSAPP_EMBEDDED_APP_ID`, and `WHATSAPP_EMBEDDED_CONFIG_ID` so local container startup does not fail when verification is pending.
 
 ---
 
@@ -218,6 +234,16 @@ Used for:
 - shortlinks
 - redirects
 
+`SHORTLINK_BASE_URL` is optional and overrides shortlink host generation.
+
+Example:
+
+```
+SHORTLINK_BASE_URL=https://wa.20byte.com
+```
+
+If empty, shortlink generation falls back to `${APP_URL}/r/{code}`.
+
 ---
 
 # 10. Local Development Setup
@@ -263,8 +289,19 @@ Worker runs background jobs.
 Command:
 
 ```
-node worker/index.ts
+npm run worker:start
 ```
+
+Alternative (requires TS runtime support and path alias resolution):
+
+```
+tsx worker/main.ts
+```
+
+Current runtime entrypoint:
+
+- `worker/main.ts` bootstraps lifecycle and signal handling.
+- `worker/index.ts` starts/stops all worker processors.
 
 Worker processes:
 
@@ -308,6 +345,13 @@ redis → queue system
 
 Docker simplifies environment consistency.
 
+For network-restricted environments, image source is configurable via env:
+
+- `MYSQL_IMAGE` (default `mysql:8`)
+- `REDIS_IMAGE` (default `redis:7`)
+
+This allows using internal/private registry mirrors when Docker Hub is unreachable.
+
 ---
 
 # 14. Deployment Steps
@@ -336,6 +380,19 @@ external storage
 
 This prevents data loss.
 
+Minimum runbook recommendation (Docker MySQL container):
+
+```
+mkdir -p /opt/20byte/backups
+BACKUP_DIR=/opt/20byte/backups ./scripts/backup/mysql-daily-backup.sh
+```
+
+Retention suggestion:
+
+- keep daily backups for at least 7 days
+- replicate to external object storage periodically
+- Cron example is provided at: `scripts/backup/cron.example`
+
 ---
 
 # 16. Logging
@@ -348,6 +405,11 @@ webhook processing
 authentication failures
 
 Logs help diagnose production issues.
+
+Current implementation:
+
+- API auth middleware logs structured auth failures (`missing session` / `invalid session`) in `lib/auth/middleware.ts` via `lib/logging/auth.ts`.
+- Login service logs structured auth failures (`user not found` / `invalid password`) in `server/services/authService.ts`.
 
 ---
 

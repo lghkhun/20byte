@@ -1,4 +1,4 @@
-import { ConversationItem } from "@/components/inbox/types";
+import type { ConversationItem } from "@/components/inbox/types";
 
 type ConversationHeaderProps = {
   conversation: ConversationItem | null;
@@ -26,7 +26,7 @@ function formatDateTime(value: string | null): string {
 export function ConversationHeader({ conversation, isLoading }: ConversationHeaderProps) {
   if (isLoading) {
     return (
-      <header className="rounded-xl border border-border bg-surface/70 p-4">
+      <header className="rounded-xl border border-border/80 bg-card/80 p-4 shadow-sm">
         <p className="text-sm text-muted-foreground">Loading conversation...</p>
       </header>
     );
@@ -34,7 +34,7 @@ export function ConversationHeader({ conversation, isLoading }: ConversationHead
 
   if (!conversation) {
     return (
-      <header className="rounded-xl border border-border bg-surface/70 p-4">
+      <header className="rounded-xl border border-border/80 bg-card/80 p-4 shadow-sm">
         <h2 className="text-sm font-semibold text-foreground">Conversation Header</h2>
         <p className="mt-2 text-sm text-muted-foreground">Select a conversation to view customer details.</p>
       </header>
@@ -42,7 +42,7 @@ export function ConversationHeader({ conversation, isLoading }: ConversationHead
   }
 
   return (
-    <header className="rounded-xl border border-border bg-surface/70 p-4">
+    <header className="rounded-xl border border-border/80 bg-card/80 p-4 shadow-sm">
       <div className="flex items-start justify-between gap-3">
         <div>
           <h2 className="text-base font-semibold text-foreground">
@@ -53,8 +53,8 @@ export function ConversationHeader({ conversation, isLoading }: ConversationHead
         <span
           className={
             conversation.status === "OPEN"
-              ? "rounded-full border border-emerald-500/40 bg-emerald-500/10 px-2 py-1 text-xs text-emerald-300"
-              : "rounded-full border border-amber-500/40 bg-amber-500/10 px-2 py-1 text-xs text-amber-300"
+              ? "rounded-full border border-emerald-500/40 bg-emerald-500/10 px-2 py-1 text-xs text-emerald-500"
+              : "rounded-full border border-amber-500/40 bg-amber-500/10 px-2 py-1 text-xs text-amber-500"
           }
         >
           {conversation.status}

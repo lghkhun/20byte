@@ -1,5 +1,6 @@
-import { NextRequest, NextResponse } from "next/server";
+import type { NextRequest } from "next/server";
 
+import { errorResponse, successResponse } from "@/lib/api/http";
 import { requireApiSession } from "@/lib/auth/middleware";
 import { ServiceError } from "@/server/services/serviceError";
 import { completeEmbeddedSignup, getEmbeddedSignupContext } from "@/server/services/whatsappService";
@@ -12,18 +13,6 @@ type CompleteSignupRequest = {
   displayPhone?: unknown;
   accessToken?: unknown;
 };
-
-function errorResponse(status: number, code: string, message: string) {
-  return NextResponse.json(
-    {
-      error: {
-        code,
-        message
-      }
-    },
-    { status }
-  );
-}
 
 export async function GET(request: NextRequest) {
   const auth = requireApiSession(request);
@@ -38,14 +27,11 @@ export async function GET(request: NextRequest) {
 
   try {
     const context = await getEmbeddedSignupContext(auth.session.userId, orgId);
-    return NextResponse.json(
+    return successResponse(
       {
-        data: {
-          embeddedSignup: context
-        },
-        meta: {}
+        embeddedSignup: context
       },
-      { status: 200 }
+      200
     );
   } catch (error) {
     if (error instanceof ServiceError) {
@@ -80,14 +66,11 @@ export async function POST(request: NextRequest) {
       accessToken: typeof body.accessToken === "string" ? body.accessToken : ""
     });
 
-    return NextResponse.json(
+    return successResponse(
       {
-        data: {
-          waAccount: account
-        },
-        meta: {}
+        waAccount: account
       },
-      { status: 200 }
+      200
     );
   } catch (error) {
     if (error instanceof ServiceError) {

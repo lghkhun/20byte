@@ -63,7 +63,8 @@ export async function createInboxRealtimeTokenRequest(
   await requireInboxMembership(actorUserId, orgId);
 
   const capability = JSON.stringify({
-    [`org:${orgId}`]: ["subscribe"]
+    [`org:${orgId}`]: ["subscribe"],
+    [`org:${orgId}:user:${actorUserId}`]: ["subscribe"]
   });
 
   const client = getAblyServerClient();
@@ -75,4 +76,3 @@ export async function createInboxRealtimeTokenRequest(
 
   return tokenRequest as AblyTokenRequestResult;
 }
-

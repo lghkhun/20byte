@@ -1,0 +1,19 @@
+export type MessageItem = {
+  id: string;
+  waMessageId: string | null;
+  direction: "INBOUND" | "OUTBOUND";
+  type: "TEXT" | "IMAGE" | "VIDEO" | "AUDIO" | "DOCUMENT" | "TEMPLATE" | "SYSTEM";
+  text: string | null;
+  mediaUrl: string | null;
+  mimeType: string | null;
+  fileName: string | null;
+  templateName: string | null;
+  templateCategory: "MARKETING" | "UTILITY" | "AUTHENTICATION" | "SERVICE" | null;
+  templateLanguageCode: string | null;
+  isAutomated: boolean;
+  sendStatus: "PENDING" | "SENT" | "FAILED" | null;
+  sendError: string | null;
+  retryable: boolean;
+  sendAttemptCount: number;
+  createdAt: string;
+};

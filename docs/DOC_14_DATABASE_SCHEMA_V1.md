@@ -58,6 +58,12 @@ enum MessageType {
   SYSTEM
 }
 
+enum MessageSendStatus {
+  PENDING
+  SENT
+  FAILED
+}
+
 enum InvoiceStatus {
   DRAFT
   SENT
@@ -104,7 +110,10 @@ model Org {
   conversations     Conversation[]
   messages          Message[]
   invoices          Invoice[]
+  invoiceItems      InvoiceItem[]
+  paymentMilestones PaymentMilestone[]
   paymentProofs     PaymentProof[]
+  invoiceSequences  InvoiceSequence[]
   tags              Tag[]
   serviceCatalogItems ServiceCatalogItem[]
   waAccounts        WaAccount[]
@@ -175,6 +184,7 @@ model WaAccount {
   wabaId         String
   phoneNumberId  String
   displayPhone   String
+  createdAt      DateTime @default(now())
   connectedAt    DateTime @default(now())
 
   // Store encrypted token only
@@ -183,7 +193,9 @@ model WaAccount {
   org            Org      @relation(fields: [orgId], references: [id])
 
   @@index([orgId])
+  @@unique([orgId])
   @@unique([orgId, phoneNumberId])
+  @@unique([phoneNumberId])
 }
 
 model Customer {
@@ -198,6 +210,8 @@ model Customer {
   // Attribution (persisted on customer)
   source          String?  // organic | meta_ads | etc
   campaign        String?
+  adset           String?
+  ad              String?
   platform        String?
   medium          String?
   firstContactAt  DateTime?
@@ -308,9 +322,16 @@ model Message {
   // Template metadata
   templateName     String?
   templateCategory WaTemplateCategory?
+  templateLanguageCode String?
+  templateComponentsJson String?
 
   // System metadata
   isAutomated    Boolean  @default(false)
+  sendStatus     MessageSendStatus?
+  sendError      String?
+  sendAttemptCount Int    @default(0)
+  lastSendAttemptAt DateTime?
+  retryable      Boolean  @default(false)
 
   createdAt      DateTime @default(now())
 
@@ -348,7 +369,7 @@ model Invoice {
   customerId      String
   conversationId  String?
 
-  invoiceNo       String   @unique
+  invoiceNo       String
   kind            InvoiceKind
   status          InvoiceStatus @default(DRAFT)
 
@@ -382,10 +403,12 @@ model Invoice {
 
   @@index([orgId, customerId, createdAt])
   @@index([conversationId])
+  @@unique([orgId, invoiceNo])
 }
 
 model InvoiceItem {
   id          String   @id @default(cuid())
+  orgId       String
   invoiceId   String
   name        String
   description String?
@@ -393,25 +416,30 @@ model InvoiceItem {
   unit        String?
   priceCents  Int
   amountCents Int
+  createdAt   DateTime @default(now())
 
+  org         Org      @relation(fields: [orgId], references: [id])
   invoice     Invoice  @relation(fields: [invoiceId], references: [id])
 
-  @@index([invoiceId])
+  @@index([orgId, invoiceId])
 }
 
 model PaymentMilestone {
   id          String   @id @default(cuid())
+  orgId       String
   invoiceId   String
   type        PaymentMilestoneType
   amountCents Int
   dueDate     DateTime?
   status      String   // "PENDING" | "PAID"
   paidAt      DateTime?
+  createdAt   DateTime @default(now())
 
+  org         Org      @relation(fields: [orgId], references: [id])
   invoice     Invoice  @relation(fields: [invoiceId], references: [id])
 
   @@unique([invoiceId, type])
-  @@index([invoiceId])
+  @@index([orgId, invoiceId])
 }
 
 model PaymentProof {
@@ -432,9 +460,25 @@ model PaymentProof {
 
   org           Org     @relation(fields: [orgId], references: [id])
   invoice       Invoice @relation(fields: [invoiceId], references: [id])
+  message       Message? @relation(fields: [messageId], references: [id])
 
   @@index([invoiceId, createdAt])
   @@index([orgId, createdAt])
+  @@index([messageId])
+}
+
+model InvoiceSequence {
+  id         String   @id @default(cuid())
+  orgId      String
+  year       Int
+  lastSeq    Int      @default(0)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  org        Org      @relation(fields: [orgId], references: [id])
+
+  @@unique([orgId, year])
+  @@index([orgId, year])
 }
 
 model Shortlink {
@@ -443,9 +487,14 @@ model Shortlink {
   code           String   @unique
 
   destinationUrl String   // e.g. https://wa.me/...
+  source         String   @default("meta_ads")
   campaign       String?
+  adset          String?
+  adName         String?
   platform       String?
   medium         String?
+  isEnabled      Boolean  @default(true)
+  disabledAt     DateTime?
 
   createdAt      DateTime @default(now())
 
@@ -460,6 +509,7 @@ model ShortlinkClick {
   orgId       String
   shortlinkId String
 
+  createdAt   DateTime @default(now())
   clickedAt   DateTime @default(now())
   ipHash      String?  // optional hashed ip
   userAgent   String?  // optional
@@ -509,7 +559,8 @@ A proof can optionally link to a milestone (DP or FINAL).
 If milestone is not specified, it is attached to the invoice generally.
 
 ### 2.5 Attribution Fields
-- Shortlink stores campaign/platform/medium
+- Shortlink stores source/campaign/adset/ad, with compatibility bridge fields `platform`/`medium`.
+- Customer attribution also stores `adset` and `ad`; `platform`/`medium` remain as backward-compatible aliases.
 - Customer stores attribution permanently
 - Conversation copies attribution for analytics
 

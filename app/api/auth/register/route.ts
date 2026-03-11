@@ -1,97 +1,30 @@
-import { NextRequest, NextResponse } from "next/server";
+import type { NextRequest } from "next/server";
 
-import { hashPassword, validatePasswordPolicy } from "@/lib/auth/password";
-import { prisma } from "@/lib/db/prisma";
-
-type ErrorResponse = {
-  error: {
-    code: string;
-    message: string;
-  };
-};
-
-type RegisterRequest = {
-  email?: unknown;
-  password?: unknown;
-  name?: unknown;
-};
-
-function errorResponse(status: number, code: string, message: string) {
-  const payload: ErrorResponse = {
-    error: {
-      code,
-      message
-    }
-  };
-
-  return NextResponse.json(payload, { status });
-}
-
-function isValidEmail(email: string): boolean {
-  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-  return emailRegex.test(email);
-}
+import { errorResponse, successResponse } from "@/lib/api/http";
+import { ServiceError } from "@/server/services/serviceError";
+import { registerUser } from "@/server/services/authService";
 
 export async function POST(request: NextRequest) {
-  let body: RegisterRequest;
+  let body: unknown;
   try {
-    body = (await request.json()) as RegisterRequest;
+    body = await request.json();
   } catch {
     return errorResponse(400, "INVALID_JSON", "Request body must be valid JSON.");
   }
 
-  const email = typeof body.email === "string" ? body.email.trim().toLowerCase() : "";
-  const password = typeof body.password === "string" ? body.password : "";
-  const name = typeof body.name === "string" ? body.name.trim() : undefined;
-
-  if (!isValidEmail(email)) {
-    return errorResponse(400, "INVALID_EMAIL", "Email format is invalid.");
-  }
-
-  const passwordPolicyError = validatePasswordPolicy(password);
-  if (passwordPolicyError) {
-    return errorResponse(400, "INVALID_PASSWORD", passwordPolicyError);
-  }
-
-  if (name && name.length > 120) {
-    return errorResponse(400, "INVALID_NAME", "Name must be 120 characters or fewer.");
-  }
-
   try {
-    const existingUser = await prisma.user.findUnique({
-      where: { email },
-      select: { id: true }
-    });
-
-    if (existingUser) {
-      return errorResponse(400, "EMAIL_ALREADY_REGISTERED", "Email is already registered.");
+    const result = await registerUser((body ?? {}) as Record<string, unknown>);
+    return successResponse(
+      {
+        user: result.user
+      },
+      201
+    );
+  } catch (error) {
+    if (error instanceof ServiceError) {
+      return errorResponse(error.status, error.code, error.message);
     }
 
-    const passwordHash = await hashPassword(password);
-    const user = await prisma.user.create({
-      data: {
-        email,
-        passwordHash,
-        name: name || null
-      },
-      select: {
-        id: true,
-        email: true,
-        name: true,
-        createdAt: true
-      }
-    });
-
-    return NextResponse.json(
-      {
-        data: {
-          user
-        },
-        meta: {}
-      },
-      { status: 201 }
-    );
-  } catch {
     return errorResponse(500, "REGISTER_FAILED", "Failed to register user.");
   }
 }

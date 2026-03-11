@@ -1,0 +1,3 @@
+# Daily backup at 02:15 server time.
+# Update BACKUP_DIR and container credentials if needed.
+15 2 * * * cd /path/to/20byte && BACKUP_DIR=/opt/20byte/backups ./scripts/backup/mysql-daily-backup.sh >> /var/log/20byte-backup.log 2>&1

@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from "next/server";
+import { type NextRequest, NextResponse } from "next/server";
 
 import { verifyWebhookSignature } from "@/lib/whatsapp/webhookSignature";
 import { enqueueWhatsAppWebhookJob } from "@/server/queues/webhookQueue";

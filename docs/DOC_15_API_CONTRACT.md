@@ -162,6 +162,12 @@ Unauthenticated endpoints:
 - shortlink redirect
 - webhook endpoints
 
+Current public routes:
+
+- `/i/{publicToken}` public invoice page
+- `/r/{code}` canonical shortlink redirect
+- `/s/{code}` legacy shortlink redirect compatibility
+
 ---
 
 # 10. API Contract Summary

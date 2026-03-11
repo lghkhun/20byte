@@ -1,6 +1,7 @@
-import { NextRequest, NextResponse } from "next/server";
+import { type NextRequest, NextResponse } from "next/server";
 
 import { requireApiSession } from "@/lib/auth/middleware";
+import { consumeRateLimit } from "@/lib/redis/rateLimit";
 import { sendOutboundMessage } from "@/server/services/messageService";
 import { ServiceError } from "@/server/services/serviceError";
 
@@ -12,6 +13,7 @@ type SendMessageRequest = {
   templateName?: unknown;
   templateCategory?: unknown;
   templateLanguageCode?: unknown;
+  templateComponents?: unknown;
 };
 
 function errorResponse(status: number, code: string, message: string) {
@@ -52,6 +54,14 @@ function parseTemplateCategory(value: unknown): "MARKETING" | "UTILITY" | "AUTHE
   return undefined;
 }
 
+function parseTemplateComponents(value: unknown): Array<Record<string, unknown>> | null {
+  if (!Array.isArray(value)) {
+    return null;
+  }
+
+  return value.filter((item) => item && typeof item === "object") as Array<Record<string, unknown>>;
+}
+
 export async function POST(request: NextRequest) {
   const auth = requireApiSession(request);
   if (auth.response) {
@@ -69,17 +79,32 @@ export async function POST(request: NextRequest) {
   if (!type) {
     return errorResponse(400, "INVALID_MESSAGE_TYPE", "type must be one of: TEXT, TEMPLATE, SYSTEM.");
   }
+  const templateComponents = parseTemplateComponents(body.templateComponents);
+  if (type === "TEMPLATE" && templateComponents === null) {
+    return errorResponse(400, "INVALID_TEMPLATE_COMPONENTS", "templateComponents array is required for template messages.");
+  }
+
+  const orgId = typeof body.orgId === "string" ? body.orgId : "";
+  const rate = await consumeRateLimit({
+    key: `ratelimit:outbound:${auth.session.userId}:${orgId}`,
+    limit: 120,
+    windowSec: 60
+  });
+  if (!rate.allowed) {
+    return errorResponse(429, "OUTBOUND_RATE_LIMITED", "Too many outbound send attempts. Please retry shortly.");
+  }
 
   try {
     const message = await sendOutboundMessage({
       actorUserId: auth.session.userId,
-      orgId: typeof body.orgId === "string" ? body.orgId : "",
+      orgId,
       conversationId: typeof body.conversationId === "string" ? body.conversationId : "",
       type,
       text: typeof body.text === "string" ? body.text : undefined,
       templateName: typeof body.templateName === "string" ? body.templateName : undefined,
       templateCategory: parseTemplateCategory(body.templateCategory),
-      templateLanguageCode: typeof body.templateLanguageCode === "string" ? body.templateLanguageCode : undefined
+      templateLanguageCode: typeof body.templateLanguageCode === "string" ? body.templateLanguageCode : undefined,
+      templateComponents: templateComponents ?? undefined
     });
 
     return NextResponse.json(

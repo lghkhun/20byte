@@ -1,3 +1,5 @@
+import { buildMockWhatsAppMessageId, isWhatsAppMockModeEnabled } from "@/lib/whatsapp/mockMode";
+
 type WhatsAppSendTextInput = {
   accessToken: string;
   phoneNumberId: string;
@@ -11,6 +13,7 @@ type WhatsAppSendTemplateInput = {
   to: string;
   templateName: string;
   languageCode: string;
+  components: Array<Record<string, unknown>>;
 };
 
 const RETRY_DELAYS_MS = [1000, 3000, 10000];
@@ -72,6 +75,10 @@ function parseWaMessageId(responseBody: unknown): string | null {
 }
 
 export async function sendWhatsAppTextMessage(input: WhatsAppSendTextInput): Promise<string | null> {
+  if (isWhatsAppMockModeEnabled()) {
+    return buildMockWhatsAppMessageId("text");
+  }
+
   const responseBody = await postWithRetry(
     `https://graph.facebook.com/v20.0/${encodeURIComponent(input.phoneNumberId)}/messages`,
     {
@@ -89,6 +96,10 @@ export async function sendWhatsAppTextMessage(input: WhatsAppSendTextInput): Pro
 }
 
 export async function sendWhatsAppTemplateMessage(input: WhatsAppSendTemplateInput): Promise<string | null> {
+  if (isWhatsAppMockModeEnabled()) {
+    return buildMockWhatsAppMessageId("template");
+  }
+
   const responseBody = await postWithRetry(
     `https://graph.facebook.com/v20.0/${encodeURIComponent(input.phoneNumberId)}/messages`,
     {
@@ -99,7 +110,8 @@ export async function sendWhatsAppTemplateMessage(input: WhatsAppSendTemplateInp
         name: normalize(input.templateName),
         language: {
           code: normalize(input.languageCode) || "en"
-        }
+        },
+        components: input.components
       }
     },
     input.accessToken

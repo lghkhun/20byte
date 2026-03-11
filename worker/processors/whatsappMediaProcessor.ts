@@ -1,17 +1,10 @@
-import { processWhatsAppMediaJob } from "@/server/jobs/processWhatsAppMediaJob";
+import { processWhatsAppMediaJob } from "@/worker/jobs/processWhatsAppMediaJob";
 import { dequeueWhatsAppMediaDownloadJob } from "@/server/queues/mediaQueue";
+import { withRetry } from "@/lib/retry/withRetry";
 
 let running = false;
 
 const IDLE_TIMEOUT_SECONDS = 5;
-const RETRY_DELAY_MS = 1000;
-
-function delay(ms: number): Promise<void> {
-  return new Promise((resolve) => {
-    setTimeout(resolve, ms);
-  });
-}
-
 export async function startWhatsAppMediaProcessor(): Promise<void> {
   if (running) {
     return;
@@ -22,16 +15,24 @@ export async function startWhatsAppMediaProcessor(): Promise<void> {
 
   while (running) {
     try {
-      const job = await dequeueWhatsAppMediaDownloadJob(IDLE_TIMEOUT_SECONDS);
+      const job = await withRetry(
+        "whatsapp-media-dequeue",
+        () => dequeueWhatsAppMediaDownloadJob(IDLE_TIMEOUT_SECONDS),
+        { retries: 3, baseDelayMs: 500, factor: 2, jitter: true }
+      );
       if (!job) {
         continue;
       }
 
-      await processWhatsAppMediaJob(job.payload);
+      await withRetry("whatsapp-media-process", () => processWhatsAppMediaJob(job.payload), {
+        retries: 3,
+        baseDelayMs: 1000,
+        factor: 2,
+        jitter: true
+      });
     } catch (error) {
       const message = error instanceof Error ? error.message : "Unknown error";
       console.error(`[worker] whatsapp media processor error: ${message}`);
-      await delay(RETRY_DELAY_MS);
     }
   }
 }
@@ -39,4 +40,3 @@ export async function startWhatsAppMediaProcessor(): Promise<void> {
 export function stopWhatsAppMediaProcessor(): void {
   running = false;
 }
-

@@ -1,4 +1,4 @@
-import { PutObjectCommand, S3Client } from "@aws-sdk/client-s3";
+import { DeleteObjectCommand, PutObjectCommand, S3Client } from "@aws-sdk/client-s3";
 
 type R2Config = {
   accountId: string;
@@ -77,3 +77,34 @@ export async function uploadToR2(input: UploadToR2Input): Promise<string> {
   return `${config.publicUrl}/${input.objectKey}`;
 }
 
+export async function deleteFromR2(objectKey: string): Promise<void> {
+  const normalized = objectKey.trim();
+  if (!normalized) {
+    return;
+  }
+
+  const client = getR2Client();
+  const config = getR2Config();
+  await client.send(
+    new DeleteObjectCommand({
+      Bucket: config.bucket,
+      Key: normalized
+    })
+  );
+}
+
+export function getPublicObjectKeyFromUrl(fileUrl: string): string | null {
+  const normalized = fileUrl.trim();
+  if (!normalized) {
+    return null;
+  }
+
+  const config = getR2Config();
+  const prefix = `${config.publicUrl}/`;
+  if (!normalized.startsWith(prefix)) {
+    return null;
+  }
+
+  const objectKey = normalized.slice(prefix.length).trim();
+  return objectKey || null;
+}

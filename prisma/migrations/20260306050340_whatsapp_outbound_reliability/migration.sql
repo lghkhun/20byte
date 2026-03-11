@@ -1,0 +1,4 @@
+-- No-op migration.
+-- This folder is intentionally kept to preserve migration history ordering.
+-- Outbound reliability columns are introduced in:
+-- `20260306165000_whatsapp_outbound_reliability`.

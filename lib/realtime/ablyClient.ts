@@ -12,7 +12,15 @@ type MessageNewPayload = {
 
 type SubscribeToOrgEventsInput = {
   orgId: string;
-  onMessageNew: (payload: MessageNewPayload) => void;
+  onMessageNew?: (payload: MessageNewPayload) => void;
+  onConversationUpdated?: () => void;
+  onAssignmentChanged?: () => void;
+  onInvoiceCreated?: () => void;
+  onInvoiceUpdated?: () => void;
+  onInvoicePaid?: () => void;
+  onProofAttached?: () => void;
+  onCustomerUpdated?: () => void;
+  onStorageUpdated?: () => void;
 };
 
 type AblyMessageData = Record<string, unknown> | null;
@@ -55,7 +63,11 @@ export async function subscribeToOrgMessageEvents(input: SubscribeToOrgEventsInp
   });
 
   const channel = client.channels.get(`org:${orgId}`);
-  const listener = (message: { data?: unknown }) => {
+  const messageNewListener = (message: { data?: unknown }) => {
+    if (!input.onMessageNew) {
+      return;
+    }
+
     const payload = parseMessageNewPayload((message.data ?? null) as AblyMessageData, orgId);
     if (!payload) {
       return;
@@ -64,11 +76,58 @@ export async function subscribeToOrgMessageEvents(input: SubscribeToOrgEventsInp
     input.onMessageNew(payload);
   };
 
-  await channel.subscribe("message.new", listener);
+  const conversationUpdatedListener = () => {
+    input.onConversationUpdated?.();
+  };
+
+  const assignmentChangedListener = () => {
+    input.onAssignmentChanged?.();
+  };
+
+  const invoiceCreatedListener = () => {
+    input.onInvoiceCreated?.();
+  };
+
+  const invoiceUpdatedListener = () => {
+    input.onInvoiceUpdated?.();
+  };
+
+  const invoicePaidListener = () => {
+    input.onInvoicePaid?.();
+  };
+
+  const proofAttachedListener = () => {
+    input.onProofAttached?.();
+  };
+
+  const customerUpdatedListener = () => {
+    input.onCustomerUpdated?.();
+  };
+
+  const storageUpdatedListener = () => {
+    input.onStorageUpdated?.();
+  };
+
+  await channel.subscribe("message.new", messageNewListener);
+  await channel.subscribe("conversation.updated", conversationUpdatedListener);
+  await channel.subscribe("assignment.changed", assignmentChangedListener);
+  await channel.subscribe("invoice.created", invoiceCreatedListener);
+  await channel.subscribe("invoice.updated", invoiceUpdatedListener);
+  await channel.subscribe("invoice.paid", invoicePaidListener);
+  await channel.subscribe("proof.attached", proofAttachedListener);
+  await channel.subscribe("customer.updated", customerUpdatedListener);
+  await channel.subscribe("storage.updated", storageUpdatedListener);
 
   return () => {
-    channel.unsubscribe("message.new", listener);
+    channel.unsubscribe("message.new", messageNewListener);
+    channel.unsubscribe("conversation.updated", conversationUpdatedListener);
+    channel.unsubscribe("assignment.changed", assignmentChangedListener);
+    channel.unsubscribe("invoice.created", invoiceCreatedListener);
+    channel.unsubscribe("invoice.updated", invoiceUpdatedListener);
+    channel.unsubscribe("invoice.paid", invoicePaidListener);
+    channel.unsubscribe("proof.attached", proofAttachedListener);
+    channel.unsubscribe("customer.updated", customerUpdatedListener);
+    channel.unsubscribe("storage.updated", storageUpdatedListener);
     client.close();
   };
 }
-

@@ -109,6 +109,12 @@ Create `.env` file.
 cp .env.example .env
 ```
 
+For Docker app profile defaults (recommended when WhatsApp credentials are not ready yet):
+
+```
+cp .env.docker.example .env
+```
+
 Edit `.env`.
 
 Minimum configuration:
@@ -125,9 +131,16 @@ NEXTAUTH_SECRET=changeme
 NEXTAUTH_URL=http://localhost:3000
 
 APP_URL=http://localhost:3000
+SHORTLINK_BASE_URL=https://wa.20byte.com
+
+# Keep platform runnable before Meta verification is complete
+WHATSAPP_MOCK_MODE=true
 ```
 
-Additional variables will be added later.
+With `WHATSAPP_MOCK_MODE=true`, inbox/onboarding message flows use dummy WhatsApp message IDs without calling Meta API.
+After Meta verification is complete, set:
+- `WHATSAPP_MOCK_MODE=false`
+- fill all `WHATSAPP_*` credentials in `.env`
 
 ---
 
@@ -206,6 +219,45 @@ You should see:
 20byte_redis
 ```
 
+If image pull fails with DNS/proxy error (example: `lookup registry-1.docker.io ... server misbehaving`):
+
+1. Configure Docker Desktop DNS manually:
+- Docker Desktop -> Settings -> Docker Engine, add:
+```json
+{
+  "dns": ["1.1.1.1", "8.8.8.8"]
+}
+```
+- Apply & Restart Docker Desktop.
+
+2. Validate host DNS quickly:
+```
+getent hosts registry-1.docker.io
+```
+
+3. Retry pull:
+```
+docker pull redis:7
+docker pull mysql:8
+```
+
+4. If Docker Hub is blocked/intermittent on your network, override image source in `.env`:
+```
+MYSQL_IMAGE=mysql:8
+REDIS_IMAGE=redis:7
+```
+or point to your internal mirror:
+```
+MYSQL_IMAGE=<your-mirror>/mysql:8
+REDIS_IMAGE=<your-mirror>/redis:7
+```
+
+Then run:
+```
+docker compose down
+docker compose up -d
+```
+
 ---
 
 # 8. Database Setup
@@ -221,6 +273,25 @@ Generate Prisma client.
 ```
 npx prisma generate
 ```
+
+Seed dummy data for full flow testing (recommended before first UI check):
+
+```
+npm run db:seed
+```
+
+Seeder content coverage:
+- org + onboarding prerequisites (plan, memberships, WhatsApp account, bank accounts)
+- inbox data (customers, conversations, mixed message types)
+- invoice lifecycle data (draft/sent/partial/paid/void + proofs + milestones)
+- CTWA shortlink attribution + click logs
+- audit logs and service catalog records
+
+Dummy login accounts:
+- `owner@seed.20byte.local` / `DemoPass123!`
+- `admin@seed.20byte.local` / `DemoPass123!`
+- `cs@seed.20byte.local` / `DemoPass123!`
+- `advertiser@seed.20byte.local` / `DemoPass123!`
 
 ---
 
@@ -249,7 +320,7 @@ The worker processes background tasks.
 Start worker:
 
 ```
-node worker/index.ts
+npm run worker:start
 ```
 
 Worker responsibilities:
@@ -289,7 +360,23 @@ docker compose restart
 
 ---
 
-# 12. Reset Development Environment
+# 12. Quality Gate Commands
+
+Before shipping changes, run:
+
+```
+npm run quality:check
+```
+
+This executes:
+- `npm run lint`
+- `npm run typecheck`
+- `npm test`
+- `npm run audit:cross-org-write-coverage`
+
+---
+
+# 13. Reset Development Environment
 
 If something breaks:
 
@@ -319,7 +406,7 @@ npx prisma migrate dev
 
 ---
 
-# 13. Folder Structure Overview
+# 14. Folder Structure Overview
 
 Key directories:
 
@@ -335,26 +422,40 @@ docs/       → architecture documents
 
 ---
 
-# 14. First Development Task
+# 15. App Container Check (Pre-Deployment)
 
-After setup, Codex should begin with:
+To run app containers (web + worker) together with MySQL + Redis:
 
-DOC_11_TASKLIST.md
+```
+docker compose --profile app up -d --build
+```
 
-Start with:
+Connection mode note:
+- If you run app on host (`npm run dev`), keep `.env` as:
+  - `DATABASE_URL=mysql://root:password@localhost:3307/20byte`
+  - `REDIS_URL=redis://localhost:6379`
+- If you run app via compose profile (`web` + `worker` containers), service connectivity uses internal Docker DNS:
+  - MySQL: `mysql:3306`
+  - Redis: `redis:6379`
 
-PHASE 0 — Project Initialization
+Expected containers:
 
-Tasks:
+```
+20byte_web
+20byte_worker
+20byte_mysql
+20byte_redis
+```
 
-Initialize Next.js project  
-Setup Tailwind  
-Setup shadcn/ui  
-Setup project structure  
+To stop:
+
+```
+docker compose down
+```
 
 ---
 
-# 15. Troubleshooting
+# 16. Troubleshooting
 
 If MySQL fails to start:
 
@@ -374,7 +475,23 @@ Stop existing containers using those ports.
 
 ---
 
-# 16. Development Philosophy
+# 17. Backup Runbook (Recommended)
+
+For VPS deployment with Docker MySQL container, create daily SQL dumps:
+
+```
+BACKUP_DIR=/opt/20byte/backups ./scripts/backup/mysql-daily-backup.sh
+```
+
+Suggested retention:
+
+- keep at least 7 daily backups
+- copy backups periodically to external storage
+- use `scripts/backup/cron.example` for cron schedule template
+
+---
+
+# 18. Development Philosophy
 
 Development follows a **documentation-driven approach**.
 
@@ -390,7 +507,45 @@ DOC_11_TASKLIST.md
 
 ---
 
-# 17. Summary
+# 19. MVP Verification (Owner UAT)
+
+After local setup is complete, run this verification flow:
+
+1. Authentication
+- Register a new user
+- Login and access dashboard
+
+2. Onboarding
+- Create organization
+- Connect WhatsApp account
+- Send onboarding test message
+- Confirm redirect to inbox
+
+3. Inbox + CRM
+- Receive/send message
+- Assign conversation
+- Add tag and customer note
+- Test keyboard shortcuts
+
+4. Invoice + Proof
+- Create draft invoice
+- Edit items/milestones
+- Open public invoice URL
+- Attach payment proof from chat
+- Download invoice PDF
+
+5. Attribution
+- Create shortlink
+- Open redirect URL
+- Verify attribution badge in conversation
+
+6. Worker + Retention
+- Confirm worker processing webhook/media
+- Check cleanup logs for storage retention jobs
+
+---
+
+# 20. Summary
 
 Local development environment uses:
 
@@ -404,6 +559,7 @@ The developer runs:
 ```
 docker compose up -d
 npm run dev
+npm run worker:start
 ```
 
 Codex performs all coding tasks.

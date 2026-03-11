@@ -1,0 +1,98 @@
+import type { MessageDirection, MessageType } from "@prisma/client";
+
+export type StoreInboundMessageInput = {
+  orgId: string;
+  customerPhoneE164: string;
+  customerDisplayName?: string;
+  shortlinkCode?: string;
+  waMessageId: string;
+  type: MessageType;
+  text?: string;
+  mediaId?: string;
+  mimeType?: string;
+  fileName?: string;
+  fileSize?: number;
+};
+
+export type InboundStoreResult = {
+  stored: boolean;
+  duplicate: boolean;
+  messageId: string | null;
+  conversationId: string | null;
+  conversationStatus: "OPEN" | "CLOSED" | null;
+  assignedToMemberId: string | null;
+};
+
+export type SendOutboundMessageInput = {
+  actorUserId: string;
+  orgId: string;
+  conversationId: string;
+  type: "TEXT" | "TEMPLATE" | "SYSTEM";
+  text?: string;
+  templateName?: string;
+  templateCategory?: "MARKETING" | "UTILITY" | "AUTHENTICATION" | "SERVICE";
+  templateLanguageCode?: string;
+  templateComponents?: Array<Record<string, unknown>>;
+};
+
+export type OutboundStoreResult = {
+  messageId: string;
+  waMessageId: string | null;
+  type: "TEXT" | "TEMPLATE" | "SYSTEM";
+  sendStatus: "PENDING" | "SENT" | "FAILED";
+  sendError: string | null;
+  retryable: boolean;
+  sendAttemptCount: number;
+  createdAt: Date;
+};
+
+export type ListMessagesInput = {
+  actorUserId: string;
+  orgId: string;
+  conversationId: string;
+  page?: number;
+  limit?: number;
+};
+
+export type MessageListItem = {
+  id: string;
+  waMessageId: string | null;
+  direction: MessageDirection;
+  type: MessageType;
+  text: string | null;
+  mediaUrl: string | null;
+  mimeType: string | null;
+  fileName: string | null;
+  templateName: string | null;
+  templateCategory: string | null;
+  templateLanguageCode: string | null;
+  isAutomated: boolean;
+  sendStatus: "PENDING" | "SENT" | "FAILED" | null;
+  sendError: string | null;
+  retryable: boolean;
+  sendAttemptCount: number;
+  createdAt: Date;
+};
+
+export type MessageListResult = {
+  messages: MessageListItem[];
+  page: number;
+  limit: number;
+  total: number;
+};
+
+export type ResolvedAttribution = {
+  source: string;
+  campaign?: string;
+  adset?: string;
+  ad?: string;
+  platform?: string;
+  medium?: string;
+  shortlinkId?: string;
+};
+
+export type RetryOutboundMessageInput = {
+  actorUserId: string;
+  orgId: string;
+  messageId: string;
+};
