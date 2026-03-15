@@ -33,8 +33,8 @@ type CatalogDraft = {
 };
 
 type ServiceCatalogPanelProps = {
-  orgId: string | null;
   onUseItem: (item: { name: string; unit?: string; priceCents: number }) => void;
+  allowManage?: boolean;
 };
 
 function createEmptyDraft(): CatalogDraft {
@@ -54,7 +54,7 @@ function formatRupiah(value: number): string {
   }).format(value);
 }
 
-export function ServiceCatalogPanel({ orgId, onUseItem }: ServiceCatalogPanelProps) {
+export function ServiceCatalogPanel({ onUseItem, allowManage = false }: ServiceCatalogPanelProps) {
   const [items, setItems] = useState<CatalogItem[]>([]);
   const [search, setSearch] = useState("");
   const [isLoading, setIsLoading] = useState(false);
@@ -68,15 +68,10 @@ export function ServiceCatalogPanel({ orgId, onUseItem }: ServiceCatalogPanelPro
   const editableItem = useMemo(() => items.find((item) => item.id === editingId) ?? null, [editingId, items]);
 
   const loadItems = useCallback(async () => {
-    if (!orgId) {
-      setItems([]);
-      return;
-    }
-
     setError(null);
     setIsLoading(true);
     try {
-      const query = new URLSearchParams({ orgId });
+      const query = new URLSearchParams();
       if (search.trim()) {
         query.set("q", search.trim());
       }
@@ -94,7 +89,7 @@ export function ServiceCatalogPanel({ orgId, onUseItem }: ServiceCatalogPanelPro
     } finally {
       setIsLoading(false);
     }
-  }, [orgId, search]);
+  }, [search]);
 
   useEffect(() => {
     void loadItems();
@@ -111,7 +106,7 @@ export function ServiceCatalogPanel({ orgId, onUseItem }: ServiceCatalogPanelPro
   }
 
   async function handleCreate() {
-    if (!orgId || isCreating) {
+    if (isCreating) {
       return;
     }
 
@@ -124,7 +119,6 @@ export function ServiceCatalogPanel({ orgId, onUseItem }: ServiceCatalogPanelPro
           "Content-Type": "application/json"
         },
         body: JSON.stringify({
-          orgId,
           name: createDraft.name,
           category: createDraft.category || undefined,
           unit: createDraft.unit || undefined,
@@ -148,7 +142,7 @@ export function ServiceCatalogPanel({ orgId, onUseItem }: ServiceCatalogPanelPro
   }
 
   async function handleSaveEdit() {
-    if (!orgId || !editingId || isSaving) {
+    if (!editingId || isSaving) {
       return;
     }
 
@@ -161,7 +155,6 @@ export function ServiceCatalogPanel({ orgId, onUseItem }: ServiceCatalogPanelPro
           "Content-Type": "application/json"
         },
         body: JSON.stringify({
-          orgId,
           name: draft.name,
           category: draft.category || "",
           unit: draft.unit || "",
@@ -185,14 +178,9 @@ export function ServiceCatalogPanel({ orgId, onUseItem }: ServiceCatalogPanelPro
   }
 
   async function handleDelete(itemId: string) {
-    if (!orgId) {
-      return;
-    }
-
     setError(null);
     try {
-      const params = new URLSearchParams({ orgId });
-      const response = await fetch(`/api/catalog/${encodeURIComponent(itemId)}?${params.toString()}`, {
+      const response = await fetch(`/api/catalog/${encodeURIComponent(itemId)}`, {
         method: "DELETE"
       });
 
@@ -219,44 +207,46 @@ export function ServiceCatalogPanel({ orgId, onUseItem }: ServiceCatalogPanelPro
             onChange={(event) => setSearch(event.target.value)}
             className="h-8 w-40"
           />
-          <Button type="button" variant="secondary" onClick={() => void loadItems()} disabled={isLoading || !orgId}>
+          <Button type="button" variant="secondary" onClick={() => void loadItems()} disabled={isLoading}>
             {isLoading ? "Loading..." : "Refresh"}
           </Button>
         </div>
       </div>
 
-      <div className="rounded-md border border-border p-2">
-        <p className="mb-2 text-xs text-muted-foreground">Create Item</p>
-        <div className="grid gap-2 sm:grid-cols-4">
-          <Input
-            value={createDraft.name}
-            placeholder="Name"
-            onChange={(event) => setCreateDraft((prev) => ({ ...prev, name: event.target.value }))}
-          />
-          <Input
-            value={createDraft.category}
-            placeholder="Category"
-            onChange={(event) => setCreateDraft((prev) => ({ ...prev, category: event.target.value }))}
-          />
-          <Input
-            value={createDraft.unit}
-            placeholder="Unit"
-            onChange={(event) => setCreateDraft((prev) => ({ ...prev, unit: event.target.value }))}
-          />
-          <Input
-            type="number"
-            min={0}
-            value={createDraft.priceCents}
-            placeholder="Price (IDR)"
-            onChange={(event) => setCreateDraft((prev) => ({ ...prev, priceCents: event.target.value }))}
-          />
+      {allowManage ? (
+        <div className="rounded-md border border-border p-2">
+          <p className="mb-2 text-xs text-muted-foreground">Create Item</p>
+          <div className="grid gap-2 sm:grid-cols-4">
+            <Input
+              value={createDraft.name}
+              placeholder="Name"
+              onChange={(event) => setCreateDraft((prev) => ({ ...prev, name: event.target.value }))}
+            />
+            <Input
+              value={createDraft.category}
+              placeholder="Category"
+              onChange={(event) => setCreateDraft((prev) => ({ ...prev, category: event.target.value }))}
+            />
+            <Input
+              value={createDraft.unit}
+              placeholder="Unit"
+              onChange={(event) => setCreateDraft((prev) => ({ ...prev, unit: event.target.value }))}
+            />
+            <Input
+              type="number"
+              min={0}
+              value={createDraft.priceCents}
+              placeholder="Price (IDR)"
+              onChange={(event) => setCreateDraft((prev) => ({ ...prev, priceCents: event.target.value }))}
+            />
+          </div>
+          <div className="mt-2">
+            <Button type="button" onClick={() => void handleCreate()} disabled={isCreating}>
+              {isCreating ? "Creating..." : "Add Catalog Item"}
+            </Button>
+          </div>
         </div>
-        <div className="mt-2">
-          <Button type="button" onClick={() => void handleCreate()} disabled={!orgId || isCreating}>
-            {isCreating ? "Creating..." : "Add Catalog Item"}
-          </Button>
-        </div>
-      </div>
+      ) : null}
 
       <div className="mt-3 space-y-2">
         {items.length === 0 ? <p className="text-xs text-muted-foreground">No catalog items yet.</p> : null}

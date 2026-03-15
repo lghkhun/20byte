@@ -1,5 +1,5 @@
-import { redirect } from "next/navigation";
+import { CustomersWorkspace } from "@/components/customers/CustomersWorkspace";
 
 export default function CustomersPage() {
-  redirect("/dashboard");
+  return <CustomersWorkspace />;
 }

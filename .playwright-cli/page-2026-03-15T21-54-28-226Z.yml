@@ -1,0 +1,27 @@
+- generic [ref=e1]:
+  - generic [ref=e2]:
+    - banner [ref=e3]:
+      - link "20byte" [ref=e4] [cursor=pointer]:
+        - /url: /
+      - button "Toggle theme" [ref=e19] [cursor=pointer]:
+        - img [ref=e20]
+    - main [ref=e6]:
+      - generic [ref=e8]:
+        - heading "Sign in to 20byte" [level=1] [ref=e9]
+        - paragraph [ref=e10]: Use your email and password to continue.
+        - generic [ref=e11]:
+          - generic [ref=e12]:
+            - text: Email
+            - textbox "Email" [ref=e13]:
+              - /placeholder: you@company.com
+              - text: DemoPass123!owner@seed.20byte.local
+          - generic [ref=e14]:
+            - text: Password
+            - textbox "Password" [active] [ref=e15]:
+              - /placeholder: At least 8 characters
+          - button "Sign in" [ref=e16] [cursor=pointer]
+        - paragraph [ref=e17]:
+          - text: No account yet?
+          - link "Register here" [ref=e18] [cursor=pointer]:
+            - /url: /register
+  - alert [ref=e22]

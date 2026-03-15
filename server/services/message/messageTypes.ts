@@ -4,14 +4,17 @@ export type StoreInboundMessageInput = {
   orgId: string;
   customerPhoneE164: string;
   customerDisplayName?: string;
+  customerAvatarUrl?: string;
   shortlinkCode?: string;
   waMessageId: string;
   type: MessageType;
   text?: string;
   mediaId?: string;
+  mediaUrl?: string;
   mimeType?: string;
   fileName?: string;
   fileSize?: number;
+  durationSec?: number;
 };
 
 export type InboundStoreResult = {
@@ -27,8 +30,13 @@ export type SendOutboundMessageInput = {
   actorUserId: string;
   orgId: string;
   conversationId: string;
-  type: "TEXT" | "TEMPLATE" | "SYSTEM";
+  type: "TEXT" | "IMAGE" | "VIDEO" | "AUDIO" | "DOCUMENT" | "TEMPLATE" | "SYSTEM";
   text?: string;
+  mediaId?: string;
+  mediaUrl?: string;
+  mimeType?: string;
+  fileName?: string;
+  fileSize?: number;
   templateName?: string;
   templateCategory?: "MARKETING" | "UTILITY" | "AUTHENTICATION" | "SERVICE";
   templateLanguageCode?: string;
@@ -38,7 +46,7 @@ export type SendOutboundMessageInput = {
 export type OutboundStoreResult = {
   messageId: string;
   waMessageId: string | null;
-  type: "TEXT" | "TEMPLATE" | "SYSTEM";
+  type: "TEXT" | "IMAGE" | "VIDEO" | "AUDIO" | "DOCUMENT" | "TEMPLATE" | "SYSTEM";
   sendStatus: "PENDING" | "SENT" | "FAILED";
   sendError: string | null;
   retryable: boolean;

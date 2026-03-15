@@ -5,6 +5,8 @@ import { requireApiSession } from "@/lib/auth/middleware";
 import { createInboxRealtimeTokenRequest } from "@/server/services/realtimeService";
 import { ServiceError } from "@/server/services/serviceError";
 
+export const runtime = "nodejs";
+
 export async function GET(request: NextRequest) {
   const auth = requireApiSession(request);
   if (auth.response) {

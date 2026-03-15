@@ -2,6 +2,7 @@ import { PaymentMilestoneType } from "@prisma/client";
 import { type NextRequest, NextResponse } from "next/server";
 
 import { requireApiSession } from "@/lib/auth/middleware";
+import { resolvePrimaryOrganizationIdForUser } from "@/server/services/organizationService";
 import { markInvoicePaid } from "@/server/services/invoiceService";
 import { ServiceError } from "@/server/services/serviceError";
 
@@ -64,9 +65,13 @@ export async function POST(
   }
 
   try {
+    const orgId = await resolvePrimaryOrganizationIdForUser(
+      auth.session.userId,
+      typeof body.orgId === "string" ? body.orgId : ""
+    );
     const invoice = await markInvoicePaid({
       actorUserId: auth.session.userId,
-      orgId: typeof body.orgId === "string" ? body.orgId : "",
+      orgId,
       invoiceId: context.params.invoiceId,
       milestoneType: parseMilestoneType(body.milestoneType)
     });

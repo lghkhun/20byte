@@ -5,6 +5,29 @@ import { formatTime, renderMediaLabel } from "@/components/inbox/bubble/utils";
 import type { MessageItem } from "@/components/inbox/types";
 import { Button } from "@/components/ui/button";
 
+function renderTextWithLinks(text: string) {
+  const urlRegex = /(https?:\/\/[^\s]+)/gi;
+  const parts = text.split(urlRegex);
+
+  return parts.map((part, index) => {
+    if (/^https?:\/\//i.test(part)) {
+      return (
+        <a
+          key={`${part}-${index}`}
+          href={part}
+          target="_blank"
+          rel="noreferrer"
+          className="break-all text-primary underline underline-offset-2"
+        >
+          {part}
+        </a>
+      );
+    }
+
+    return <span key={`${part}-${index}`}>{part}</span>;
+  });
+}
+
 type MessageBubbleProps = {
   density?: "compact" | "comfy";
   isEmphasized?: boolean;
@@ -65,7 +88,7 @@ export function MessageBubble({
           </p>
         ) : null}
 
-        {message.text ? <p className="whitespace-pre-wrap text-sm leading-relaxed text-foreground">{message.text}</p> : null}
+        {message.text ? <p className="whitespace-pre-wrap break-words text-sm leading-relaxed text-foreground">{renderTextWithLinks(message.text)}</p> : null}
 
         {canUseAsProof ? (
           <div className="mt-2">

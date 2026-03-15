@@ -73,6 +73,13 @@ enum WaTemplateCategory {
 model Org {
   id                 String   @id @default(cuid())
   name               String
+  legalName          String?
+  responsibleName    String?
+  businessPhone      String?
+  businessEmail      String?
+  businessAddress    String?  @db.Text
+  logoUrl            String?
+  invoiceSignatureUrl String?
   createdAt          DateTime @default(now())
   updatedAt          DateTime @updatedAt
 
@@ -98,6 +105,8 @@ model Org {
   auditLogs          AuditLog[]
   plan               OrgPlan?
   bankAccounts       OrgBankAccount[]
+  crmPipelines       CrmPipeline[]
+  crmPipelineStages  CrmPipelineStage[]
 
   @@index([createdAt])
 }
@@ -263,18 +272,58 @@ model Conversation {
   sourcePlatform     String?
   sourceMedium       String?
   shortlinkId        String?
+  crmPipelineId      String?
+  crmStageId         String?
 
   createdAt          DateTime           @default(now())
   updatedAt          DateTime           @updatedAt
 
   org                Org                @relation(fields: [orgId], references: [id])
   customer           Customer           @relation(fields: [customerId], references: [id])
+  crmPipeline        CrmPipeline?       @relation(fields: [crmPipelineId], references: [id])
+  crmStage           CrmPipelineStage?  @relation(fields: [crmStageId], references: [id])
   messages           Message[]
   invoices           Invoice[]
 
   @@index([orgId, status, lastMessageAt])
   @@index([orgId, assignedToMemberId, lastMessageAt])
   @@index([customerId])
+  @@index([crmPipelineId])
+  @@index([crmStageId])
+}
+
+model CrmPipeline {
+  id          String             @id @default(cuid())
+  orgId       String
+  name        String
+  isDefault   Boolean            @default(false)
+  createdAt   DateTime           @default(now())
+  updatedAt   DateTime           @updatedAt
+
+  org         Org                @relation(fields: [orgId], references: [id])
+  stages      CrmPipelineStage[]
+  conversations Conversation[]
+
+  @@index([orgId, createdAt])
+  @@unique([orgId, name])
+}
+
+model CrmPipelineStage {
+  id            String          @id @default(cuid())
+  orgId         String
+  pipelineId    String
+  name          String
+  color         String          @default("emerald")
+  position      Int             @default(0)
+  createdAt     DateTime        @default(now())
+  updatedAt     DateTime        @updatedAt
+
+  org           Org             @relation(fields: [orgId], references: [id])
+  pipeline      CrmPipeline     @relation(fields: [pipelineId], references: [id])
+  conversations Conversation[]
+
+  @@index([orgId, pipelineId, position])
+  @@unique([pipelineId, name])
 }
 
 model Message {
@@ -361,7 +410,7 @@ model Invoice {
   publicToken      String        @unique
 
   // Snapshot of bank accounts for invoice rendering (stable even if org settings change later)
-  bankAccountsJson String
+  bankAccountsJson String        @db.LongText
 
   // PDF stored on R2
   pdfUrl           String?

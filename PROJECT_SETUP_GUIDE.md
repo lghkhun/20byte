@@ -133,14 +133,14 @@ NEXTAUTH_URL=http://localhost:3000
 APP_URL=http://localhost:3000
 SHORTLINK_BASE_URL=https://wa.20byte.com
 
-# Keep platform runnable before Meta verification is complete
+# Optional: keep platform runnable without a live paired device
 WHATSAPP_MOCK_MODE=true
 ```
 
-With `WHATSAPP_MOCK_MODE=true`, inbox/onboarding message flows use dummy WhatsApp message IDs without calling Meta API.
-After Meta verification is complete, set:
+With `WHATSAPP_MOCK_MODE=true`, inbox/onboarding message flows use dummy WhatsApp message IDs without requiring a live Baileys session.
+When you are ready to test with a real WhatsApp device, set:
 - `WHATSAPP_MOCK_MODE=false`
-- fill all `WHATSAPP_*` credentials in `.env`
+- pair the account from `/dashboard/settings/whatsapp`
 
 ---
 

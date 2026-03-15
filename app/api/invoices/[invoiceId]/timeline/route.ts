@@ -1,6 +1,7 @@
 import { type NextRequest, NextResponse } from "next/server";
 
 import { requireApiSession } from "@/lib/auth/middleware";
+import { resolvePrimaryOrganizationIdForUser } from "@/server/services/organizationService";
 import { getInvoiceTimeline } from "@/server/services/invoiceService";
 import { ServiceError } from "@/server/services/serviceError";
 
@@ -29,9 +30,11 @@ export async function GET(
     return auth.response;
   }
 
-  const orgId = request.nextUrl.searchParams.get("orgId")?.trim() ?? "";
-
   try {
+    const orgId = await resolvePrimaryOrganizationIdForUser(
+      auth.session.userId,
+      request.nextUrl.searchParams.get("orgId")?.trim() ?? ""
+    );
     const timeline = await getInvoiceTimeline({
       actorUserId: auth.session.userId,
       orgId,

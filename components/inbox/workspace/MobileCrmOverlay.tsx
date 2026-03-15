@@ -4,7 +4,7 @@ import { useRef } from "react";
 
 import { CrmContextPanel } from "@/components/inbox/CrmContextPanel";
 import type { CrmActivityItem, CrmInvoiceItem } from "@/components/inbox/crm/types";
-import type { ConversationItem } from "@/components/inbox/types";
+import type { ConversationItem, MessageItem } from "@/components/inbox/types";
 import { useModalAccessibility } from "@/lib/a11y/useModalAccessibility";
 import { Button } from "@/components/ui/button";
 
@@ -26,6 +26,7 @@ type MobileCrmOverlayProps = {
   open: boolean;
   onClose: () => void;
   conversation: ConversationItem | null;
+  messages: MessageItem[];
   activeOrgRole: string | null;
   isLoadingConversation: boolean;
   isAssigning: boolean;
@@ -39,14 +40,16 @@ type MobileCrmOverlayProps = {
   onCreateTag: (name: string, color: string) => Promise<void>;
   onAssignTag: (tagId: string) => Promise<void>;
   onCreateNote: (content: string) => Promise<void>;
+  onUpdateNote: (noteId: string, content: string) => Promise<void>;
+  onDeleteNote: (noteId: string) => Promise<void>;
   selectedProofMessageId: string | null;
   isAttachingProof: boolean;
   proofFeedback: string | null;
   onAttachProof: (invoiceId: string, milestoneType?: "FULL" | "DP" | "FINAL") => Promise<void>;
   onOpenInvoiceDrawer: () => void;
-  onAssignToMe: () => void;
   onSendInvoice: (invoiceId: string) => Promise<void>;
   onMarkInvoicePaid: (invoiceId: string, milestoneType?: "FULL" | "DP" | "FINAL") => Promise<void>;
+  onRefreshConversation: () => Promise<void>;
   isSendingInvoice: boolean;
   isMarkingInvoicePaid: boolean;
   invoiceActionError: string | null;
@@ -55,10 +58,11 @@ type MobileCrmOverlayProps = {
 
 const MOBILE_CRM_ANCHORS = [
   ["Profile", "crm-profile"],
-  ["Assign", "crm-assignment"],
+  ["Pipeline", "crm-pipeline"],
   ["Proof", "crm-proof"],
   ["Tags", "crm-tags"],
   ["Notes", "crm-notes"],
+  ["Media", "crm-media"],
   ["Invoices", "crm-invoices"],
   ["Timeline", "crm-timeline"]
 ] as const;
@@ -68,6 +72,7 @@ export function MobileCrmOverlay(props: MobileCrmOverlayProps) {
     open,
     onClose,
     conversation,
+    messages,
     activeOrgRole,
     isLoadingConversation,
     isAssigning,
@@ -81,14 +86,16 @@ export function MobileCrmOverlay(props: MobileCrmOverlayProps) {
     onCreateTag,
     onAssignTag,
     onCreateNote,
+    onUpdateNote,
+    onDeleteNote,
     selectedProofMessageId,
     isAttachingProof,
     proofFeedback,
     onAttachProof,
     onOpenInvoiceDrawer,
-    onAssignToMe,
     onSendInvoice,
     onMarkInvoicePaid,
+    onRefreshConversation,
     isSendingInvoice,
     isMarkingInvoicePaid,
     invoiceActionError,
@@ -147,6 +154,7 @@ export function MobileCrmOverlay(props: MobileCrmOverlayProps) {
 
         <CrmContextPanel
           conversation={conversation}
+          messages={messages}
           activeOrgRole={activeOrgRole}
           isLoading={isLoadingConversation}
           isAssigning={isAssigning}
@@ -160,14 +168,16 @@ export function MobileCrmOverlay(props: MobileCrmOverlayProps) {
           onCreateTag={onCreateTag}
           onAssignTag={onAssignTag}
           onCreateNote={onCreateNote}
+          onUpdateNote={onUpdateNote}
+          onDeleteNote={onDeleteNote}
           selectedProofMessageId={selectedProofMessageId}
           isAttachingProof={isAttachingProof}
           proofFeedback={proofFeedback}
           onAttachProof={onAttachProof}
           onOpenInvoiceDrawer={onOpenInvoiceDrawer}
-          onAssignToMe={onAssignToMe}
           onSendInvoice={onSendInvoice}
           onMarkInvoicePaid={onMarkInvoicePaid}
+          onRefreshConversation={onRefreshConversation}
           isSendingInvoice={isSendingInvoice}
           isMarkingInvoicePaid={isMarkingInvoicePaid}
           invoiceActionError={invoiceActionError}

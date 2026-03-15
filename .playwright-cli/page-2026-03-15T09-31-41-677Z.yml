@@ -1,0 +1,135 @@
+- generic [active] [ref=e1]:
+  - alert [ref=e22]
+  - generic [ref=e24]:
+    - generic [ref=e27]:
+      - list [ref=e29]:
+        - listitem [ref=e30]:
+          - link "20 20byte Chat-first CRM" [ref=e31] [cursor=pointer]:
+            - /url: /inbox
+            - generic [ref=e33]: "20"
+            - generic:
+              - generic: 20byte
+              - generic: Chat-first CRM
+      - generic [ref=e34]:
+        - generic [ref=e35]:
+          - generic [ref=e36]: Platform
+          - list [ref=e37]:
+            - listitem [ref=e38]:
+              - link "Dashboard" [ref=e39] [cursor=pointer]:
+                - /url: /dashboard
+                - img [ref=e40]
+                - generic: Dashboard
+            - listitem [ref=e45]:
+              - link "Inbox" [ref=e46] [cursor=pointer]:
+                - /url: /inbox
+                - img [ref=e47]
+                - generic: Inbox
+            - listitem [ref=e49]:
+              - link "Customers" [ref=e50] [cursor=pointer]:
+                - /url: /customers
+                - img [ref=e51]
+                - generic: Customers
+            - listitem [ref=e56]:
+              - link "Invoices" [ref=e57] [cursor=pointer]:
+                - /url: /invoices
+                - img [ref=e58]
+                - generic: Invoices
+        - generic [ref=e64]:
+          - generic [ref=e65]: Business Tools
+          - list [ref=e67]:
+            - listitem [ref=e68]:
+              - link "Business" [ref=e69] [cursor=pointer]:
+                - /url: /dashboard/settings/business
+                - img [ref=e70]
+                - generic: Business
+            - listitem [ref=e78]:
+              - link "WhatsApp" [ref=e79] [cursor=pointer]:
+                - /url: /dashboard/settings/whatsapp
+                - img [ref=e80]
+                - generic: WhatsApp
+            - listitem [ref=e83]:
+              - link "CRM Pipeline" [ref=e84] [cursor=pointer]:
+                - /url: /crm/pipelines
+                - img [ref=e85]
+                - generic: CRM Pipeline
+            - listitem [ref=e89]:
+              - link "General" [ref=e90] [cursor=pointer]:
+                - /url: /settings
+                - img [ref=e91]
+                - generic: General
+      - list [ref=e95]:
+        - listitem [ref=e96]:
+          - button "SO Seed Owner owner@seed.20byte.local" [ref=e97] [cursor=pointer]:
+            - generic [ref=e99]: SO
+            - generic:
+              - generic: Seed Owner
+              - generic: owner@seed.20byte.local
+            - img [ref=e100]
+    - main [ref=e103]:
+      - main [ref=e104]:
+        - generic [ref=e110]:
+          - generic [ref=e113]:
+            - generic [ref=e114]:
+              - generic [ref=e115]:
+                - heading "Inbox" [level=2] [ref=e116]
+                - paragraph [ref=e117]: 5 active conversations
+              - generic [ref=e118]:
+                - button "Filters" [ref=e119] [cursor=pointer]:
+                  - img [ref=e120]
+                  - generic [ref=e130]: Filters
+                - button "Archive actions" [ref=e131] [cursor=pointer]:
+                  - img [ref=e132]
+                  - generic [ref=e138]: Archive actions
+                - button "More actions" [ref=e139] [cursor=pointer]:
+                  - img [ref=e140]
+                  - generic [ref=e144]: More actions
+            - generic [ref=e145]:
+              - button "All5" [ref=e146] [cursor=pointer]
+              - button "Unassigned5" [ref=e147] [cursor=pointer]
+              - button "Unread0" [ref=e148] [cursor=pointer]
+              - button "Resolved0" [ref=e149] [cursor=pointer]
+            - generic [ref=e150]:
+              - generic [ref=e151]:
+                - img
+                - textbox [ref=e152]:
+                  - /placeholder: Search...
+              - button "New" [ref=e153] [cursor=pointer]:
+                - img [ref=e154]
+                - generic [ref=e157]: New
+              - button "Refresh conversations" [ref=e158] [cursor=pointer]:
+                - img [ref=e159]
+                - generic [ref=e164]: Refresh conversations
+          - generic [ref=e210]:
+            - generic [ref=e211]:
+              - generic [ref=e212]:
+                - generic [ref=e213]: +
+                - generic [ref=e215]:
+                  - heading "+628662776277" [level=2] [ref=e216]
+                  - generic [ref=e217]:
+                    - generic [ref=e218]: Open
+                    - generic [ref=e219]: "+628662776277"
+                    - generic [ref=e220]:
+                      - img [ref=e221]
+                      - text: Unassigned
+              - generic [ref=e224]:
+                - button "Search in messages" [ref=e225] [cursor=pointer]:
+                  - img [ref=e226]
+                - button "Transfer chat" [ref=e229] [cursor=pointer]:
+                  - img [ref=e230]
+                - button "Resolve conversation" [ref=e235] [cursor=pointer]:
+                  - img [ref=e236]
+                - button "Hide CRM panel" [ref=e239] [cursor=pointer]:
+                  - img [ref=e240]
+            - generic [ref=e270]:
+              - generic [ref=e271]:
+                - textbox "Enter message..." [ref=e272]
+                - generic [ref=e273]:
+                  - button "Insert emoji" [ref=e274] [cursor=pointer]:
+                    - img [ref=e275]
+                  - img [ref=e281] [cursor=pointer]
+                - button "Send" [ref=e284] [cursor=pointer]
+              - paragraph [ref=e285]: "Tip: use / for quick reply, I for invoice drawer, and attach file with the paperclip icon."
+          - generic [ref=e286]:
+            - button "Resize CRM panel" [ref=e287]
+            - complementary [ref=e290]:
+              - paragraph [ref=e291]: Loading CRM context...

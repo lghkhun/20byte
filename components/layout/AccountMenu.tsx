@@ -189,7 +189,7 @@ export function AccountMenu({ user, sidebarExpanded = false }: AccountMenuProps)
                 onClick={() => setOpen(false)}
               >
                 <Settings className="h-4 w-4" />
-                Workspace Settings
+                Business Settings
               </Link>
               <button
                 className="flex w-full items-center gap-2 rounded-md px-2.5 py-2 text-left text-sm text-destructive transition hover:bg-destructive/10 disabled:opacity-50"

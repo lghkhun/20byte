@@ -4,6 +4,10 @@ File: DOC_11_TASKLIST.md
 Product: 20byte  
 Purpose: This document defines the step-by-step development roadmap for Codex.
 
+Current note:
+
+- this file contains historical execution logs, including earlier Meta WhatsApp API work that has since been retired in favor of Baileys
+
 Codex must treat this file as the **primary execution checklist**.
 
 Rules:

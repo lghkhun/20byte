@@ -47,12 +47,6 @@ const CASES: ServiceGuardCase[] = [
     expectUpdateMany: true
   },
   {
-    label: "whatsappService write-path",
-    file: "server/services/whatsappService.ts",
-    strictNoDirectWrite: true,
-    expectUpdateMany: true
-  },
-  {
     label: "org bank account write-path",
     file: "server/services/orgBankAccountService.ts",
     strictNoDirectWrite: true,

@@ -5,15 +5,8 @@ export const TEMPLATE_COST: Record<"MARKETING" | "UTILITY" | "AUTHENTICATION" | 
   SERVICE: "Rp 0"
 };
 
-const ALLOWED_MIME_PREFIXES = ["image/", "video/"];
-const ALLOWED_EXACT_MIME_TYPES = ["application/pdf"];
-
 export function isAllowedAttachmentType(mimeType: string): boolean {
-  if (ALLOWED_EXACT_MIME_TYPES.includes(mimeType)) {
-    return true;
-  }
-
-  return ALLOWED_MIME_PREFIXES.some((prefix) => mimeType.startsWith(prefix));
+  return typeof mimeType === "string";
 }
 
 export function formatFileSize(bytes: number): string {

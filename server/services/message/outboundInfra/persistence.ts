@@ -7,8 +7,13 @@ import { ServiceError } from "@/server/services/serviceError";
 export async function storeOutboundRecord(params: {
   orgId: string;
   conversationId: string;
-  type: "TEXT" | "TEMPLATE" | "SYSTEM";
+  type: "TEXT" | "IMAGE" | "VIDEO" | "AUDIO" | "DOCUMENT" | "TEMPLATE" | "SYSTEM";
   text?: string;
+  mediaId?: string | null;
+  mediaUrl?: string | null;
+  mimeType?: string | null;
+  fileName?: string | null;
+  fileSize?: number | null;
   waMessageId?: string | null;
   templateName?: string;
   templateCategory?: "MARKETING" | "UTILITY" | "AUTHENTICATION" | "SERVICE";
@@ -28,6 +33,11 @@ export async function storeOutboundRecord(params: {
         direction: MessageDirection.OUTBOUND,
         type: params.type,
         text: params.text,
+        mediaId: params.mediaId ?? null,
+        mediaUrl: params.mediaUrl ?? null,
+        mimeType: params.mimeType ?? null,
+        fileName: params.fileName ?? null,
+        fileSize: params.fileSize ?? null,
         templateName: params.templateName,
         templateCategory: params.templateCategory,
         templateLanguageCode: params.templateLanguageCode,
@@ -66,7 +76,7 @@ export async function storeOutboundRecord(params: {
   return {
     messageId: createdMessage.id,
     waMessageId: createdMessage.waMessageId,
-    type: createdMessage.type as "TEXT" | "TEMPLATE" | "SYSTEM",
+    type: createdMessage.type as "TEXT" | "IMAGE" | "VIDEO" | "AUDIO" | "DOCUMENT" | "TEMPLATE" | "SYSTEM",
     sendStatus: createdMessage.sendStatus ?? "SENT",
     sendError: createdMessage.sendError ?? null,
     retryable: createdMessage.retryable,

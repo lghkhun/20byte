@@ -64,7 +64,7 @@ export async function GET(request: NextRequest) {
       return errorResponse(error.status, error.code, error.message);
     }
 
-    return errorResponse(500, "ORG_MEMBER_LIST_FAILED", "Failed to fetch organization members.");
+    return errorResponse(500, "ORG_MEMBER_LIST_FAILED", "Failed to fetch business members.");
   }
 }
 
@@ -115,6 +115,6 @@ export async function POST(request: NextRequest) {
       return errorResponse(error.status, error.code, error.message);
     }
 
-    return errorResponse(500, "ORG_MEMBER_UPSERT_FAILED", "Failed to add organization member.");
+    return errorResponse(500, "ORG_MEMBER_UPSERT_FAILED", "Failed to add business member.");
   }
 }

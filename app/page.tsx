@@ -6,7 +6,7 @@ export default function HomePage() {
           WhatsApp-first CRM for service business
         </p>
         <h1 className="text-3xl font-semibold tracking-tight text-foreground md:text-5xl">
-          Kelola chat, CRM, invoice, dan payment proof dalam satu workspace.
+          Kelola chat, CRM, invoice, dan payment proof dalam satu bisnis.
         </h1>
         <p className="max-w-3xl text-sm text-muted-foreground md:text-base">
           20byte membantu tim owner, admin, dan CS bekerja dari inbox yang sama: assign conversation, kirim invoice,

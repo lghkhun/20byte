@@ -1,4 +1,5 @@
 import type { OutboundStoreResult, SendOutboundMessageInput } from "@/server/services/message/messageTypes";
+import { readBaileysMediaFile } from "@/server/services/baileysService";
 import {
   normalize,
   normalizeOptional,
@@ -10,10 +11,11 @@ import {
 import { ServiceError } from "@/server/services/serviceError";
 import {
   getConversationWithCustomer,
-  getOrgWaCredentials,
+  getOrgWaConnection,
   publishConversationUpdated,
   publishMessageNewEventNonBlocking,
   requireInboxMembership,
+  sendOutboundMediaWithRetry,
   sendOutboundTemplateWithRetry,
   sendOutboundTextWithRetry,
   storeOutboundRecord,
@@ -87,12 +89,11 @@ export async function sendOutboundMessage(input: SendOutboundMessageInput): Prom
       status: conversation.status
     });
 
-    const credentials = await getOrgWaCredentials(orgId);
+    const connection = await getOrgWaConnection(orgId);
     let waMessageId: string | null = null;
     try {
       waMessageId = await sendOutboundTextWithRetry({
-        accessToken: credentials.accessToken,
-        phoneNumberId: credentials.phoneNumberId,
+        orgId: connection.orgId,
         to: conversation.customer.phoneE164,
         text
       });
@@ -115,6 +116,83 @@ export async function sendOutboundMessage(input: SendOutboundMessageInput): Prom
       });
 
       throw new ServiceError(502, "WHATSAPP_SEND_FAILED", "Failed to send outbound WhatsApp message.");
+    }
+
+    return {
+      ...pending,
+      waMessageId,
+      sendStatus: "SENT",
+      sendError: null,
+      retryable: false,
+      sendAttemptCount: pending.sendAttemptCount + 1
+    };
+  }
+
+  if (input.type === "IMAGE" || input.type === "VIDEO" || input.type === "AUDIO" || input.type === "DOCUMENT") {
+    if (!input.mediaId || !input.mediaUrl || !input.fileName) {
+      throw new ServiceError(400, "INVALID_MEDIA_ATTACHMENT", "Attachment file is required.");
+    }
+
+    const pending = await storeOutboundRecord({
+      orgId,
+      conversationId: conversation.id,
+      type: input.type,
+      text: normalizeOptional(input.text),
+      mediaId: input.mediaId,
+      mediaUrl: input.mediaUrl,
+      mimeType: normalizeOptional(input.mimeType),
+      fileName: input.fileName,
+      fileSize: input.fileSize,
+      sendStatus: "PENDING",
+      retryable: false
+    });
+
+    publishMessageNewEventNonBlocking({
+      orgId,
+      conversationId: conversation.id,
+      messageId: pending.messageId,
+      direction: "OUTBOUND"
+    });
+    void publishConversationUpdated({
+      orgId,
+      conversationId: conversation.id,
+      assignedToMemberId: conversation.assignedToMemberId,
+      status: conversation.status
+    });
+
+    const connection = await getOrgWaConnection(orgId);
+    let waMessageId: string | null = null;
+
+    try {
+      const mediaBuffer = await readBaileysMediaFile(orgId, input.mediaId);
+      waMessageId = await sendOutboundMediaWithRetry({
+        orgId: connection.orgId,
+        to: conversation.customer.phoneE164,
+        type: input.type,
+        fileName: input.fileName,
+        mimeType: input.mimeType,
+        caption: input.text,
+        buffer: mediaBuffer
+      });
+
+      await updateOutboundSendResult({
+        orgId,
+        messageId: pending.messageId,
+        waMessageId,
+        sendStatus: "SENT",
+        sendError: null,
+        retryable: false
+      });
+    } catch (error) {
+      await updateOutboundSendResult({
+        orgId,
+        messageId: pending.messageId,
+        sendStatus: "FAILED",
+        sendError: normalizeSendError(error),
+        retryable: false
+      });
+
+      throw new ServiceError(502, "WHATSAPP_MEDIA_SEND_FAILED", "Failed to send outbound attachment.");
     }
 
     return {
@@ -165,12 +243,11 @@ export async function sendOutboundMessage(input: SendOutboundMessageInput): Prom
     status: conversation.status
   });
 
-  const credentials = await getOrgWaCredentials(orgId);
+  const connection = await getOrgWaConnection(orgId);
   let waMessageId: string | null = null;
   try {
     waMessageId = await sendOutboundTemplateWithRetry({
-      accessToken: credentials.accessToken,
-      phoneNumberId: credentials.phoneNumberId,
+      orgId: connection.orgId,
       to: conversation.customer.phoneE164,
       templateName,
       languageCode: templateLanguageCode,

@@ -2,6 +2,7 @@ import { type NextRequest, NextResponse } from "next/server";
 import { ConversationStatus } from "@prisma/client";
 
 import { requireApiSession } from "@/lib/auth/middleware";
+import { resolvePrimaryOrganizationIdForUser } from "@/server/services/organizationService";
 import { createConversation, listConversations } from "@/server/services/conversationService";
 import { ServiceError } from "@/server/services/serviceError";
 
@@ -66,13 +67,16 @@ export async function GET(request: NextRequest) {
     return auth.response;
   }
 
-  const orgId = request.nextUrl.searchParams.get("orgId")?.trim() ?? "";
   const filter = parseFilter(request.nextUrl.searchParams.get("filter"));
   const status = parseStatus(request.nextUrl.searchParams.get("status"));
   const page = parseNumber(request.nextUrl.searchParams.get("page"), 1);
   const limit = parseNumber(request.nextUrl.searchParams.get("limit"), 20);
 
   try {
+    const orgId = await resolvePrimaryOrganizationIdForUser(
+      auth.session.userId,
+      request.nextUrl.searchParams.get("orgId")?.trim() ?? ""
+    );
     const result = await listConversations({
       actorUserId: auth.session.userId,
       orgId,
@@ -118,9 +122,13 @@ export async function POST(request: NextRequest) {
   }
 
   try {
+    const orgId = await resolvePrimaryOrganizationIdForUser(
+      auth.session.userId,
+      typeof body.orgId === "string" ? body.orgId : ""
+    );
     const conversation = await createConversation({
       actorUserId: auth.session.userId,
-      orgId: typeof body.orgId === "string" ? body.orgId : "",
+      orgId,
       phoneE164: typeof body.phoneE164 === "string" ? body.phoneE164 : "",
       customerDisplayName: typeof body.customerDisplayName === "string" ? body.customerDisplayName : undefined
     });

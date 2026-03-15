@@ -2,6 +2,7 @@ import type { NextRequest } from "next/server";
 
 import { requireApiSession } from "@/lib/auth/middleware";
 import { errorResponse, successResponse } from "@/lib/api/http";
+import { resolvePrimaryOrganizationIdForUser } from "@/server/services/organizationService";
 import { createShortlink, disableShortlink, listShortlinks } from "@/server/services/shortlinkService";
 import { ServiceError } from "@/server/services/serviceError";
 
@@ -28,9 +29,11 @@ export async function GET(request: NextRequest) {
     return auth.response;
   }
 
-  const orgId = request.nextUrl.searchParams.get("orgId")?.trim() ?? "";
-
   try {
+    const orgId = await resolvePrimaryOrganizationIdForUser(
+      auth.session.userId,
+      request.nextUrl.searchParams.get("orgId")?.trim() ?? ""
+    );
     const shortlinks = await listShortlinks(auth.session.userId, orgId);
     return successResponse(
       {
@@ -61,9 +64,13 @@ export async function POST(request: NextRequest) {
   }
 
   try {
+    const orgId = await resolvePrimaryOrganizationIdForUser(
+      auth.session.userId,
+      typeof body.orgId === "string" ? body.orgId : ""
+    );
     const shortlink = await createShortlink({
       actorUserId: auth.session.userId,
-      orgId: typeof body.orgId === "string" ? body.orgId : "",
+      orgId,
       destinationUrl: typeof body.destinationUrl === "string" ? body.destinationUrl : "",
       source: typeof body.source === "string" ? body.source : undefined,
       campaign: typeof body.campaign === "string" ? body.campaign : undefined,
@@ -103,9 +110,13 @@ export async function PATCH(request: NextRequest) {
   }
 
   try {
+    const orgId = await resolvePrimaryOrganizationIdForUser(
+      auth.session.userId,
+      typeof body.orgId === "string" ? body.orgId : ""
+    );
     const shortlink = await disableShortlink(
       auth.session.userId,
-      typeof body.orgId === "string" ? body.orgId : "",
+      orgId,
       typeof body.shortlinkId === "string" ? body.shortlinkId : ""
     );
 

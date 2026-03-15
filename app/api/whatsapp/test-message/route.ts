@@ -2,8 +2,10 @@ import type { NextRequest } from "next/server";
 
 import { requireApiSession } from "@/lib/auth/middleware";
 import { errorResponse, successResponse } from "@/lib/api/http";
+import { normalizeWhatsAppDestination } from "@/lib/whatsapp/e164";
+import { getPrimaryOrganizationForUser } from "@/server/services/organizationService";
+import { sendBaileysTestMessage } from "@/server/services/baileysService";
 import { ServiceError } from "@/server/services/serviceError";
-import { sendOnboardingTestMessage } from "@/server/services/whatsappService";
 
 type TestMessageRequest = {
   orgId?: unknown;
@@ -24,10 +26,12 @@ export async function POST(request: NextRequest) {
   }
 
   try {
-    const result = await sendOnboardingTestMessage({
+    const primaryOrganization = await getPrimaryOrganizationForUser(auth.session.userId);
+    const orgId = typeof body.orgId === "string" && body.orgId.trim() ? body.orgId : primaryOrganization?.id ?? "";
+    const result = await sendBaileysTestMessage({
       actorUserId: auth.session.userId,
-      orgId: typeof body.orgId === "string" ? body.orgId : "",
-      toPhoneE164: typeof body.toPhoneE164 === "string" ? body.toPhoneE164 : ""
+      orgId,
+      toPhoneE164: normalizeWhatsAppDestination(typeof body.toPhoneE164 === "string" ? body.toPhoneE164 : "") ?? ""
     });
 
     return successResponse(

@@ -95,7 +95,6 @@ export async function seedBusiness(ctx: SeedContext) {
 
   const auditLogs = [
     { id: "seed_audit_invoice_sent_1", orgId: "seed_org_alpha", actorUserId: "seed_user_admin", action: "invoice.sent", entityType: "invoice", entityId: "seed_invoice_1", metaJson: JSON.stringify({ channel: "whatsapp", by: "seed" }) },
-    { id: "seed_audit_whatsapp_connected", orgId: "seed_org_alpha", actorUserId: "seed_user_owner", action: "whatsapp.connected", entityType: "wa_account", entityId: "seed_wa_alpha", metaJson: JSON.stringify({ provider: "meta", mode: "mock" }) },
     { id: "seed_audit_conversation_assigned", orgId: "seed_org_alpha", actorUserId: "seed_user_admin", action: "conversation.assigned", entityType: "conversation", entityId: "seed_conversation_1", metaJson: JSON.stringify({ assignee: "seed_member_cs" }) },
     { id: "seed_audit_proof_attached", orgId: "seed_org_alpha", actorUserId: "seed_user_cs", action: "invoice.proof_attached", entityType: "invoice", entityId: "seed_invoice_2", metaJson: JSON.stringify({ proofId: "seed_proof_1", milestoneType: "DP" }) },
     { id: "seed_audit_invoice_paid", orgId: "seed_org_alpha", actorUserId: "seed_user_owner", action: "invoice.mark_paid", entityType: "invoice", entityId: "seed_invoice_4", metaJson: JSON.stringify({ milestoneType: "FULL", source: "manual" }) }

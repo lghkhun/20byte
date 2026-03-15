@@ -1,6 +1,7 @@
 import { type NextRequest, NextResponse } from "next/server";
 
 import { requireApiSession } from "@/lib/auth/middleware";
+import { resolvePrimaryOrganizationIdForUser } from "@/server/services/organizationService";
 import { getConversationCrmContext } from "@/server/services/inboxCrmService";
 import { ServiceError } from "@/server/services/serviceError";
 
@@ -28,10 +29,13 @@ export async function GET(request: NextRequest, context: RouteParams) {
     return auth.response;
   }
 
-  const orgId = request.nextUrl.searchParams.get("orgId")?.trim() ?? "";
   const conversationId = context.params.conversationId;
 
   try {
+    const orgId = await resolvePrimaryOrganizationIdForUser(
+      auth.session.userId,
+      request.nextUrl.searchParams.get("orgId")?.trim() ?? ""
+    );
     const result = await getConversationCrmContext({
       actorUserId: auth.session.userId,
       orgId,

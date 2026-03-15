@@ -24,6 +24,14 @@
   --destructive-foreground: 0 0% 98%;
   --ring: 160 84% 35%;
   --radius: 0.75rem;
+  --sidebar-background: 0 0% 100%;
+  --sidebar-foreground: 222 47% 11%;
+  --sidebar-primary: 160 84% 35%;
+  --sidebar-primary-foreground: 0 0% 100%;
+  --sidebar-accent: 210 30% 95%;
+  --sidebar-accent-foreground: 222 47% 12%;
+  --sidebar-border: 214 30% 88%;
+  --sidebar-ring: 160 84% 35%;
 }
 
 .dark {
@@ -47,6 +55,14 @@
   --destructive: 0 84% 60%;
   --destructive-foreground: 0 0% 98%;
   --ring: 160 84% 39%;
+  --sidebar-background: 220 39% 12%;
+  --sidebar-foreground: 210 40% 98%;
+  --sidebar-primary: 160 84% 39%;
+  --sidebar-primary-foreground: 0 0% 100%;
+  --sidebar-accent: 217 33% 17%;
+  --sidebar-accent-foreground: 210 40% 98%;
+  --sidebar-border: 217 33% 17%;
+  --sidebar-ring: 160 84% 39%;
 }
 
 * {
@@ -132,6 +148,27 @@ body {
   animation: inbox-slide-up 200ms ease-out;
 }
 
+@keyframes settings-success-pop {
+  0% {
+    opacity: 0;
+    transform: translateY(10px) scale(0.96);
+  }
+
+  60% {
+    opacity: 1;
+    transform: translateY(0) scale(1.02);
+  }
+
+  100% {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.settings-success-pop {
+  animation: settings-success-pop 320ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
 @keyframes inbox-shimmer {
   0% {
     background-position: -200% 0;
@@ -151,4 +188,29 @@ body {
   );
   background-size: 220% 100%;
   animation: inbox-shimmer 1.2s linear infinite;
+}
+
+
+
+@layer base {
+  :root {
+    --sidebar-background: 0 0% 100%;
+    --sidebar-foreground: 222 47% 11%;
+    --sidebar-primary: 160 84% 35%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 210 30% 95%;
+    --sidebar-accent-foreground: 222 47% 12%;
+    --sidebar-border: 214 30% 88%;
+    --sidebar-ring: 160 84% 35%;
+  }
+  .dark {
+    --sidebar-background: 220 39% 12%;
+    --sidebar-foreground: 210 40% 98%;
+    --sidebar-primary: 160 84% 39%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 217 33% 17%;
+    --sidebar-accent-foreground: 210 40% 98%;
+    --sidebar-border: 217 33% 17%;
+    --sidebar-ring: 160 84% 39%;
+  }
 }

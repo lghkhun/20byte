@@ -2,6 +2,7 @@ import { PaymentMilestoneType } from "@prisma/client";
 import { type NextRequest, NextResponse } from "next/server";
 
 import { requireApiSession } from "@/lib/auth/middleware";
+import { resolvePrimaryOrganizationIdForUser } from "@/server/services/organizationService";
 import { attachPaymentProofFromMessage } from "@/server/services/paymentProofService";
 import { ServiceError } from "@/server/services/serviceError";
 
@@ -65,9 +66,13 @@ export async function POST(
   }
 
   try {
+    const orgId = await resolvePrimaryOrganizationIdForUser(
+      auth.session.userId,
+      typeof body.orgId === "string" ? body.orgId : ""
+    );
     const proof = await attachPaymentProofFromMessage({
       actorUserId: auth.session.userId,
-      orgId: typeof body.orgId === "string" ? body.orgId : "",
+      orgId,
       invoiceId: context.params.invoiceId,
       messageId: typeof body.messageId === "string" ? body.messageId : "",
       milestoneType: parseMilestoneType(body.milestoneType)
@@ -90,4 +95,3 @@ export async function POST(
     return errorResponse(500, "PROOF_ATTACH_FAILED", "Failed to attach payment proof.");
   }
 }
-

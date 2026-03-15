@@ -60,8 +60,8 @@ export function AuthForm({ mode }: AuthFormProps) {
       }
 
       if (isLogin) {
-        setSuccess("Login successful. Redirecting to dashboard...");
-        router.push("/dashboard");
+        setSuccess("Login successful. Redirecting to inbox...");
+        router.push("/inbox");
         router.refresh();
         return;
       }
@@ -165,4 +165,3 @@ export function AuthForm({ mode }: AuthFormProps) {
     </div>
   );
 }
-

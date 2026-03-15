@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import { ChatWindow } from "@/components/inbox/ChatWindow";
 import { AttachProofShortcutModal } from "@/components/inbox/AttachProofShortcutModal";
@@ -15,10 +15,10 @@ import { useInboxWorkspacePreferences } from "@/components/inbox/workspace/useIn
 import { InvoiceDrawer } from "@/components/invoices/InvoiceDrawer";
 import { Button } from "@/components/ui/button";
 import { EmptyStatePanel, ErrorStatePanel } from "@/components/ui/state-panels";
-import { Minimize2, PanelRightClose, PanelRightOpen } from "lucide-react";
+import { PanelRightClose, PanelRightOpen } from "lucide-react";
 
 export function InboxWorkspace() {
-  const { density, isCrmPanelVisible, isFocusMode, setIsFocusMode } = useInboxWorkspacePreferences();
+  const { density } = useInboxWorkspacePreferences();
   const {
     orgId,
     error,
@@ -38,8 +38,8 @@ export function InboxWorkspace() {
     isLoadingMessages,
     messageError,
     sendTextMessage,
+    createConversation,
     sendAttachmentMessage,
-    sendTemplateMessage,
     toggleSelectedConversationStatus,
     retryOutboundMessage,
     setSelectedProofMessageId,
@@ -57,12 +57,13 @@ export function InboxWorkspace() {
     createTagForCustomer,
     assignTagForCustomer,
     createCustomerNoteEntry,
+    updateCustomerNoteEntry,
+    deleteCustomerNoteEntry,
     selectedProofMessageId,
     isAttachingProof,
     proofFeedback,
     attachSelectedMessageAsProof,
     openInvoiceDrawer,
-    assignSelectedConversationToMe,
     sendInvoiceFromPanel,
     markInvoicePaidFromPanel,
     isSendingInvoice,
@@ -90,6 +91,10 @@ export function InboxWorkspace() {
 
   const [mobilePane, setMobilePane] = useState<"list" | "chat">("list");
   const [isMobileCrmOpen, setIsMobileCrmOpen] = useState(false);
+  const [isDesktopCrmOpen, setIsDesktopCrmOpen] = useState(true);
+  const [crmPanelWidth, setCrmPanelWidth] = useState(340);
+  const [isResizingCrm, setIsResizingCrm] = useState(false);
+  const resizeOriginRef = useRef<{ startX: number; startWidth: number } | null>(null);
   useEffect(() => {
     if (selectedConversationId) {
       setMobilePane("chat");
@@ -104,14 +109,58 @@ export function InboxWorkspace() {
     }
   }, [mobilePane]);
 
-  const gridLayoutClass = "grid gap-4 lg:grid-cols-[380px_minmax(0,1fr)] 2xl:grid-cols-[380px_minmax(0,1fr)_auto]";
+  useEffect(() => {
+    const saved = window.localStorage.getItem("inbox.crm.width");
+    if (saved) {
+      const nextWidth = Number(saved);
+      if (Number.isFinite(nextWidth)) {
+        setCrmPanelWidth(Math.min(520, Math.max(300, nextWidth)));
+      }
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!isResizingCrm) {
+      return;
+    }
+
+    function handleMove(event: MouseEvent) {
+      if (!resizeOriginRef.current) {
+        return;
+      }
+
+      const delta = resizeOriginRef.current.startX - event.clientX;
+      const nextWidth = Math.min(520, Math.max(300, resizeOriginRef.current.startWidth + delta));
+      setCrmPanelWidth(nextWidth);
+    }
+
+    function handleUp() {
+      setIsResizingCrm(false);
+      resizeOriginRef.current = null;
+    }
+
+    window.addEventListener("mousemove", handleMove);
+    window.addEventListener("mouseup", handleUp);
+    return () => {
+      window.removeEventListener("mousemove", handleMove);
+      window.removeEventListener("mouseup", handleUp);
+    };
+  }, [isResizingCrm]);
+
+  useEffect(() => {
+    window.localStorage.setItem("inbox.crm.width", String(crmPanelWidth));
+  }, [crmPanelWidth]);
+
+  const gridLayoutClass = isDesktopCrmOpen
+    ? "grid h-full min-h-0 gap-3 lg:grid-cols-[340px_minmax(0,1fr)_minmax(300px,var(--crm-panel-width))]"
+    : "grid h-full min-h-0 gap-3 lg:grid-cols-[340px_minmax(0,1fr)]";
 
   return (
-    <section className="min-h-[calc(100vh-6.75rem)] rounded-3xl border border-border/70 bg-gradient-to-br from-background via-background to-accent/20 p-2 shadow-lg shadow-black/5">
+    <section className="flex h-full min-h-0 flex-1 overflow-hidden">
       {!orgId ? (
         <EmptyStatePanel
-          title="No Organization Found"
-          message="Create an organization first to access inbox modules."
+          title="No Business Found"
+          message="No business is linked to this account yet."
         />
       ) : null}
 
@@ -120,41 +169,7 @@ export function InboxWorkspace() {
       ) : null}
 
       {orgId ? (
-        isFocusMode ? (
-          <div className="grid gap-4">
-            <div className="flex items-center justify-end">
-              <button
-                type="button"
-                onClick={() => setIsFocusMode(false)}
-                className="inline-flex h-9 items-center gap-2 rounded-lg border border-border bg-card/80 px-3 text-xs font-medium text-foreground hover:bg-accent"
-                title="Exit focus mode (Ctrl+Shift+F)"
-              >
-                <Minimize2 className="h-4 w-4" />
-                Exit Focus
-              </button>
-            </div>
-
-            <ChatWindow
-              density={density}
-              conversation={selectedConversation}
-              isUpdatingConversationStatus={isUpdatingConversationStatus}
-              messages={messages}
-              isLoading={isLoadingMessages}
-              isConversationSelected={Boolean(selectedConversationId)}
-              error={messageError}
-              onSendText={sendTextMessage}
-              onSendAttachment={sendAttachmentMessage}
-              onSendTemplate={sendTemplateMessage}
-              onToggleConversationStatus={toggleSelectedConversationStatus}
-              onRetryOutboundMessage={retryOutboundMessage}
-              onSelectProofMessage={(messageId) => {
-                setSelectedProofMessageId(messageId);
-                setProofFeedback(null);
-              }}
-            />
-          </div>
-        ) : (
-        <div>
+        <div className="flex h-full min-h-0 flex-1 flex-col overflow-hidden">
           <div className="mb-3 flex items-center gap-2 rounded-xl border border-border/80 bg-card/85 p-1.5 shadow-sm lg:hidden">
             <Button
               type="button"
@@ -176,9 +191,9 @@ export function InboxWorkspace() {
             </Button>
           </div>
 
-          <div className={gridLayoutClass}>
+          <div className={`${gridLayoutClass} max-h-full flex-1 overflow-hidden`} style={{ ["--crm-panel-width" as string]: `${crmPanelWidth}px` }}>
             <div
-              className={`h-[calc(100vh-6.75rem)] overflow-hidden rounded-2xl border border-border/80 bg-card/90 shadow-sm ${
+              className={`flex h-full min-h-0 max-h-full flex-col overflow-hidden rounded-[24px] border border-border/70 bg-card/95 shadow-sm shadow-black/5 ${
                 mobilePane === "chat" ? "hidden lg:block" : ""
               } ${mobilePane === "list" ? "inbox-fade-slide" : ""}`}
             >
@@ -200,10 +215,11 @@ export function InboxWorkspace() {
                 onRefresh={() => {
                   void loadConversations();
                 }}
+                onCreateConversation={createConversation}
               />
             </div>
 
-            <div className={`${mobilePane === "list" ? "hidden lg:block" : ""} ${mobilePane === "chat" ? "inbox-fade-slide" : ""}`}>
+            <div className={`min-h-0 min-w-0 max-h-full overflow-hidden ${mobilePane === "list" ? "hidden lg:block" : ""} ${mobilePane === "chat" ? "inbox-fade-slide" : ""}`}>
               <div className="mb-2 flex items-center justify-between gap-2 lg:hidden">
                 <Button type="button" variant="ghost" size="sm" className="h-8" onClick={() => setMobilePane("list")}>
                   Back to conversations
@@ -229,7 +245,8 @@ export function InboxWorkspace() {
                 error={messageError}
                 onSendText={sendTextMessage}
                 onSendAttachment={sendAttachmentMessage}
-                onSendTemplate={sendTemplateMessage}
+                isCrmPanelOpen={isDesktopCrmOpen}
+                onToggleCrmPanel={() => setIsDesktopCrmOpen((current) => !current)}
                 onToggleConversationStatus={toggleSelectedConversationStatus}
                 onRetryOutboundMessage={retryOutboundMessage}
                 onSelectProofMessage={(messageId) => {
@@ -239,55 +256,66 @@ export function InboxWorkspace() {
               />
             </div>
 
-            <div
-              className={`hidden h-[calc(100vh-6.75rem)] overflow-hidden transition-all duration-300 ease-out 2xl:block ${
-                isCrmPanelVisible ? "w-[360px] opacity-100" : "w-0 opacity-0"
-              }`}
-              aria-hidden={!isCrmPanelVisible}
-            >
-              <div
-                className={`inbox-scroll h-full overflow-auto rounded-2xl border border-border/80 bg-card/85 p-4 shadow-sm transition-all duration-300 ${
-                  isCrmPanelVisible ? "translate-x-0" : "translate-x-4"
-                }`}
-              >
-                <CrmContextPanel
-                  conversation={selectedConversation}
-                  activeOrgRole={activeOrgRole}
-                  isLoading={isLoadingConversation}
-                  isAssigning={isAssigning}
-                  assignError={assignError}
-                  tags={tags}
-                  notes={notes}
-                  invoices={crmInvoices}
-                  activity={crmActivity}
-                  isLoadingCrm={isLoadingCrm}
-                  crmError={crmError}
-                  onCreateTag={createTagForCustomer}
-                  onAssignTag={assignTagForCustomer}
-                  onCreateNote={createCustomerNoteEntry}
-                  selectedProofMessageId={selectedProofMessageId}
-                  isAttachingProof={isAttachingProof}
-                  proofFeedback={proofFeedback}
-                  onAttachProof={attachSelectedMessageAsProof}
-                  onOpenInvoiceDrawer={openInvoiceDrawer}
-                  onAssignToMe={() => {
-                    void assignSelectedConversationToMe();
+            {isDesktopCrmOpen ? (
+              <div data-panel="crm-panel" className="relative hidden h-full min-h-0 max-h-full overflow-hidden lg:block">
+                <button
+                  type="button"
+                  className="absolute -left-1 top-0 z-10 h-full w-2 cursor-col-resize rounded-full bg-transparent"
+                  aria-label="Resize CRM panel"
+                  onMouseDown={(event) => {
+                    resizeOriginRef.current = { startX: event.clientX, startWidth: crmPanelWidth };
+                    setIsResizingCrm(true);
                   }}
-                  onSendInvoice={sendInvoiceFromPanel}
-                  onMarkInvoicePaid={markInvoicePaidFromPanel}
-                  isSendingInvoice={isSendingInvoice}
-                  isMarkingInvoicePaid={isMarkingInvoicePaid}
-                  invoiceActionError={invoiceActionError}
-                  invoiceActionSuccess={invoiceActionSuccess}
                 />
+                <div className="flex h-full min-h-0 max-h-full flex-col overflow-hidden rounded-[24px] border border-border/70 bg-card/95 p-3 shadow-sm shadow-black/5">
+                  <div className="inbox-scroll min-h-0 flex-1 overflow-y-auto overscroll-contain pr-1">
+                  <CrmContextPanel
+                    conversation={selectedConversation}
+                    messages={messages}
+                    activeOrgRole={activeOrgRole}
+                    isLoading={isLoadingConversation}
+                    isAssigning={isAssigning}
+                    assignError={assignError}
+                    tags={tags}
+                    notes={notes}
+                    invoices={crmInvoices}
+                    activity={crmActivity}
+                    isLoadingCrm={isLoadingCrm}
+                    crmError={crmError}
+                    onCreateTag={createTagForCustomer}
+                    onAssignTag={assignTagForCustomer}
+                    onCreateNote={createCustomerNoteEntry}
+                    onUpdateNote={updateCustomerNoteEntry}
+                    onDeleteNote={deleteCustomerNoteEntry}
+                    selectedProofMessageId={selectedProofMessageId}
+                    isAttachingProof={isAttachingProof}
+                    proofFeedback={proofFeedback}
+                    onAttachProof={attachSelectedMessageAsProof}
+                    onOpenInvoiceDrawer={openInvoiceDrawer}
+                    onSendInvoice={sendInvoiceFromPanel}
+                    onMarkInvoicePaid={markInvoicePaidFromPanel}
+                    onRefreshConversation={async () => {
+                      if (selectedConversationId) {
+                        await loadConversation(selectedConversationId);
+                        await loadConversations();
+                      }
+                    }}
+                    isSendingInvoice={isSendingInvoice}
+                    isMarkingInvoicePaid={isMarkingInvoicePaid}
+                    invoiceActionError={invoiceActionError}
+                    invoiceActionSuccess={invoiceActionSuccess}
+                  />
+                  </div>
+                </div>
               </div>
-            </div>
+            ) : null}
           </div>
 
           <MobileCrmOverlay
             open={isMobileCrmOpen}
             onClose={() => setIsMobileCrmOpen(false)}
             conversation={selectedConversation}
+            messages={messages}
             activeOrgRole={activeOrgRole}
             isLoadingConversation={isLoadingConversation}
             isAssigning={isAssigning}
@@ -301,23 +329,27 @@ export function InboxWorkspace() {
             onCreateTag={createTagForCustomer}
             onAssignTag={assignTagForCustomer}
             onCreateNote={createCustomerNoteEntry}
+            onUpdateNote={updateCustomerNoteEntry}
+            onDeleteNote={deleteCustomerNoteEntry}
             selectedProofMessageId={selectedProofMessageId}
             isAttachingProof={isAttachingProof}
             proofFeedback={proofFeedback}
             onAttachProof={attachSelectedMessageAsProof}
             onOpenInvoiceDrawer={openInvoiceDrawer}
-            onAssignToMe={() => {
-              void assignSelectedConversationToMe();
-            }}
             onSendInvoice={sendInvoiceFromPanel}
             onMarkInvoicePaid={markInvoicePaidFromPanel}
+            onRefreshConversation={async () => {
+              if (selectedConversationId) {
+                await loadConversation(selectedConversationId);
+                await loadConversations();
+              }
+            }}
             isSendingInvoice={isSendingInvoice}
             isMarkingInvoicePaid={isMarkingInvoicePaid}
             invoiceActionError={invoiceActionError}
             invoiceActionSuccess={invoiceActionSuccess}
           />
         </div>
-        )
       ) : null}
 
       <QuickReplyModal
@@ -343,9 +375,11 @@ export function InboxWorkspace() {
 
       <InvoiceDrawer
         open={isInvoiceDrawerOpen}
-        orgId={orgId}
         customerId={selectedConversation?.customerId ?? null}
         conversationId={selectedConversation?.id ?? null}
+        orgId={selectedConversation?.orgId ?? orgId}
+        customerDisplayName={selectedConversation?.customerDisplayName ?? null}
+        customerPhoneE164={selectedConversation?.customerPhoneE164 ?? null}
         onClose={() => setIsInvoiceDrawerOpen(false)}
       />
     </section>

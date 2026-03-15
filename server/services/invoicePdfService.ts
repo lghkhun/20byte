@@ -123,17 +123,24 @@ function buildInvoicePdfBuffer(input: GenerateInvoicePdfInput): Promise<Buffer> 
   });
 }
 
-export async function generateAndUploadInvoicePdf(input: GenerateInvoicePdfInput): Promise<string> {
+export async function generateAndUploadInvoicePdf(input: GenerateInvoicePdfInput): Promise<string | null> {
   const pdfBuffer = await buildInvoicePdfBuffer(input);
   const objectKey = buildInvoicePdfObjectKey({
     orgId: input.orgId,
     invoiceId: input.invoiceId
   });
 
-  return uploadToR2({
-    objectKey,
-    body: pdfBuffer,
-    contentType: "application/pdf"
-  });
-}
+  try {
+    return await uploadToR2({
+      objectKey,
+      body: pdfBuffer,
+      contentType: "application/pdf"
+    });
+  } catch {
+    if (process.env.NODE_ENV !== "production") {
+      return null;
+    }
 
+    throw new Error("Failed to upload invoice PDF.");
+  }
+}

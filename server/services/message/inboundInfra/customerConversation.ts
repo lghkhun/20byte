@@ -8,6 +8,7 @@ export async function getOrCreateCustomer(
   orgId: string,
   customerPhoneE164: string,
   customerDisplayName?: string,
+  customerAvatarUrl?: string,
   attribution?: ResolvedAttribution
 ) {
   const existing = await tx.customer.findUnique({
@@ -32,6 +33,10 @@ export async function getOrCreateCustomer(
     const updateData: Prisma.CustomerUpdateInput = {};
     if (customerDisplayName) {
       updateData.displayName = customerDisplayName;
+    }
+
+    if (customerAvatarUrl) {
+      updateData.waProfilePicUrl = customerAvatarUrl;
     }
 
     if (!existing.source) {
@@ -78,6 +83,7 @@ export async function getOrCreateCustomer(
       orgId,
       phoneE164: customerPhoneE164,
       displayName: customerDisplayName ?? null,
+      waProfilePicUrl: customerAvatarUrl ?? null,
       source: attribution?.source ?? "organic",
       campaign: attribution?.campaign ?? null,
       adset: createdAdset,

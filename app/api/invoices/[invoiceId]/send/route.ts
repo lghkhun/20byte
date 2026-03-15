@@ -1,6 +1,7 @@
 import { type NextRequest, NextResponse } from "next/server";
 
 import { requireApiSession } from "@/lib/auth/middleware";
+import { resolvePrimaryOrganizationIdForUser } from "@/server/services/organizationService";
 import { sendInvoiceToCustomer } from "@/server/services/invoiceService";
 import { ServiceError } from "@/server/services/serviceError";
 
@@ -41,9 +42,13 @@ export async function POST(
   }
 
   try {
+    const orgId = await resolvePrimaryOrganizationIdForUser(
+      auth.session.userId,
+      typeof body.orgId === "string" ? body.orgId : ""
+    );
     const invoice = await sendInvoiceToCustomer({
       actorUserId: auth.session.userId,
-      orgId: typeof body.orgId === "string" ? body.orgId : "",
+      orgId,
       invoiceId: context.params.invoiceId
     });
 

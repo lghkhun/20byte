@@ -283,7 +283,7 @@ canReadConversation
 
 ### whatsapp
 
-WhatsApp Cloud API integration.
+WhatsApp helpers and Baileys integration.
 
 Example:
 
@@ -410,7 +410,6 @@ Queue setup using Redis.
 Example:
 
 ```
-webhookQueue
 mediaQueue
 cleanupQueue
 ```
@@ -732,7 +731,7 @@ Next.js App Router
 + Prisma database  
 + R2 storage  
 + Ably realtime  
-+ WhatsApp Cloud API
++ Baileys
 
 This structure ensures:
 

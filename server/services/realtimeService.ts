@@ -2,6 +2,7 @@ import { Rest } from "ably";
 
 import { prisma } from "@/lib/db/prisma";
 import { canAccessInbox } from "@/lib/permissions/orgPermissions";
+import { getPrimaryOrganizationForUser } from "@/server/services/organizationService";
 import { ServiceError } from "@/server/services/serviceError";
 
 type AblyTokenRequestResult = {
@@ -20,7 +21,7 @@ function normalize(value: string): string {
 
 function getAblyServerClient(): Rest {
   const apiKey = process.env.ABLY_API_KEY?.trim();
-  if (!apiKey) {
+  if (!apiKey || apiKey === "ably-key-placeholder" || apiKey === "\"ably-key-placeholder\"") {
     throw new ServiceError(500, "ABLY_NOT_CONFIGURED", "Ably API key is not configured.");
   }
 
@@ -55,9 +56,14 @@ export async function createInboxRealtimeTokenRequest(
   actorUserId: string,
   orgIdInput: string
 ): Promise<AblyTokenRequestResult> {
-  const orgId = normalize(orgIdInput);
+  let orgId = normalize(orgIdInput);
   if (!orgId) {
-    throw new ServiceError(400, "MISSING_ORG_ID", "orgId is required.");
+    const primaryOrganization = await getPrimaryOrganizationForUser(actorUserId);
+    if (!primaryOrganization) {
+      throw new ServiceError(404, "ORG_NOT_FOUND", "No business is available for this account.");
+    }
+
+    orgId = primaryOrganization.id;
   }
 
   await requireInboxMembership(actorUserId, orgId);

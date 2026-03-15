@@ -1,6 +1,7 @@
 import { type NextRequest, NextResponse } from "next/server";
 
 import { requireApiSession } from "@/lib/auth/middleware";
+import { resolvePrimaryOrganizationIdForUser } from "@/server/services/organizationService";
 import { assignConversation } from "@/server/services/conversationService";
 import { ServiceError } from "@/server/services/serviceError";
 
@@ -36,9 +37,13 @@ export async function POST(request: NextRequest) {
   }
 
   try {
+    const orgId = await resolvePrimaryOrganizationIdForUser(
+      auth.session.userId,
+      typeof body.orgId === "string" ? body.orgId : ""
+    );
     const assignment = await assignConversation({
       actorUserId: auth.session.userId,
-      orgId: typeof body.orgId === "string" ? body.orgId : "",
+      orgId,
       conversationId: typeof body.conversationId === "string" ? body.conversationId : "",
       assigneeUserId: typeof body.assigneeUserId === "string" ? body.assigneeUserId : undefined
     });

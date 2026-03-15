@@ -6,7 +6,9 @@ import type {
   AttachProofResponse,
   CreateNoteResponse,
   CreateTagResponse,
-  CustomerTagsResponse
+  DeleteNoteResponse,
+  CustomerTagsResponse,
+  UpdateNoteResponse
 } from "@/components/inbox/workspace/types";
 
 import type { InboxWorkspaceLoaders } from "./useInboxWorkspaceLoaders";
@@ -52,7 +54,7 @@ export function useInboxWorkspaceCrmInvoiceActions(
       const createResponse = await fetch("/api/tags", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ orgId, name, color })
+        body: JSON.stringify({ name, color })
       });
 
       const createPayload = (await createResponse.json().catch(() => null)) as CreateTagResponse | null;
@@ -66,7 +68,7 @@ export function useInboxWorkspaceCrmInvoiceActions(
         const assignResponse = await fetch(`/api/customers/${encodeURIComponent(selectedConversation.customerId)}/tags`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ orgId, tagId: createdTagId })
+          body: JSON.stringify({ tagId: createdTagId })
         });
 
         if (!assignResponse.ok) {
@@ -90,7 +92,7 @@ export function useInboxWorkspaceCrmInvoiceActions(
       const response = await fetch(`/api/customers/${encodeURIComponent(selectedConversation.customerId)}/tags`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ orgId, tagId })
+        body: JSON.stringify({ tagId })
       });
 
       const payload = (await response.json().catch(() => null)) as CustomerTagsResponse | null;
@@ -114,12 +116,64 @@ export function useInboxWorkspaceCrmInvoiceActions(
       const response = await fetch(`/api/customers/${encodeURIComponent(selectedConversation.customerId)}/notes`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ orgId, content })
+        body: JSON.stringify({ content })
       });
 
       const payload = (await response.json().catch(() => null)) as CreateNoteResponse | null;
       if (!response.ok) {
         setCrmError(payload?.error?.message ?? "Failed to create note.");
+        return;
+      }
+
+      await loadCustomerCrmContext(selectedConversation.customerId);
+    },
+    [loadCustomerCrmContext, orgId, selectedConversation, setCrmError]
+  );
+
+  const updateCustomerNoteEntry = useCallback(
+    async (noteId: string, content: string) => {
+      if (!orgId || !selectedConversation) {
+        return;
+      }
+
+      setCrmError(null);
+      const response = await fetch(
+        `/api/customers/${encodeURIComponent(selectedConversation.customerId)}/notes/${encodeURIComponent(noteId)}`,
+        {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ content })
+        }
+      );
+
+      const payload = (await response.json().catch(() => null)) as UpdateNoteResponse | null;
+      if (!response.ok) {
+        setCrmError(payload?.error?.message ?? "Failed to update note.");
+        return;
+      }
+
+      await loadCustomerCrmContext(selectedConversation.customerId);
+    },
+    [loadCustomerCrmContext, orgId, selectedConversation, setCrmError]
+  );
+
+  const deleteCustomerNoteEntry = useCallback(
+    async (noteId: string) => {
+      if (!orgId || !selectedConversation) {
+        return;
+      }
+
+      setCrmError(null);
+      const response = await fetch(
+        `/api/customers/${encodeURIComponent(selectedConversation.customerId)}/notes/${encodeURIComponent(noteId)}`,
+        {
+          method: "DELETE"
+        }
+      );
+
+      const payload = (await response.json().catch(() => null)) as DeleteNoteResponse | null;
+      if (!response.ok) {
+        setCrmError(payload?.error?.message ?? "Failed to delete note.");
         return;
       }
 
@@ -140,7 +194,7 @@ export function useInboxWorkspaceCrmInvoiceActions(
         const response = await fetch(`/api/invoices/${encodeURIComponent(invoiceId)}/proofs`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ orgId, messageId: selectedProofMessageId, milestoneType })
+          body: JSON.stringify({ messageId: selectedProofMessageId, milestoneType })
         });
 
         const payload = (await response.json().catch(() => null)) as AttachProofResponse | null;
@@ -185,7 +239,7 @@ export function useInboxWorkspaceCrmInvoiceActions(
         const response = await fetch(`/api/invoices/${encodeURIComponent(invoiceId)}/send`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ orgId })
+          body: JSON.stringify({})
         });
         const payload = (await response.json().catch(() => null)) as { error?: { message?: string } } | null;
         if (!response.ok) {
@@ -227,7 +281,7 @@ export function useInboxWorkspaceCrmInvoiceActions(
         const response = await fetch(`/api/invoices/${encodeURIComponent(invoiceId)}/mark-paid`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ orgId, milestoneType })
+          body: JSON.stringify({ milestoneType })
         });
         const payload = (await response.json().catch(() => null)) as { error?: { message?: string } } | null;
         if (!response.ok) {
@@ -281,6 +335,8 @@ export function useInboxWorkspaceCrmInvoiceActions(
     createTagForCustomer,
     assignTagForCustomer,
     createCustomerNoteEntry,
+    updateCustomerNoteEntry,
+    deleteCustomerNoteEntry,
     attachSelectedMessageAsProof,
     sendInvoiceFromPanel,
     markInvoicePaidFromPanel,

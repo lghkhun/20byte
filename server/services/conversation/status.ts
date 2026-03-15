@@ -30,6 +30,7 @@ export async function updateConversationStatus(input: UpdateConversationStatusIn
           id: true,
           phoneE164: true,
           displayName: true,
+          waProfilePicUrl: true,
           source: true
         }
       }
@@ -58,6 +59,18 @@ export async function updateConversationStatus(input: UpdateConversationStatusIn
     where: {
       id: conversation.id,
       orgId
+    },
+    include: {
+      crmPipeline: {
+        select: {
+          name: true
+        }
+      },
+      crmStage: {
+        select: {
+          name: true
+        }
+      }
     }
   });
 
@@ -77,6 +90,7 @@ export async function updateConversationStatus(input: UpdateConversationStatusIn
     customer: {
       phoneE164: conversation.customer.phoneE164,
       displayName: conversation.customer.displayName,
+      waProfilePicUrl: conversation.customer.waProfilePicUrl,
       source: conversation.customer.source
     }
   });

@@ -1,0 +1,302 @@
+- generic [active] [ref=e1]:
+  - alert [ref=e22]
+  - generic [ref=e23]:
+    - generic [ref=e26]:
+      - list [ref=e28]:
+        - listitem [ref=e29]:
+          - link "20 20byte Chat-first CRM" [ref=e30] [cursor=pointer]:
+            - /url: /inbox
+            - generic [ref=e32]: "20"
+            - generic:
+              - generic: 20byte
+              - generic: Chat-first CRM
+      - generic [ref=e33]:
+        - generic [ref=e34]:
+          - generic [ref=e35]: Platform
+          - list [ref=e36]:
+            - listitem [ref=e37]:
+              - link "Dashboard" [ref=e38] [cursor=pointer]:
+                - /url: /dashboard
+                - img [ref=e39]
+                - generic: Dashboard
+            - listitem [ref=e44]:
+              - link "Inbox" [ref=e45] [cursor=pointer]:
+                - /url: /inbox
+                - img [ref=e46]
+                - generic: Inbox
+            - listitem [ref=e48]:
+              - link "Customers" [ref=e49] [cursor=pointer]:
+                - /url: /customers
+                - img [ref=e50]
+                - generic: Customers
+            - listitem [ref=e55]:
+              - link "Invoices" [ref=e56] [cursor=pointer]:
+                - /url: /invoices
+                - img [ref=e57]
+                - generic: Invoices
+        - generic [ref=e63]:
+          - generic [ref=e64]: Business Tools
+          - list [ref=e66]:
+            - listitem [ref=e67]:
+              - link "Business" [ref=e68] [cursor=pointer]:
+                - /url: /dashboard/settings/business
+                - img [ref=e69]
+                - generic: Business
+            - listitem [ref=e77]:
+              - link "WhatsApp" [ref=e78] [cursor=pointer]:
+                - /url: /dashboard/settings/whatsapp
+                - img [ref=e79]
+                - generic: WhatsApp
+            - listitem [ref=e82]:
+              - link "CRM Pipeline" [ref=e83] [cursor=pointer]:
+                - /url: /crm/pipelines
+                - img [ref=e84]
+                - generic: CRM Pipeline
+            - listitem [ref=e88]:
+              - link "General" [ref=e89] [cursor=pointer]:
+                - /url: /settings
+                - img [ref=e90]
+                - generic: General
+      - list [ref=e94]:
+        - listitem [ref=e95]:
+          - button "SO Seed Owner owner@seed.20byte.local" [ref=e96] [cursor=pointer]:
+            - generic [ref=e98]: SO
+            - generic:
+              - generic: Seed Owner
+              - generic: owner@seed.20byte.local
+            - img [ref=e99]
+    - main [ref=e102]:
+      - main [ref=e103]:
+        - generic [ref=e109]:
+          - generic [ref=e111]:
+            - generic [ref=e112]:
+              - generic [ref=e113]:
+                - generic [ref=e114]:
+                  - heading "Inbox" [level=2] [ref=e115]
+                  - paragraph [ref=e116]: 6 active conversations
+                - generic [ref=e117]:
+                  - button "Filters" [ref=e118] [cursor=pointer]:
+                    - img [ref=e119]
+                    - generic [ref=e129]: Filters
+                  - button "Archive actions" [ref=e130] [cursor=pointer]:
+                    - img [ref=e131]
+                    - generic [ref=e137]: Archive actions
+                  - button "More actions" [ref=e138] [cursor=pointer]:
+                    - img [ref=e139]
+                    - generic [ref=e143]: More actions
+              - generic [ref=e144]:
+                - button "All6" [ref=e145] [cursor=pointer]
+                - button "Unassigned6" [ref=e146] [cursor=pointer]
+                - button "Unread1" [ref=e147] [cursor=pointer]
+                - button "Resolved0" [ref=e148] [cursor=pointer]
+              - generic [ref=e149]:
+                - generic [ref=e150]:
+                  - img
+                  - textbox [ref=e151]:
+                    - /placeholder: Search...
+                - button "New" [ref=e152] [cursor=pointer]:
+                  - img [ref=e153]
+                  - generic [ref=e156]: New
+                - button "Refresh conversations" [ref=e157] [cursor=pointer]:
+                  - img [ref=e158]
+                  - generic [ref=e163]: Refresh conversations
+            - generic [ref=e165]:
+              - button "77 +628662776277 Mar 14 cek ORGANIC Unassigned" [ref=e166] [cursor=pointer]:
+                - generic [ref=e167]:
+                  - generic [ref=e168]: "77"
+                  - generic [ref=e170]:
+                    - generic [ref=e171]:
+                      - generic [ref=e172]: "+628662776277"
+                      - generic [ref=e173]: Mar 14
+                    - generic [ref=e175]: cek
+                    - generic [ref=e177]:
+                      - 'generic "Source: organic Campaign: - Adset: - Ad: -" [ref=e178]': ORGANIC
+                      - generic [ref=e179]: Unassigned
+              - button "28 +62892662777828 - No message preview yet ORGANIC Unassigned" [ref=e182] [cursor=pointer]:
+                - generic [ref=e183]:
+                  - generic [ref=e184]: "28"
+                  - generic [ref=e186]:
+                    - generic [ref=e187]:
+                      - generic [ref=e188]: "+62892662777828"
+                      - generic [ref=e189]: "-"
+                    - generic [ref=e191]: No message preview yet
+                    - generic [ref=e193]:
+                      - 'generic "Source: organic Campaign: - Adset: - Ad: -" [ref=e194]': ORGANIC
+                      - generic [ref=e195]: Unassigned
+              - button "28 +62897762777728 - No message preview yet ORGANIC Unassigned" [ref=e198] [cursor=pointer]:
+                - generic [ref=e199]:
+                  - generic [ref=e200]: "28"
+                  - generic [ref=e202]:
+                    - generic [ref=e203]:
+                      - generic [ref=e204]: "+62897762777728"
+                      - generic [ref=e205]: "-"
+                    - generic [ref=e207]: No message preview yet
+                    - generic [ref=e209]:
+                      - 'generic "Source: organic Campaign: - Adset: - Ad: -" [ref=e210]': ORGANIC
+                      - generic [ref=e211]: Unassigned
+              - button "B BUnda Mar 14 halo ORGANIC Unassigned" [ref=e214] [cursor=pointer]:
+                - generic [ref=e215]:
+                  - generic [ref=e216]: B
+                  - generic [ref=e218]:
+                    - generic [ref=e219]:
+                      - generic [ref=e220]: BUnda
+                      - generic [ref=e221]: Mar 14
+                    - generic [ref=e223]: halo
+                    - generic [ref=e225]:
+                      - 'generic "Source: organic Campaign: - Adset: - Ad: -" [ref=e226]': ORGANIC
+                      - generic [ref=e227]: Unassigned
+              - button "83 +6289524789183 - No message preview yet ORGANIC Unassigned" [ref=e230] [cursor=pointer]:
+                - generic [ref=e231]:
+                  - generic [ref=e232]: "83"
+                  - generic [ref=e234]:
+                    - generic [ref=e235]:
+                      - generic [ref=e236]: "+6289524789183"
+                      - generic [ref=e237]: "-"
+                    - generic [ref=e239]: No message preview yet
+                    - generic [ref=e241]:
+                      - 'generic "Source: organic Campaign: - Adset: - Ad: -" [ref=e242]': ORGANIC
+                      - generic [ref=e243]: Unassigned
+              - 'button "SA Salsa Agency Mar 06 Here is your invoice: http://localhost:3000/i/seed-public-token-3 [Automated] META Unassigned 3" [ref=e246] [cursor=pointer]':
+                - generic [ref=e247]:
+                  - generic [ref=e248]: SA
+                  - generic [ref=e250]:
+                    - generic [ref=e251]:
+                      - generic [ref=e252]: Salsa Agency
+                      - generic [ref=e253]: Mar 06
+                    - generic [ref=e255]: "Here is your invoice: http://localhost:3000/i/seed-public-token-3 [Automated]"
+                    - generic [ref=e256]:
+                      - generic [ref=e257]:
+                        - 'generic "Source: meta_ads Campaign: agency-q1 Adset: instagram Ad: ctwa" [ref=e258]': META
+                        - generic [ref=e259]: Unassigned
+                      - generic [ref=e262]: "3"
+          - generic [ref=e264]:
+            - generic [ref=e265]:
+              - generic [ref=e266]:
+                - generic [ref=e267]: +
+                - generic [ref=e269]:
+                  - heading "+628662776277" [level=2] [ref=e270]
+                  - generic [ref=e271]:
+                    - generic [ref=e272]: Open
+                    - generic [ref=e273]: "+628662776277"
+                    - generic [ref=e274]:
+                      - img [ref=e275]
+                      - text: Unassigned
+              - generic [ref=e278]:
+                - button "Search in messages" [ref=e279] [cursor=pointer]:
+                  - img [ref=e280]
+                - button "Transfer chat" [ref=e283] [cursor=pointer]:
+                  - img [ref=e284]
+                - button "Resolve conversation" [ref=e289] [cursor=pointer]:
+                  - img [ref=e290]
+                - button "Hide CRM panel" [ref=e293] [cursor=pointer]:
+                  - img [ref=e294]
+            - generic [ref=e298]:
+              - generic:
+                - generic: Mar 14, 2026
+              - generic [ref=e300]:
+                - generic [ref=e302]: Mar 14, 2026
+                - article [ref=e304]:
+                  - generic [ref=e306]: SENT • attempt 1
+                  - paragraph [ref=e307]: cek
+                  - generic [ref=e308]:
+                    - generic [ref=e309]: 02:33 PM
+                    - generic [ref=e310]: ✓✓
+            - generic [ref=e311]:
+              - generic [ref=e312]:
+                - textbox "Enter message..." [ref=e313]
+                - generic [ref=e314]:
+                  - button "Insert emoji" [ref=e315] [cursor=pointer]:
+                    - img [ref=e316]
+                  - img [ref=e322] [cursor=pointer]
+                - button "Send" [ref=e325] [cursor=pointer]
+              - paragraph [ref=e326]: "Tip: use / for quick reply, I for invoice drawer, and attach file with the paperclip icon."
+          - generic [ref=e327]:
+            - button "Resize CRM panel" [ref=e328]
+            - complementary [ref=e331]:
+              - generic [ref=e332]:
+                - generic [ref=e333]:
+                  - generic [ref=e334]: "+6"
+                  - generic [ref=e335]:
+                    - heading "+628662776277" [level=2] [ref=e336]
+                    - paragraph [ref=e337]: "+628662776277"
+                    - generic [ref=e338]:
+                      - generic [ref=e339]: OPEN
+                      - generic [ref=e340]: Inisiasi Chat
+                - generic [ref=e342]:
+                  - generic [ref=e343]:
+                    - paragraph [ref=e344]: "Unread: 0"
+                    - paragraph [ref=e345]: "Last Activity: Mar 14, 02:33 PM"
+                    - paragraph [ref=e346]: "Assigned Member: Unassigned"
+                  - generic [ref=e348]:
+                    - button "Create Invoice" [ref=e349] [cursor=pointer]
+                    - button "Assign to" [ref=e350] [cursor=pointer]
+              - group [ref=e351]:
+                - generic "Pipeline & Peluang" [ref=e352] [cursor=pointer]:
+                  - generic [ref=e353]:
+                    - img [ref=e355]
+                    - paragraph [ref=e359]: Pipeline & Peluang
+                  - img [ref=e361]
+                - generic [ref=e364]:
+                  - combobox [ref=e365]:
+                    - option "-- Pilih Pipeline --"
+                    - option "Pipellead default" [selected]
+                  - combobox [ref=e366]:
+                    - option "-- Pilih Stage --"
+                    - option "Inisiasi Chat" [selected]
+                    - option "Invoice"
+                    - option "Follow Up"
+                    - option "Sudah Bayar"
+                  - button "Simpan Pipeline" [ref=e367] [cursor=pointer]
+              - group [ref=e368]:
+                - generic "Catatan Internal" [ref=e369] [cursor=pointer]:
+                  - generic [ref=e370]:
+                    - img [ref=e372]
+                    - paragraph [ref=e379]: Catatan Internal
+                  - img [ref=e381]
+                - generic [ref=e383]:
+                  - generic [ref=e384]:
+                    - textbox "Catatan khusus pelanggan ini... (Tidak terkirim)" [ref=e385]
+                    - generic [ref=e386]:
+                      - button "Simpan Catatan" [disabled]
+                  - paragraph [ref=e388]: Belum ada catatan internal.
+              - group [ref=e389]:
+                - generic "Labels" [ref=e390] [cursor=pointer]:
+                  - generic [ref=e391]:
+                    - img [ref=e393]
+                    - paragraph [ref=e397]: Labels
+                  - img [ref=e399]
+              - group [ref=e401]:
+                - generic "Media, Dokumen & Tautan" [ref=e402] [cursor=pointer]:
+                  - generic [ref=e403]:
+                    - img [ref=e405]
+                    - paragraph [ref=e409]: Media, Dokumen & Tautan
+                  - img [ref=e411]
+                - generic [ref=e414]:
+                  - generic [ref=e415]:
+                    - paragraph [ref=e416]: Media & Dokumen
+                    - generic [ref=e417]: Tidak ada riwayat media
+                  - generic [ref=e418]:
+                    - paragraph [ref=e419]: Tautan
+                    - generic [ref=e420]: Tidak ada tautan di percakapan ini
+              - group [ref=e421]:
+                - generic "Attach Payment Proof" [ref=e422] [cursor=pointer]:
+                  - generic [ref=e423]:
+                    - img [ref=e425]
+                    - paragraph [ref=e431]: Attach Payment Proof
+                  - img [ref=e433]
+                - option "No milestone" [selected]
+                - option "FULL"
+                - option "DP"
+                - option "FINAL"
+              - group [ref=e436]:
+                - generic "Invoices" [ref=e437] [cursor=pointer]:
+                  - generic [ref=e438]:
+                    - img [ref=e440]
+                    - paragraph [ref=e446]: Invoices
+                  - img [ref=e448]
+              - group [ref=e451]:
+                - generic "Timeline" [ref=e452] [cursor=pointer]:
+                  - generic [ref=e453]:
+                    - img [ref=e455]
+                    - paragraph [ref=e459]: Timeline
+                  - img [ref=e461]

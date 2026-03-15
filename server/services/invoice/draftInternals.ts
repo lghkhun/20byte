@@ -206,15 +206,17 @@ export async function generateDraftPdfAndPersist(params: {
     bankAccounts: params.bankAccounts
   });
 
-  await prisma.invoice.updateMany({
-    where: {
-      id: params.created.id,
-      orgId: params.orgId
-    },
-    data: {
-      pdfUrl
-    }
-  });
+  if (pdfUrl) {
+    await prisma.invoice.updateMany({
+      where: {
+        id: params.created.id,
+        orgId: params.orgId
+      },
+      data: {
+        pdfUrl
+      }
+    });
+  }
 
   return pdfUrl;
 }

@@ -1,6 +1,7 @@
 import { type NextRequest, NextResponse } from "next/server";
 
 import { requireApiSession } from "@/lib/auth/middleware";
+import { resolvePrimaryOrganizationIdForUser } from "@/server/services/organizationService";
 import { getConversationById } from "@/server/services/conversationService";
 import { ServiceError } from "@/server/services/serviceError";
 
@@ -29,10 +30,13 @@ export async function GET(
     return auth.response;
   }
 
-  const orgId = request.nextUrl.searchParams.get("orgId")?.trim() ?? "";
   const conversationId = context.params.conversationId;
 
   try {
+    const orgId = await resolvePrimaryOrganizationIdForUser(
+      auth.session.userId,
+      request.nextUrl.searchParams.get("orgId")?.trim() ?? ""
+    );
     const conversation = await getConversationById(auth.session.userId, orgId, conversationId);
     return NextResponse.json(
       {

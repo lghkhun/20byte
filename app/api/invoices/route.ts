@@ -2,6 +2,7 @@ import { InvoiceKind, InvoiceStatus, PaymentMilestoneType } from "@prisma/client
 import { type NextRequest, NextResponse } from "next/server";
 
 import { requireApiSession } from "@/lib/auth/middleware";
+import { resolvePrimaryOrganizationIdForUser } from "@/server/services/organizationService";
 import { createDraftInvoice, listInvoices } from "@/server/services/invoiceService";
 import { ServiceError } from "@/server/services/serviceError";
 
@@ -165,9 +166,13 @@ export async function POST(request: NextRequest) {
   }
 
   try {
+    const orgId = await resolvePrimaryOrganizationIdForUser(
+      auth.session.userId,
+      typeof body.orgId === "string" ? body.orgId : ""
+    );
     const created = await createDraftInvoice({
       actorUserId: auth.session.userId,
-      orgId: typeof body.orgId === "string" ? body.orgId : "",
+      orgId,
       customerId: typeof body.customerId === "string" ? body.customerId : "",
       conversationId: typeof body.conversationId === "string" ? body.conversationId : undefined,
       kind,
@@ -203,7 +208,12 @@ export async function POST(request: NextRequest) {
       return errorResponse(error.status, error.code, error.message);
     }
 
-    return errorResponse(500, "INVOICE_CREATE_FAILED", "Failed to create invoice.");
+    console.error("[api/invoices][POST] unexpected error", error);
+    const fallbackMessage =
+      process.env.NODE_ENV !== "production" && error instanceof Error && error.message
+        ? `Failed to create invoice: ${error.message}`
+        : "Failed to create invoice.";
+    return errorResponse(500, "INVOICE_CREATE_FAILED", fallbackMessage);
   }
 }
 
@@ -226,7 +236,6 @@ export async function GET(request: NextRequest) {
     return auth.response;
   }
 
-  const orgId = request.nextUrl.searchParams.get("orgId")?.trim() ?? "";
   const page = parseNumber(request.nextUrl.searchParams.get("page"), 1);
   const limit = parseNumber(request.nextUrl.searchParams.get("limit"), 20);
   const statusValue = request.nextUrl.searchParams.get("status")?.trim().toUpperCase() ?? "";
@@ -235,6 +244,10 @@ export async function GET(request: NextRequest) {
     : undefined;
 
   try {
+    const orgId = await resolvePrimaryOrganizationIdForUser(
+      auth.session.userId,
+      request.nextUrl.searchParams.get("orgId")?.trim() ?? ""
+    );
     const result = await listInvoices({
       actorUserId: auth.session.userId,
       orgId,

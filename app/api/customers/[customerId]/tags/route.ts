@@ -1,6 +1,7 @@
 import { type NextRequest, NextResponse } from "next/server";
 
 import { requireApiSession } from "@/lib/auth/middleware";
+import { resolvePrimaryOrganizationIdForUser } from "@/server/services/organizationService";
 import { assignTagToCustomer, listCustomerTags } from "@/server/services/crmService";
 import { ServiceError } from "@/server/services/serviceError";
 
@@ -34,10 +35,13 @@ export async function GET(
     return auth.response;
   }
 
-  const orgId = request.nextUrl.searchParams.get("orgId")?.trim() ?? "";
   const customerId = context.params.customerId;
 
   try {
+    const orgId = await resolvePrimaryOrganizationIdForUser(
+      auth.session.userId,
+      request.nextUrl.searchParams.get("orgId")?.trim() ?? ""
+    );
     const tags = await listCustomerTags(auth.session.userId, orgId, customerId);
     return NextResponse.json(
       {
@@ -78,9 +82,13 @@ export async function POST(
   }
 
   try {
+    const orgId = await resolvePrimaryOrganizationIdForUser(
+      auth.session.userId,
+      typeof body.orgId === "string" ? body.orgId : ""
+    );
     const tag = await assignTagToCustomer(
       auth.session.userId,
-      typeof body.orgId === "string" ? body.orgId : "",
+      orgId,
       context.params.customerId,
       typeof body.tagId === "string" ? body.tagId : ""
     );
@@ -101,4 +109,3 @@ export async function POST(
     return errorResponse(500, "CUSTOMER_TAG_ASSIGN_FAILED", "Failed to assign tag to customer.");
   }
 }
-

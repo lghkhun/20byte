@@ -1,6 +1,6 @@
 export {
   getConversationWithCustomer,
-  getOrgWaCredentials,
+  getOrgWaConnection,
   requireInboxMembership
 } from "@/server/services/message/outboundInfra/access";
 export {
@@ -12,6 +12,7 @@ export {
   updateOutboundSendResult
 } from "@/server/services/message/outboundInfra/persistence";
 export {
+  sendOutboundMediaWithRetry,
   sendOutboundTemplateWithRetry,
   sendOutboundTextWithRetry
 } from "@/server/services/message/outboundInfra/transport";

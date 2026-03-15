@@ -4,6 +4,8 @@ import { type FormEvent, useEffect, useMemo, useState } from "react";
 import { InvoiceKind, InvoiceStatus, PaymentMilestoneType } from "@prisma/client";
 
 import {
+  computeInvoiceLine,
+  computeInvoiceSummary,
   createDefaultItems,
   createDefaultMilestones,
   type CreateInvoiceResponse,
@@ -17,10 +19,14 @@ import {
 } from "@/components/invoices/invoice-drawer/types";
 
 export function useInvoiceDrawer(props: InvoiceDrawerProps) {
-  const { open, orgId, customerId, conversationId } = props;
+  const { open, customerId, conversationId } = props;
   const [kind, setKind] = useState<InvoiceKind>(InvoiceKind.FULL);
   const [items, setItems] = useState<InvoiceItemDraft[]>(createDefaultItems);
+  const [invoiceDiscountType, setInvoiceDiscountType] = useState<"%" | "IDR">("%");
+  const [invoiceDiscountValue, setInvoiceDiscountValue] = useState(0);
+  const [dpPercentage, setDpPercentage] = useState(50);
   const [milestones, setMilestones] = useState<MilestoneDraft[]>(createDefaultMilestones(InvoiceKind.FULL, 0));
+  const [invoiceDueDate, setInvoiceDueDate] = useState("");
   const [invoiceId, setInvoiceId] = useState<string | null>(null);
   const [invoiceNo, setInvoiceNo] = useState<string | null>(null);
   const [invoiceStatus, setInvoiceStatus] = useState<InvoiceStatus | "OVERDUE" | null>(null);
@@ -31,56 +37,38 @@ export function useInvoiceDrawer(props: InvoiceDrawerProps) {
   const [isSendingInvoice, setIsSendingInvoice] = useState(false);
   const [isMarkingPaid, setIsMarkingPaid] = useState(false);
 
-  const totalCents = useMemo(
-    () =>
-      items.reduce((accumulator, item) => {
-        const qty = Number.isFinite(item.qty) ? item.qty : 0;
-        const price = Number.isFinite(item.priceCents) ? item.priceCents : 0;
-        return accumulator + Math.max(0, Math.floor(qty)) * Math.max(0, Math.floor(price));
-      }, 0),
-    [items]
+  const summary = useMemo(
+    () => computeInvoiceSummary(items, invoiceDiscountType, invoiceDiscountValue),
+    [invoiceDiscountType, invoiceDiscountValue, items]
   );
+  const totalCents = summary.totalCents;
 
   useEffect(() => {
     setMilestones((previous) => {
-      if (previous.length === 0) {
-        return createDefaultMilestones(kind, totalCents);
-      }
-
+      const fallback = createDefaultMilestones(kind, totalCents, dpPercentage);
       if (kind === InvoiceKind.FULL) {
         const current = previous.find((item) => item.type === PaymentMilestoneType.FULL);
-        return [
-          {
-            type: PaymentMilestoneType.FULL,
-            amountCents: current ? current.amountCents : totalCents,
-            dueDate: current?.dueDate ?? ""
-          }
-        ];
+        return [{ ...fallback[0], dueDate: current?.dueDate ?? "" }];
       }
 
       const currentDp = previous.find((item) => item.type === PaymentMilestoneType.DP);
       const currentFinal = previous.find((item) => item.type === PaymentMilestoneType.FINAL);
-      const fallback = createDefaultMilestones(InvoiceKind.DP_AND_FINAL, totalCents);
       return [
-        {
-          type: PaymentMilestoneType.DP,
-          amountCents: currentDp ? currentDp.amountCents : fallback[0].amountCents,
-          dueDate: currentDp?.dueDate ?? ""
-        },
-        {
-          type: PaymentMilestoneType.FINAL,
-          amountCents: currentFinal ? currentFinal.amountCents : fallback[1].amountCents,
-          dueDate: currentFinal?.dueDate ?? ""
-        }
+        { ...fallback[0], dueDate: currentDp?.dueDate ?? "" },
+        { ...fallback[1], dueDate: currentFinal?.dueDate ?? "" }
       ];
     });
-  }, [kind, totalCents]);
+  }, [dpPercentage, kind, totalCents]);
 
   useEffect(() => {
     if (!open) {
       setKind(InvoiceKind.FULL);
       setItems(createDefaultItems());
+      setInvoiceDiscountType("%");
+      setInvoiceDiscountValue(0);
+      setDpPercentage(50);
       setMilestones(createDefaultMilestones(InvoiceKind.FULL, 0));
+      setInvoiceDueDate("");
       setInvoiceId(null);
       setInvoiceNo(null);
       setInvoiceStatus(null);
@@ -106,7 +94,10 @@ export function useInvoiceDrawer(props: InvoiceDrawerProps) {
         qty: 1,
         priceCents: 0,
         unit: "",
-        description: ""
+        description: "",
+        discountType: "%",
+        discountValue: 0,
+        taxLabel: ""
       }
     ]);
   }
@@ -120,7 +111,10 @@ export function useInvoiceDrawer(props: InvoiceDrawerProps) {
         qty: 1,
         priceCents: Math.max(0, Math.floor(item.priceCents)),
         unit: item.unit ?? "",
-        description: ""
+        description: "",
+        discountType: "%",
+        discountValue: 0,
+        taxLabel: ""
       }
     ]);
   }
@@ -136,13 +130,30 @@ export function useInvoiceDrawer(props: InvoiceDrawerProps) {
   }
 
   function buildPayload() {
-    const normalizedItems = items.map((item) => ({
-      name: item.name.trim(),
-      qty: Math.max(0, Math.floor(item.qty)),
-      priceCents: Math.max(0, Math.floor(item.priceCents)),
-      unit: item.unit.trim() || undefined,
-      description: item.description.trim() || undefined
-    }));
+    const normalizedItems = items.map((item) => {
+      const line = computeInvoiceLine(item);
+      const lineMeta = [
+        item.description.trim(),
+        line.qty > 0 ? `Qty ${line.qty}` : "",
+        line.unitPriceCents > 0 ? `Harga ${line.unitPriceCents}` : "",
+        line.discountCents > 0
+          ? item.discountType === "%"
+            ? `Diskon ${item.discountValue}%`
+            : `Diskon ${item.discountValue}`
+          : "",
+        line.taxCents > 0 ? `Pajak ${item.taxLabel}` : ""
+      ]
+        .filter(Boolean)
+        .join(" • ");
+
+      return {
+        name: item.name.trim(),
+        qty: 1,
+        priceCents: line.totalCents,
+        unit: item.unit.trim() || undefined,
+        description: lineMeta || undefined
+      };
+    });
 
     const normalizedMilestones = milestones.map((milestone) => ({
       type: milestone.type,
@@ -158,7 +169,7 @@ export function useInvoiceDrawer(props: InvoiceDrawerProps) {
 
   async function handleCreateInvoice(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (!orgId || !customerId || isSubmitting) {
+    if (!customerId || isSubmitting) {
       return;
     }
 
@@ -173,11 +184,11 @@ export function useInvoiceDrawer(props: InvoiceDrawerProps) {
           "Content-Type": "application/json"
         },
         body: JSON.stringify({
-          orgId,
           customerId,
           conversationId: conversationId ?? undefined,
           kind,
           currency: "IDR",
+          dueDate: invoiceDueDate ? new Date(invoiceDueDate).toISOString() : undefined,
           items: payload.items,
           milestones: payload.milestones
         })
@@ -202,7 +213,7 @@ export function useInvoiceDrawer(props: InvoiceDrawerProps) {
   }
 
   async function handleUpdateItems() {
-    if (!orgId || !invoiceId || isUpdatingItems) {
+    if (!invoiceId || isUpdatingItems) {
       return;
     }
 
@@ -217,7 +228,6 @@ export function useInvoiceDrawer(props: InvoiceDrawerProps) {
           "Content-Type": "application/json"
         },
         body: JSON.stringify({
-          orgId,
           items: payload.items,
           milestones: payload.milestones
         })
@@ -239,7 +249,7 @@ export function useInvoiceDrawer(props: InvoiceDrawerProps) {
   }
 
   async function handleSendInvoice() {
-    if (!orgId || !invoiceId || isSendingInvoice) {
+    if (!invoiceId || isSendingInvoice) {
       return;
     }
 
@@ -251,8 +261,7 @@ export function useInvoiceDrawer(props: InvoiceDrawerProps) {
         method: "POST",
         headers: {
           "Content-Type": "application/json"
-        },
-        body: JSON.stringify({ orgId })
+        }
       });
 
       const body = (await response.json().catch(() => null)) as SendInvoiceResponse | null;
@@ -272,7 +281,7 @@ export function useInvoiceDrawer(props: InvoiceDrawerProps) {
   }
 
   async function handleMarkPaid(milestoneType?: PaymentMilestoneType) {
-    if (!orgId || !invoiceId || isMarkingPaid) {
+    if (!invoiceId || isMarkingPaid) {
       return;
     }
 
@@ -286,7 +295,6 @@ export function useInvoiceDrawer(props: InvoiceDrawerProps) {
           "Content-Type": "application/json"
         },
         body: JSON.stringify({
-          orgId,
           milestoneType
         })
       });
@@ -312,6 +320,14 @@ export function useInvoiceDrawer(props: InvoiceDrawerProps) {
     setKind,
     items,
     milestones,
+    invoiceDiscountType,
+    setInvoiceDiscountType,
+    invoiceDiscountValue,
+    setInvoiceDiscountValue,
+    dpPercentage,
+    setDpPercentage,
+    invoiceDueDate,
+    setInvoiceDueDate,
     invoiceId,
     invoiceNo,
     invoiceStatus,
@@ -321,6 +337,7 @@ export function useInvoiceDrawer(props: InvoiceDrawerProps) {
     isUpdatingItems,
     isSendingInvoice,
     isMarkingPaid,
+    summary,
     totalCents,
     updateItem,
     addItem,

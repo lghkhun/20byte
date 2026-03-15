@@ -15,10 +15,10 @@ export function ConversationListFilters({
   onStatusChange
 }: ConversationListFiltersProps) {
   return (
-    <div className="space-y-3 border-t border-border/70 bg-card/30 px-5 py-3">
-      <div className="space-y-2">
-        <p className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">Status</p>
-        <div className="flex gap-2">
+    <div className="space-y-3 border-t border-border/70 bg-card/60 px-4 py-3 sm:px-5">
+      <div className="flex flex-wrap items-center gap-2">
+        <span className="text-[11px] font-medium uppercase tracking-[0.24em] text-muted-foreground">Status</span>
+        <div className="flex flex-wrap gap-2">
           {(["OPEN", "CLOSED"] as ConversationStatusFilter[]).map((item) => (
             <button
               key={item}
@@ -27,8 +27,8 @@ export function ConversationListFilters({
               onClick={() => onStatusChange(item)}
               className={
                 item === status
-                  ? "rounded-full border border-primary/40 bg-primary/15 px-3 py-1 text-xs font-medium text-primary shadow-sm transition"
-                  : "rounded-full border border-border px-3 py-1 text-xs text-muted-foreground transition hover:bg-accent/70 hover:text-foreground"
+                  ? "rounded-full border border-primary/30 bg-primary/10 px-3 py-1.5 text-xs font-medium text-primary shadow-sm transition"
+                  : "rounded-full border border-border/80 bg-background/70 px-3 py-1.5 text-xs text-muted-foreground transition hover:bg-accent/70 hover:text-foreground"
               }
             >
               {STATUS_LABELS[item]}
@@ -37,9 +37,9 @@ export function ConversationListFilters({
         </div>
       </div>
 
-      <div className="space-y-2">
-        <p className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">Visibility</p>
-        <div className="flex gap-2">
+      <div className="flex flex-wrap items-center gap-2">
+        <span className="text-[11px] font-medium uppercase tracking-[0.24em] text-muted-foreground">View</span>
+        <div className="flex flex-wrap gap-2">
           {(["UNASSIGNED", "MY", "ALL"] as ConversationListFilter[]).map((item) => (
             <button
               key={item}
@@ -48,8 +48,8 @@ export function ConversationListFilters({
               onClick={() => onFilterChange(item)}
               className={
                 item === filter
-                  ? "rounded-full border border-primary/40 bg-primary/15 px-3 py-1 text-xs font-medium text-primary shadow-sm transition"
-                  : "rounded-full border border-border px-3 py-1 text-xs text-muted-foreground transition hover:bg-accent/70 hover:text-foreground"
+                  ? "rounded-full border border-primary/30 bg-primary/10 px-3 py-1.5 text-xs font-medium text-primary shadow-sm transition"
+                  : "rounded-full border border-border/80 bg-background/70 px-3 py-1.5 text-xs text-muted-foreground transition hover:bg-accent/70 hover:text-foreground"
               }
             >
               {FILTER_LABELS[item]}

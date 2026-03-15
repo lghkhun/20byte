@@ -52,9 +52,7 @@ Organization member management policy:
 
 # 4. Webhook Security
 
-Webhook endpoints must verify:
-
-Meta signature header.
+Third-party webhook endpoints must verify provider signatures when the provider supports them.
 
 Invalid signatures must be rejected.
 

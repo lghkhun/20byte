@@ -38,7 +38,6 @@ function toErrorMessage(error: unknown, fallback: string): string {
 
 export function ShortlinkManager() {
   const [orgs, setOrgs] = useState<OrgItem[]>([]);
-  const [activeOrgId, setActiveOrgId] = useState("");
   const [shortlinks, setShortlinks] = useState<ShortlinkItem[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -49,32 +48,25 @@ export function ShortlinkManager() {
   const [adset, setAdset] = useState("");
   const [ad, setAd] = useState("");
 
+  const activeBusiness = useMemo(() => orgs[0] ?? null, [orgs]);
   const canSubmit = useMemo(() => {
-    return Boolean(activeOrgId && destinationUrl.trim() && !isSubmitting);
-  }, [activeOrgId, destinationUrl, isSubmitting]);
+    return Boolean(destinationUrl.trim() && !isSubmitting);
+  }, [destinationUrl, isSubmitting]);
 
   const loadOrganizations = useCallback(async () => {
     const response = await fetch("/api/orgs", { cache: "no-store" });
     const payload = (await response.json()) as { data?: { organizations?: OrgItem[] } } & ApiError;
 
     if (!response.ok) {
-      throw new Error(payload.error?.message ?? "Failed to load organizations.");
+      throw new Error(payload.error?.message ?? "Failed to load business.");
     }
 
     const nextOrgs = payload.data?.organizations ?? [];
     setOrgs(nextOrgs);
-    if (nextOrgs.length > 0) {
-      setActiveOrgId((prev) => prev || nextOrgs[0].id);
-    }
   }, []);
 
-  const loadShortlinks = useCallback(async (orgId: string) => {
-    if (!orgId) {
-      setShortlinks([]);
-      return;
-    }
-
-    const response = await fetch(`/api/shortlinks?orgId=${encodeURIComponent(orgId)}`, { cache: "no-store" });
+  const loadShortlinks = useCallback(async () => {
+    const response = await fetch("/api/shortlinks", { cache: "no-store" });
     const payload = (await response.json()) as { data?: { shortlinks?: ShortlinkItem[] } } & ApiError;
 
     if (!response.ok) {
@@ -114,13 +106,13 @@ export function ShortlinkManager() {
     let mounted = true;
 
     async function syncShortlinks() {
-      if (!activeOrgId) {
+      if (!activeBusiness) {
         return;
       }
 
       try {
         setError(null);
-        await loadShortlinks(activeOrgId);
+        await loadShortlinks();
       } catch (err) {
         if (mounted) {
           setError(toErrorMessage(err, "Failed to refresh shortlinks."));
@@ -133,7 +125,7 @@ export function ShortlinkManager() {
     return () => {
       mounted = false;
     };
-  }, [activeOrgId, loadShortlinks]);
+  }, [activeBusiness, loadShortlinks]);
 
   async function handleCreateShortlink(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -151,7 +143,6 @@ export function ShortlinkManager() {
           "Content-Type": "application/json"
         },
         body: JSON.stringify({
-          orgId: activeOrgId,
           destinationUrl,
           source: "meta_ads",
           campaign,
@@ -169,7 +160,7 @@ export function ShortlinkManager() {
       setCampaign("");
       setAdset("");
       setAd("");
-      await loadShortlinks(activeOrgId);
+      await loadShortlinks();
     } catch (err) {
       setError(toErrorMessage(err, "Failed to create shortlink."));
     } finally {
@@ -187,7 +178,6 @@ export function ShortlinkManager() {
           "Content-Type": "application/json"
         },
         body: JSON.stringify({
-          orgId: activeOrgId,
           shortlinkId
         })
       });
@@ -197,7 +187,7 @@ export function ShortlinkManager() {
         throw new Error(payload.error?.message ?? "Failed to disable shortlink.");
       }
 
-      await loadShortlinks(activeOrgId);
+      await loadShortlinks();
     } catch (err) {
       setError(toErrorMessage(err, "Failed to disable shortlink."));
     }
@@ -211,21 +201,10 @@ export function ShortlinkManager() {
       </div>
 
       <div className="rounded-xl border border-border bg-surface/70 p-4">
-        <label htmlFor="org-selector" className="mb-2 block text-xs text-muted-foreground">
-          Organization
-        </label>
-        <select
-          id="org-selector"
-          value={activeOrgId}
-          onChange={(event) => setActiveOrgId(event.target.value)}
-          className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground"
-        >
-          {orgs.map((org) => (
-            <option key={org.id} value={org.id}>
-              {org.name}
-            </option>
-          ))}
-        </select>
+        <p className="mb-2 block text-xs text-muted-foreground">Business</p>
+        <p className="rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground">
+          {activeBusiness?.name ?? "Primary business"}
+        </p>
       </div>
 
       <form onSubmit={handleCreateShortlink} className="rounded-xl border border-border bg-surface/70 p-4">
@@ -274,7 +253,7 @@ export function ShortlinkManager() {
           <button
             type="button"
             onClick={() => {
-              void loadShortlinks(activeOrgId);
+              void loadShortlinks();
             }}
             className="rounded-md border border-border px-2 py-1 text-xs text-muted-foreground hover:text-foreground"
           >

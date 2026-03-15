@@ -1,6 +1,7 @@
 import { type NextRequest, NextResponse } from "next/server";
 
 import { requireApiSession } from "@/lib/auth/middleware";
+import { resolvePrimaryOrganizationIdForUser } from "@/server/services/organizationService";
 import { createCustomerNote, listCustomerNotes } from "@/server/services/crmService";
 import { ServiceError } from "@/server/services/serviceError";
 
@@ -47,12 +48,15 @@ export async function GET(
     return auth.response;
   }
 
-  const orgId = request.nextUrl.searchParams.get("orgId")?.trim() ?? "";
   const customerId = context.params.customerId;
   const page = parseNumber(request.nextUrl.searchParams.get("page"), 1);
   const limit = parseNumber(request.nextUrl.searchParams.get("limit"), 20);
 
   try {
+    const orgId = await resolvePrimaryOrganizationIdForUser(
+      auth.session.userId,
+      request.nextUrl.searchParams.get("orgId")?.trim() ?? ""
+    );
     const result = await listCustomerNotes(auth.session.userId, orgId, customerId, page, limit);
     return NextResponse.json(
       {
@@ -97,9 +101,13 @@ export async function POST(
   }
 
   try {
+    const orgId = await resolvePrimaryOrganizationIdForUser(
+      auth.session.userId,
+      typeof body.orgId === "string" ? body.orgId : ""
+    );
     const note = await createCustomerNote(
       auth.session.userId,
-      typeof body.orgId === "string" ? body.orgId : "",
+      orgId,
       context.params.customerId,
       typeof body.content === "string" ? body.content : ""
     );
@@ -120,4 +128,3 @@ export async function POST(
     return errorResponse(500, "CUSTOMER_NOTE_CREATE_FAILED", "Failed to create customer note.");
   }
 }
-

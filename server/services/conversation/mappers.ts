@@ -8,6 +8,8 @@ export function toConversationSummary(input: {
     id: string;
     orgId: string;
     customerId: string;
+    crmPipelineId: string | null;
+    crmStageId: string | null;
     sourceCampaign: string | null;
     sourcePlatform: string | null;
     sourceMedium: string | null;
@@ -15,10 +17,17 @@ export function toConversationSummary(input: {
     assignedToMemberId: string | null;
     createdAt: Date;
     updatedAt: Date;
+    crmPipeline?: {
+      name: string;
+    } | null;
+    crmStage?: {
+      name: string;
+    } | null;
   };
   customer: {
     phoneE164: string;
     displayName: string | null;
+    waProfilePicUrl: string | null;
     source: string | null;
   };
 }): ConversationSummary {
@@ -28,6 +37,11 @@ export function toConversationSummary(input: {
     customerId: input.conversation.customerId,
     phoneE164: input.customer.phoneE164,
     customerDisplayName: input.customer.displayName,
+    customerAvatarUrl: input.customer.waProfilePicUrl,
+    crmPipelineId: input.conversation.crmPipelineId,
+    crmPipelineName: input.conversation.crmPipeline?.name ?? null,
+    crmStageId: input.conversation.crmStageId,
+    crmStageName: input.conversation.crmStage?.name ?? null,
     source: input.customer.source,
     sourceCampaign: input.conversation.sourceCampaign,
     sourceAdset: input.conversation.sourcePlatform,
@@ -45,6 +59,8 @@ export function toConversationListItem(row: {
   id: string;
   orgId: string;
   customerId: string;
+  crmPipelineId: string | null;
+  crmStageId: string | null;
   sourceCampaign: string | null;
   sourcePlatform: string | null;
   sourceMedium: string | null;
@@ -56,8 +72,15 @@ export function toConversationListItem(row: {
   customer: {
     phoneE164: string;
     displayName: string | null;
+    waProfilePicUrl: string | null;
     source: string | null;
   };
+  crmPipeline?: {
+    name: string;
+  } | null;
+  crmStage?: {
+    name: string;
+  } | null;
   messages: Array<{
     text: string | null;
     type: string;
@@ -70,6 +93,11 @@ export function toConversationListItem(row: {
     customerId: row.customerId,
     customerPhoneE164: row.customer.phoneE164,
     customerDisplayName: row.customer.displayName,
+    customerAvatarUrl: row.customer.waProfilePicUrl,
+    crmPipelineId: row.crmPipelineId,
+    crmPipelineName: row.crmPipeline?.name ?? null,
+    crmStageId: row.crmStageId,
+    crmStageName: row.crmStage?.name ?? null,
     lastMessagePreview: row.messages[0]
       ? resolveLastMessagePreview({
           text: row.messages[0].text,

@@ -1,0 +1,8 @@
+ALTER TABLE `Org`
+  ADD COLUMN `legalName` VARCHAR(191) NULL,
+  ADD COLUMN `responsibleName` VARCHAR(191) NULL,
+  ADD COLUMN `businessPhone` VARCHAR(191) NULL,
+  ADD COLUMN `businessEmail` VARCHAR(191) NULL,
+  ADD COLUMN `businessAddress` TEXT NULL,
+  ADD COLUMN `logoUrl` VARCHAR(191) NULL,
+  ADD COLUMN `invoiceSignatureUrl` VARCHAR(191) NULL;

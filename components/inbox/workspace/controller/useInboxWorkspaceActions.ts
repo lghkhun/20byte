@@ -38,7 +38,7 @@ export function useInboxWorkspaceActions(state: InboxWorkspaceState, loaders: In
       const response = await fetch("/api/inbox/send", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ orgId, conversationId: selectedConversationId, type: "TEXT", text })
+        body: JSON.stringify({ conversationId: selectedConversationId, type: "TEXT", text })
       });
 
       const payload = (await response.json().catch(() => null)) as SendMessageResponse | null;
@@ -55,6 +55,42 @@ export function useInboxWorkspaceActions(state: InboxWorkspaceState, loaders: In
     [loadConversations, loadMessages, orgId, selectedConversationId, setMessageError]
   );
 
+  const createConversation = useCallback(
+    async (input: { phoneE164: string; customerDisplayName?: string }) => {
+      if (!orgId) {
+        return;
+      }
+
+      const response = await fetch("/api/conversations", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          phoneE164: input.phoneE164,
+          customerDisplayName: input.customerDisplayName
+        })
+      });
+
+      const payload = (await response.json().catch(() => null)) as
+        | {
+            data?: { conversation?: { id?: string } };
+            error?: { message?: string };
+          }
+        | null;
+
+      if (!response.ok) {
+        throw new Error(payload?.error?.message ?? "Failed to create conversation.");
+      }
+
+      await loadConversations();
+      const createdConversationId = payload?.data?.conversation?.id;
+      if (createdConversationId) {
+        setSelectedConversationId(createdConversationId);
+        await loadConversation(createdConversationId);
+      }
+    },
+    [loadConversation, loadConversations, orgId, setSelectedConversationId]
+  );
+
   const sendTemplateMessage = useCallback(
     async (input: { templateName: string; templateCategory: "MARKETING" | "UTILITY" | "AUTHENTICATION" | "SERVICE"; templateLanguageCode: string }) => {
       if (!orgId || !selectedConversationId) {
@@ -66,7 +102,6 @@ export function useInboxWorkspaceActions(state: InboxWorkspaceState, loaders: In
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          orgId,
           conversationId: selectedConversationId,
           type: "TEMPLATE",
           templateName: input.templateName,
@@ -91,21 +126,20 @@ export function useInboxWorkspaceActions(state: InboxWorkspaceState, loaders: In
   );
 
   const sendAttachmentMessage = useCallback(
-    async (attachment: { fileName: string; mimeType: string; size: number }) => {
+    async (attachment: { file: File; fileName: string; mimeType: string; size: number }) => {
       if (!orgId || !selectedConversationId) {
         return;
       }
 
       setMessageError(null);
+      const body = new FormData();
+      body.set("conversationId", selectedConversationId);
+      body.set("type", attachment.mimeType.startsWith("image/") ? "IMAGE" : attachment.mimeType.startsWith("video/") ? "VIDEO" : attachment.mimeType.startsWith("audio/") ? "AUDIO" : "DOCUMENT");
+      body.set("file", attachment.file, attachment.fileName);
+
       const response = await fetch("/api/inbox/send", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          orgId,
-          conversationId: selectedConversationId,
-          type: "SYSTEM",
-          text: `Attachment queued: ${attachment.fileName} (${attachment.mimeType}, ${attachment.size} bytes).`
-        })
+        body
       });
 
       const payload = (await response.json().catch(() => null)) as SendMessageResponse | null;
@@ -134,7 +168,7 @@ export function useInboxWorkspaceActions(state: InboxWorkspaceState, loaders: In
       const response = await fetch("/api/conversations/status", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ orgId, conversationId: selectedConversationId, status: nextStatus })
+        body: JSON.stringify({ conversationId: selectedConversationId, status: nextStatus })
       });
 
       const payload = (await response.json().catch(() => null)) as UpdateConversationStatusResponse | null;
@@ -169,7 +203,7 @@ export function useInboxWorkspaceActions(state: InboxWorkspaceState, loaders: In
       const response = await fetch("/api/inbox/retry", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ orgId, messageId })
+        body: JSON.stringify({ messageId })
       });
 
       const payload = (await response.json().catch(() => null)) as SendMessageResponse | null;
@@ -195,7 +229,7 @@ export function useInboxWorkspaceActions(state: InboxWorkspaceState, loaders: In
       const response = await fetch("/api/conversations/assign", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ orgId, conversationId: selectedConversationId })
+        body: JSON.stringify({ conversationId: selectedConversationId })
       });
 
       const payload = (await response.json().catch(() => null)) as AssignConversationResponse | null;
@@ -243,6 +277,7 @@ export function useInboxWorkspaceActions(state: InboxWorkspaceState, loaders: In
 
   return {
     sendTextMessage,
+    createConversation,
     sendTemplateMessage,
     sendAttachmentMessage,
     toggleSelectedConversationStatus,
@@ -251,6 +286,8 @@ export function useInboxWorkspaceActions(state: InboxWorkspaceState, loaders: In
     createTagForCustomer: crmInvoiceActions.createTagForCustomer,
     assignTagForCustomer: crmInvoiceActions.assignTagForCustomer,
     createCustomerNoteEntry: crmInvoiceActions.createCustomerNoteEntry,
+    updateCustomerNoteEntry: crmInvoiceActions.updateCustomerNoteEntry,
+    deleteCustomerNoteEntry: crmInvoiceActions.deleteCustomerNoteEntry,
     attachSelectedMessageAsProof: crmInvoiceActions.attachSelectedMessageAsProof,
     openInvoiceDrawer: crmInvoiceActions.openInvoiceDrawer,
     sendInvoiceFromPanel: crmInvoiceActions.sendInvoiceFromPanel,

@@ -1,7 +1,9 @@
 import { ConversationStatus } from "@prisma/client";
 
 import { prisma } from "@/lib/db/prisma";
+import { normalizeWhatsAppDestination } from "@/lib/whatsapp/e164";
 import { requireInboxMembership } from "@/server/services/conversation/access";
+import { ensureDefaultCrmPipeline } from "@/server/services/crmPipelineService";
 import { toConversationSummary } from "@/server/services/conversation/mappers";
 import type { ConversationSummary, CreateConversationInput } from "@/server/services/conversation/types";
 import { normalizeOptionalName, normalizeValue, validatePhoneE164 } from "@/server/services/conversation/utils";
@@ -9,7 +11,8 @@ import { ServiceError } from "@/server/services/serviceError";
 
 export async function createConversation(input: CreateConversationInput): Promise<ConversationSummary> {
   const orgId = normalizeValue(input.orgId);
-  const phoneE164 = validatePhoneE164(input.phoneE164);
+  const normalizedPhoneInput = normalizeWhatsAppDestination(input.phoneE164) ?? input.phoneE164;
+  const phoneE164 = validatePhoneE164(normalizedPhoneInput);
   const customerDisplayName = normalizeOptionalName(input.customerDisplayName);
 
   if (!orgId) {
@@ -17,6 +20,31 @@ export async function createConversation(input: CreateConversationInput): Promis
   }
 
   await requireInboxMembership(input.actorUserId, orgId);
+  await ensureDefaultCrmPipeline(orgId);
+
+  const defaultPipeline = await prisma.crmPipeline.findFirst({
+    where: {
+      orgId,
+      isDefault: true
+    },
+    orderBy: {
+      createdAt: "asc"
+    },
+    select: {
+      id: true,
+      name: true,
+      stages: {
+        orderBy: {
+          position: "asc"
+        },
+        take: 1,
+        select: {
+          id: true,
+          name: true
+        }
+      }
+    }
+  });
 
   const existingCustomer = await prisma.customer.findUnique({
     where: {
@@ -29,6 +57,7 @@ export async function createConversation(input: CreateConversationInput): Promis
       id: true,
       phoneE164: true,
       displayName: true,
+      waProfilePicUrl: true,
       source: true,
       campaign: true,
       adset: true,
@@ -71,6 +100,7 @@ export async function createConversation(input: CreateConversationInput): Promis
             id: true,
             phoneE164: true,
             displayName: true,
+            waProfilePicUrl: true,
             source: true,
             campaign: true,
             adset: true,
@@ -98,6 +128,7 @@ export async function createConversation(input: CreateConversationInput): Promis
           id: true,
           phoneE164: true,
           displayName: true,
+          waProfilePicUrl: true,
           source: true,
           campaign: true,
           adset: true,
@@ -125,9 +156,23 @@ export async function createConversation(input: CreateConversationInput): Promis
         orgId,
         customerId: customer.id,
         status: ConversationStatus.OPEN,
+        crmPipelineId: defaultPipeline?.id ?? null,
+        crmStageId: defaultPipeline?.stages[0]?.id ?? null,
         sourceCampaign: customer.campaign,
         sourcePlatform: customer.adset ?? customer.platform,
         sourceMedium: customer.ad ?? customer.medium
+      },
+      include: {
+        crmPipeline: {
+          select: {
+            name: true
+          }
+        },
+        crmStage: {
+          select: {
+            name: true
+          }
+        }
       }
     }));
 
@@ -136,6 +181,7 @@ export async function createConversation(input: CreateConversationInput): Promis
     customer: {
       phoneE164: customer.phoneE164,
       displayName: customer.displayName,
+      waProfilePicUrl: customer.waProfilePicUrl,
       source: customer.source
     }
   });

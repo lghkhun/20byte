@@ -1,46 +1,43 @@
 "use client";
 
 import { type FormEvent, useRef, useState } from "react";
-import { Mic, Paperclip, Smile } from "lucide-react";
+import EmojiPicker, { Theme } from "emoji-picker-react";
+import { Paperclip, Smile } from "lucide-react";
 
 import { AttachmentPendingBar } from "@/components/inbox/input/AttachmentPendingBar";
-import { TemplateComposer } from "@/components/inbox/input/TemplateComposer";
 import { isAllowedAttachmentType } from "@/components/inbox/input/utils";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { useTheme } from "next-themes";
 
 type MessageInputProps = {
   density?: "compact" | "comfy";
   disabled: boolean;
   onSendText: (text: string) => Promise<void>;
   onSendAttachment: (attachment: {
+    file: File;
     fileName: string;
     mimeType: string;
     size: number;
   }) => Promise<void>;
-  onSendTemplate: (input: {
-    templateName: string;
-    templateCategory: "MARKETING" | "UTILITY" | "AUTHENTICATION" | "SERVICE";
-    templateLanguageCode: string;
-  }) => Promise<void>;
 };
 
-export function MessageInput({ density = "comfy", disabled, onSendText, onSendAttachment, onSendTemplate }: MessageInputProps) {
+export function MessageInput({ density = "comfy", disabled, onSendText, onSendAttachment }: MessageInputProps) {
   const inputRef = useRef<HTMLInputElement | null>(null);
+  const emojiButtonRef = useRef<HTMLButtonElement | null>(null);
+  const { resolvedTheme } = useTheme();
   const [text, setText] = useState("");
   const [isSending, setIsSending] = useState(false);
   const [pendingAttachment, setPendingAttachment] = useState<{
+    file: File;
     fileName: string;
     mimeType: string;
     size: number;
   } | null>(null);
   const [attachmentError, setAttachmentError] = useState<string | null>(null);
   const [isSendingAttachment, setIsSendingAttachment] = useState(false);
-  const [templateName, setTemplateName] = useState("");
-  const [templateCategory, setTemplateCategory] = useState<"MARKETING" | "UTILITY" | "AUTHENTICATION" | "SERVICE">("UTILITY");
-  const [templateLanguageCode, setTemplateLanguageCode] = useState("en");
-  const [isSendingTemplate, setIsSendingTemplate] = useState(false);
   const [inputHint, setInputHint] = useState<string | null>(null);
+  const [isEmojiOpen, setIsEmojiOpen] = useState(false);
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -55,30 +52,6 @@ export function MessageInput({ density = "comfy", disabled, onSendText, onSendAt
       setText("");
     } finally {
       setIsSending(false);
-    }
-  }
-
-  async function handleSendTemplate() {
-    if (disabled || isSendingTemplate) {
-      return;
-    }
-
-    const normalizedName = templateName.trim();
-    const normalizedLanguage = templateLanguageCode.trim() || "en";
-    if (!normalizedName) {
-      return;
-    }
-
-    setIsSendingTemplate(true);
-    try {
-      await onSendTemplate({
-        templateName: normalizedName,
-        templateCategory,
-        templateLanguageCode: normalizedLanguage
-      });
-      setTemplateName("");
-    } finally {
-      setIsSendingTemplate(false);
     }
   }
 
@@ -103,7 +76,7 @@ export function MessageInput({ density = "comfy", disabled, onSendText, onSendAt
       onSubmit={handleSubmit}
     >
       <div
-        className={`flex items-center gap-2 rounded-2xl border border-border bg-background/95 shadow-sm transition ${
+        className={`relative flex items-center gap-2 rounded-2xl border border-border bg-background/95 shadow-sm transition ${
           density === "compact" ? "px-2 py-2" : "px-2 py-2.5 sm:px-3"
         }`}
       >
@@ -117,15 +90,15 @@ export function MessageInput({ density = "comfy", disabled, onSendText, onSendAt
         />
         <div className="flex items-center gap-1">
           <Button
+            ref={emojiButtonRef}
             type="button"
             variant="ghost"
             size="icon"
             className="h-8 w-8 rounded-md text-muted-foreground"
             title="Insert emoji"
             onClick={() => {
-              setText((current) => `${current}${current.trim().length > 0 ? " " : ""}🙂`);
               setInputHint(null);
-              inputRef.current?.focus();
+              setIsEmojiOpen((current) => !current);
             }}
           >
             <Smile className="h-4 w-4" />
@@ -135,7 +108,6 @@ export function MessageInput({ density = "comfy", disabled, onSendText, onSendAt
             <input
               type="file"
               className="hidden"
-              accept="image/*,video/*,application/pdf"
               disabled={disabled || isSendingAttachment}
               onChange={(event) => {
                 const file = event.target.files?.[0];
@@ -145,12 +117,13 @@ export function MessageInput({ density = "comfy", disabled, onSendText, onSendAt
                 }
 
                 if (!isAllowedAttachmentType(file.type)) {
-                  setAttachmentError("Attachment must be image, PDF, or video.");
+                  setAttachmentError("Attachment type is not supported.");
                   return;
                 }
 
                 setAttachmentError(null);
                 setPendingAttachment({
+                  file,
                   fileName: file.name,
                   mimeType: file.type || "application/octet-stream",
                   size: file.size
@@ -158,23 +131,23 @@ export function MessageInput({ density = "comfy", disabled, onSendText, onSendAt
               }}
             />
           </label>
-          <Button
-            type="button"
-            variant="ghost"
-            size="icon"
-            className="h-8 w-8 rounded-md text-muted-foreground"
-            title="Voice note shortcut"
-            onClick={() => {
-              setInputHint("Voice note recorder is in progress. Please use attachment or text for now.");
-              inputRef.current?.focus();
-            }}
-          >
-            <Mic className="h-4 w-4" />
-          </Button>
         </div>
         <Button type="submit" disabled={disabled || isSending} className="h-9 rounded-xl px-3 shadow-sm sm:px-5">
           {isSending ? "Sending..." : "Send"}
         </Button>
+        {isEmojiOpen ? (
+          <div className="absolute bottom-[calc(100%_+_12px)] right-0 z-20 overflow-hidden rounded-2xl border border-border bg-card shadow-2xl">
+            <EmojiPicker
+              lazyLoadEmojis
+              theme={resolvedTheme === "dark" ? Theme.DARK : Theme.LIGHT}
+              onEmojiClick={(emojiData) => {
+                setText((current) => `${current}${emojiData.emoji}`);
+                setIsEmojiOpen(false);
+                inputRef.current?.focus();
+              }}
+            />
+          </div>
+        ) : null}
       </div>
 
       {pendingAttachment ? (
@@ -194,25 +167,9 @@ export function MessageInput({ density = "comfy", disabled, onSendText, onSendAt
       {attachmentError ? <p className="text-xs text-destructive">{attachmentError}</p> : null}
       {inputHint ? <p className="text-xs text-muted-foreground">{inputHint}</p> : null}
 
-      <TemplateComposer
-        density={density}
-        disabled={disabled}
-        isSendingTemplate={isSendingTemplate}
-        templateName={templateName}
-        templateCategory={templateCategory}
-        templateLanguageCode={templateLanguageCode}
-        onTemplateNameChange={setTemplateName}
-        onTemplateCategoryChange={setTemplateCategory}
-        onTemplateLanguageCodeChange={setTemplateLanguageCode}
-        onSendTemplate={() => {
-          void handleSendTemplate();
-        }}
-      />
-
       <p className="text-[11px] text-muted-foreground/90">
         Tip: use <span className="font-medium text-foreground/90">/</span> for quick reply,{" "}
-        <span className="font-medium text-foreground/90">I</span> for invoice drawer, and{" "}
-        <span className="font-medium text-foreground/90">Ctrl+/</span> for shortcuts help.
+        <span className="font-medium text-foreground/90">I</span> for invoice drawer, and attach file with the paperclip icon.
       </p>
     </form>
   );

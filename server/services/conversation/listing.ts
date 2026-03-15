@@ -39,11 +39,22 @@ export async function listConversations(input: ListConversationsInput): Promise<
     prisma.conversation.findMany({
       where,
       include: {
+        crmPipeline: {
+          select: {
+            name: true
+          }
+        },
+        crmStage: {
+          select: {
+            name: true
+          }
+        },
         customer: {
           select: {
             id: true,
             phoneE164: true,
             displayName: true,
+            waProfilePicUrl: true,
             source: true
           }
         },
@@ -96,11 +107,22 @@ export async function getConversationById(
       orgId: normalizedOrgId
     },
     include: {
+      crmPipeline: {
+        select: {
+          name: true
+        }
+      },
+      crmStage: {
+        select: {
+          name: true
+        }
+      },
       customer: {
         select: {
           id: true,
           phoneE164: true,
           displayName: true,
+          waProfilePicUrl: true,
           source: true
         }
       }
@@ -117,6 +139,11 @@ export async function getConversationById(
     customerId: conversation.customerId,
     customerPhoneE164: conversation.customer.phoneE164,
     customerDisplayName: conversation.customer.displayName,
+    customerAvatarUrl: conversation.customer.waProfilePicUrl,
+    crmPipelineId: conversation.crmPipelineId,
+    crmPipelineName: conversation.crmPipeline?.name ?? null,
+    crmStageId: conversation.crmStageId,
+    crmStageName: conversation.crmStage?.name ?? null,
     lastMessagePreview: null,
     source: conversation.customer.source,
     sourceCampaign: conversation.sourceCampaign,

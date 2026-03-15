@@ -1,6 +1,7 @@
 import { type NextRequest, NextResponse } from "next/server";
 
 import { requireApiSession } from "@/lib/auth/middleware";
+import { resolvePrimaryOrganizationIdForUser } from "@/server/services/organizationService";
 import { retryOutboundMessage } from "@/server/services/messageService";
 import { ServiceError } from "@/server/services/serviceError";
 
@@ -35,9 +36,13 @@ export async function POST(request: NextRequest) {
   }
 
   try {
+    const orgId = await resolvePrimaryOrganizationIdForUser(
+      auth.session.userId,
+      typeof body.orgId === "string" ? body.orgId : ""
+    );
     const result = await retryOutboundMessage({
       actorUserId: auth.session.userId,
-      orgId: typeof body.orgId === "string" ? body.orgId : "",
+      orgId,
       messageId: typeof body.messageId === "string" ? body.messageId : ""
     });
 

@@ -138,6 +138,18 @@ export type CreateNoteResponse = {
   };
 };
 
+export type UpdateNoteResponse = {
+  error?: {
+    message?: string;
+  };
+};
+
+export type DeleteNoteResponse = {
+  error?: {
+    message?: string;
+  };
+};
+
 export type AttachProofResponse = {
   data?: {
     proof?: {

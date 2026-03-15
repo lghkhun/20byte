@@ -7,6 +7,11 @@ export type ConversationItem = {
   customerId: string;
   customerPhoneE164: string;
   customerDisplayName: string | null;
+  customerAvatarUrl: string | null;
+  crmPipelineId: string | null;
+  crmPipelineName: string | null;
+  crmStageId: string | null;
+  crmStageName: string | null;
   lastMessagePreview: string | null;
   source: string | null;
   sourceCampaign: string | null;

@@ -5,7 +5,7 @@ import type { OutboundStoreResult, RetryOutboundMessageInput } from "@/server/se
 import { normalize, normalizeSendError, normalizeTemplateLanguageCode, parseTemplateComponentsJson } from "@/server/services/message/messageUtils";
 import { ServiceError } from "@/server/services/serviceError";
 import {
-  getOrgWaCredentials,
+  getOrgWaConnection,
   requireInboxMembership,
   sendOutboundTemplateWithRetry,
   sendOutboundTextWithRetry,
@@ -63,7 +63,7 @@ export async function retryOutboundMessage(input: RetryOutboundMessageInput): Pr
     throw new ServiceError(400, "MESSAGE_NOT_RETRYABLE", "Only TEXT or TEMPLATE messages can be retried.");
   }
 
-  const credentials = await getOrgWaCredentials(orgId);
+  const connection = await getOrgWaConnection(orgId);
   try {
     let waMessageId: string | null = null;
 
@@ -74,8 +74,7 @@ export async function retryOutboundMessage(input: RetryOutboundMessageInput): Pr
       }
 
       waMessageId = await sendOutboundTextWithRetry({
-        accessToken: credentials.accessToken,
-        phoneNumberId: credentials.phoneNumberId,
+        orgId: connection.orgId,
         to: message.conversation.customer.phoneE164,
         text
       });
@@ -86,8 +85,7 @@ export async function retryOutboundMessage(input: RetryOutboundMessageInput): Pr
       }
 
       waMessageId = await sendOutboundTemplateWithRetry({
-        accessToken: credentials.accessToken,
-        phoneNumberId: credentials.phoneNumberId,
+        orgId: connection.orgId,
         to: message.conversation.customer.phoneE164,
         templateName,
         languageCode: normalizeTemplateLanguageCode(message.templateLanguageCode ?? "en"),

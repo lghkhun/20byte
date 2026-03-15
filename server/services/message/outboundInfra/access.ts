@@ -1,7 +1,7 @@
 import { prisma } from "@/lib/db/prisma";
 import { canAccessInbox } from "@/lib/permissions/orgPermissions";
-import { decryptSensitiveToken } from "@/lib/security/tokenCipher";
 import { isWhatsAppMockModeEnabled } from "@/lib/whatsapp/mockMode";
+import { ensureBaileysConnectedForOrg } from "@/server/services/baileysService";
 import { ServiceError } from "@/server/services/serviceError";
 
 export async function requireInboxMembership(userId: string, orgId: string) {
@@ -51,34 +51,31 @@ export async function getConversationWithCustomer(orgId: string, conversationId:
   return conversation;
 }
 
-export async function getOrgWaCredentials(orgId: string): Promise<{ accessToken: string; phoneNumberId: string }> {
+export async function getOrgWaConnection(orgId: string): Promise<{ orgId: string }> {
   const waAccount = await prisma.waAccount.findFirst({
     where: {
-      orgId
+      orgId,
+      metaBusinessId: "baileys",
+      wabaId: "baileys"
     },
     orderBy: {
       connectedAt: "desc"
     },
     select: {
-      accessTokenEnc: true,
-      phoneNumberId: true
+      id: true
     }
   });
 
   if (!waAccount) {
     if (isWhatsAppMockModeEnabled()) {
       return {
-        accessToken: "mock-access-token",
-        phoneNumberId: "mock-phone-number-id"
+        orgId
       };
     }
 
     throw new ServiceError(400, "WHATSAPP_NOT_CONNECTED", "WhatsApp account is not connected for this organization.");
   }
 
-  const accessToken = decryptSensitiveToken(waAccount.accessTokenEnc);
-  return {
-    accessToken,
-    phoneNumberId: waAccount.phoneNumberId
-  };
+  await ensureBaileysConnectedForOrg(orgId);
+  return { orgId };
 }

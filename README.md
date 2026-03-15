@@ -46,7 +46,7 @@ The inbox becomes the central place to:
 
 Connect WhatsApp using:
 
-Embedded Signup + Cloud API
+Baileys multi-device session
 
 The inbox supports:
 
@@ -143,7 +143,7 @@ Infrastructure:
 - Redis
 - Cloudflare R2
 - Ably Realtime
-- WhatsApp Cloud API
+- Baileys
 
 ---
 
@@ -159,7 +159,7 @@ MySQL Database
 Redis Queue  
 Cloudflare R2 Storage  
 Ably Realtime  
-WhatsApp Cloud API
+Baileys socket session
 
 This architecture keeps the system simple while remaining scalable.
 
@@ -324,14 +324,6 @@ DATABASE_URL=
 REDIS_URL=
 NEXTAUTH_SECRET=
 NEXTAUTH_URL=
-
-WHATSAPP_ACCESS_TOKEN=
-WHATSAPP_PHONE_NUMBER_ID=
-WHATSAPP_WEBHOOK_VERIFY_TOKEN=
-WHATSAPP_APP_SECRET=
-WHATSAPP_TOKEN_ENCRYPTION_KEY=
-WHATSAPP_EMBEDDED_APP_ID=
-WHATSAPP_EMBEDDED_CONFIG_ID=
 WHATSAPP_MOCK_MODE=true
 
 ABLY_API_KEY=
@@ -351,8 +343,8 @@ Use `.env.example` instead.
 
 Notes:
 
-- `WHATSAPP_ACCESS_TOKEN` and `WHATSAPP_PHONE_NUMBER_ID` are placeholder values for local/dev.
-- Active runtime credentials are stored encrypted in `WaAccount` after Embedded Signup.
+- Runtime WhatsApp connection now uses Baileys auth state under `.runtime/baileys-auth`.
+- `WHATSAPP_MOCK_MODE` remains available if you want message flows without a live paired device.
 
 ---
 

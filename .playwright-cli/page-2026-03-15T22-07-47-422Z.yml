@@ -1,0 +1,538 @@
+- generic:
+  - alert
+  - generic:
+    - generic:
+      - generic:
+        - generic:
+          - generic:
+            - list:
+              - listitem:
+                - link:
+                  - /url: /inbox
+                  - generic:
+                    - generic: "20"
+          - generic:
+            - generic:
+              - generic: Platform
+              - list:
+                - listitem:
+                  - link:
+                    - /url: /dashboard
+                    - img
+                - listitem:
+                  - link:
+                    - /url: /inbox
+                    - img
+                - listitem:
+                  - link:
+                    - /url: /customers
+                    - img
+                - listitem:
+                  - link:
+                    - /url: /invoices
+                    - img
+            - generic:
+              - generic: Business Tools
+              - generic:
+                - list:
+                  - listitem:
+                    - link:
+                      - /url: /dashboard/settings/business
+                      - img
+                  - listitem:
+                    - link:
+                      - /url: /dashboard/settings/whatsapp
+                      - img
+                  - listitem:
+                    - link:
+                      - /url: /crm/pipelines
+                      - img
+                  - listitem:
+                    - link:
+                      - /url: /settings
+                      - img
+          - generic:
+            - list:
+              - listitem:
+                - button:
+                  - generic:
+                    - generic: SO
+                  - img
+    - main:
+      - main:
+        - generic:
+          - generic:
+            - generic:
+              - generic:
+                - generic:
+                  - generic:
+                    - generic:
+                      - generic:
+                        - generic:
+                          - generic:
+                            - generic:
+                              - heading [level=2]: Inbox
+                              - paragraph: 6 active conversations
+                            - generic:
+                              - button:
+                                - img
+                                - generic: Filters
+                              - button:
+                                - img
+                                - generic: Archive actions
+                              - button:
+                                - img
+                                - generic: More actions
+                          - generic:
+                            - button: All6
+                            - button: Unassigned6
+                            - button: Unread1
+                            - button: Resolved0
+                          - generic:
+                            - generic:
+                              - img
+                              - textbox:
+                                - /placeholder: Search...
+                            - button:
+                              - img
+                              - generic: New
+                            - button:
+                              - img
+                              - generic: Refresh conversations
+                        - generic:
+                          - generic:
+                            - button:
+                              - generic:
+                                - generic: "77"
+                                - generic:
+                                  - generic:
+                                    - generic: "+628662776277"
+                                    - generic: Mar 14
+                                  - generic:
+                                    - generic: cek
+                                  - generic:
+                                    - generic:
+                                      - generic: ORGANIC
+                                      - generic: Unassigned
+                            - button:
+                              - generic:
+                                - generic: "28"
+                                - generic:
+                                  - generic:
+                                    - generic: "+62892662777828"
+                                    - generic: "-"
+                                  - generic:
+                                    - generic: No message preview yet
+                                  - generic:
+                                    - generic:
+                                      - generic: ORGANIC
+                                      - generic: Unassigned
+                            - button:
+                              - generic:
+                                - generic: "28"
+                                - generic:
+                                  - generic:
+                                    - generic: "+62897762777728"
+                                    - generic: "-"
+                                  - generic:
+                                    - generic: No message preview yet
+                                  - generic:
+                                    - generic:
+                                      - generic: ORGANIC
+                                      - generic: Unassigned
+                            - button:
+                              - generic:
+                                - generic: B
+                                - generic:
+                                  - generic:
+                                    - generic: BUnda
+                                    - generic: Mar 14
+                                  - generic:
+                                    - generic: halo
+                                  - generic:
+                                    - generic:
+                                      - generic: ORGANIC
+                                      - generic: Unassigned
+                            - button:
+                              - generic:
+                                - generic: "83"
+                                - generic:
+                                  - generic:
+                                    - generic: "+6289524789183"
+                                    - generic: "-"
+                                  - generic:
+                                    - generic: No message preview yet
+                                  - generic:
+                                    - generic:
+                                      - generic: ORGANIC
+                                      - generic: Unassigned
+                            - button:
+                              - generic:
+                                - generic: SA
+                                - generic:
+                                  - generic:
+                                    - generic: Salsa Agency
+                                    - generic: Mar 06
+                                  - generic:
+                                    - generic: "Here is your invoice: http://localhost:3000/i/seed-public-token-3 [Automated]"
+                                  - generic:
+                                    - generic:
+                                      - generic: META
+                                      - generic: Unassigned
+                                    - generic:
+                                      - generic: "3"
+                    - generic:
+                      - generic:
+                        - generic:
+                          - generic:
+                            - generic: +
+                            - generic:
+                              - heading [level=2]: "+628662776277"
+                              - generic:
+                                - generic: Open
+                                - generic: "+628662776277"
+                                - generic:
+                                  - img
+                                  - text: Unassigned
+                          - generic:
+                            - button:
+                              - img
+                            - button:
+                              - img
+                            - button:
+                              - img
+                            - button:
+                              - img
+                        - generic:
+                          - generic:
+                            - generic: Mar 14, 2026
+                          - generic:
+                            - generic:
+                              - generic:
+                                - generic: Mar 14, 2026
+                              - generic:
+                                - article:
+                                  - generic:
+                                    - generic: SENT • attempt 1
+                                  - paragraph: cek
+                                  - generic:
+                                    - generic: 02:33 PM
+                                    - generic: ✓✓
+                        - generic:
+                          - generic:
+                            - textbox:
+                              - /placeholder: Enter message...
+                            - generic:
+                              - button:
+                                - img
+                              - generic:
+                                - img
+                            - button: Send
+                          - paragraph: "Tip: use / for quick reply, I for invoice drawer, and attach file with the paperclip icon."
+                    - generic:
+                      - button
+                      - generic:
+                        - generic:
+                          - complementary:
+                            - generic:
+                              - generic:
+                                - generic: "+6"
+                                - generic:
+                                  - heading [level=2]: "+628662776277"
+                                  - paragraph: "+628662776277"
+                                  - generic:
+                                    - generic: OPEN
+                                    - generic: Inisiasi Chat
+                              - generic:
+                                - generic:
+                                  - generic:
+                                    - paragraph: "Unread: 0"
+                                    - paragraph: "Last Activity: Mar 14, 02:33 PM"
+                                    - paragraph: "Assigned Member: Unassigned"
+                                  - generic:
+                                    - generic:
+                                      - button: Create Invoice
+                                      - button: Assign to
+                            - group:
+                              - generic:
+                                - generic:
+                                  - generic:
+                                    - img
+                                  - paragraph: Pipeline & Peluang
+                                - generic:
+                                  - img
+                              - generic:
+                                - generic:
+                                  - combobox
+                                  - combobox
+                                  - button: Simpan Pipeline
+                            - group:
+                              - generic:
+                                - generic:
+                                  - generic:
+                                    - img
+                                  - paragraph: Catatan Internal
+                                - generic:
+                                  - img
+                              - generic:
+                                - generic:
+                                  - textbox:
+                                    - /placeholder: Catatan khusus pelanggan ini... (Tidak terkirim)
+                                  - generic:
+                                    - button [disabled]: Simpan Catatan
+                                - generic:
+                                  - paragraph: Belum ada catatan internal.
+                            - group:
+                              - generic:
+                                - generic:
+                                  - generic:
+                                    - img
+                                  - paragraph: Labels
+                                - generic:
+                                  - img
+                            - group:
+                              - generic:
+                                - generic:
+                                  - generic:
+                                    - img
+                                  - paragraph: Media, Dokumen & Tautan
+                                - generic:
+                                  - img
+                              - generic:
+                                - generic:
+                                  - generic:
+                                    - paragraph: Media & Dokumen
+                                    - generic: Tidak ada riwayat media
+                                  - generic:
+                                    - paragraph: Tautan
+                                    - generic: Tidak ada tautan di percakapan ini
+                            - group:
+                              - generic:
+                                - generic:
+                                  - generic:
+                                    - img
+                                  - paragraph: Attach Payment Proof
+                                - generic:
+                                  - img
+                            - generic:
+                              - group:
+                                - generic:
+                                  - generic:
+                                    - generic:
+                                      - img
+                                    - paragraph: Invoices
+                                  - generic:
+                                    - img
+                            - generic:
+                              - group:
+                                - generic:
+                                  - generic:
+                                    - generic:
+                                      - img
+                                    - paragraph: Timeline
+                                  - generic:
+                                    - img
+  - dialog:
+    - generic:
+      - generic:
+        - generic:
+          - generic:
+            - heading [level=2]: Invoice
+            - paragraph: Susun invoice customer dari percakapan aktif.
+          - generic:
+            - button: Full Payment
+            - button: Down Payment
+        - button: Close
+    - generic:
+      - generic:
+        - generic:
+          - generic:
+            - generic:
+              - generic:
+                - generic:
+                  - text: Salesperson
+                  - generic:
+                    - combobox
+                - generic:
+                  - text: Tgl. Jatuh Tempo
+                  - button:
+                    - generic: Pilih tanggal jatuh tempo
+                    - img
+                - generic:
+                  - generic:
+                    - text: Pelanggan
+                    - button:
+                      - img
+                      - text: Tambah Manual
+                  - textbox:
+                    - /placeholder: Nama pelanggan
+                - generic:
+                  - generic:
+                    - text: Nomor WhatsApp
+                    - button:
+                      - img
+                      - text: Tambah Manual
+                  - textbox:
+                    - /placeholder: +628...
+                    - text: "+628662776277"
+            - generic:
+              - generic:
+                - text: Default Business Invoice
+                - button:
+                  - img
+              - generic:
+                - generic:
+                  - img
+                  - generic:
+                    - paragraph: Seed Org Alpha
+                    - paragraph: Nama legal belum diisi.
+                - generic:
+                  - img
+                  - generic:
+                    - paragraph: Seed Owner
+                    - paragraph: Tanda tangan default bisnis akan dipakai otomatis.
+                - paragraph: Ubah logo bisnis, tanda tangan invoice, atau penanggung jawab dari halaman Business Settings.
+          - generic:
+            - generic:
+              - generic:
+                - generic:
+                  - generic:
+                    - generic:
+                      - text: Produk
+                      - generic: "*"
+                    - generic:
+                      - text: Deskripsi
+                      - generic: "*"
+                    - generic:
+                      - text: Kuantitas
+                      - generic: "*"
+                    - generic:
+                      - text: Harga
+                      - generic: "*"
+                    - generic: Diskon
+                    - generic:
+                      - text: Pajak
+                      - button:
+                        - img
+                    - generic: Jumlah
+                  - generic:
+                    - generic:
+                      - textbox:
+                        - /placeholder: Nama produk
+                      - textbox:
+                        - /placeholder: Deskripsi produk
+                      - spinbutton: "1"
+                      - spinbutton: "0"
+                      - generic:
+                        - generic:
+                          - combobox
+                          - img
+                        - spinbutton: "0"
+                        - generic: "%"
+                      - generic:
+                        - combobox
+                        - img
+                      - generic:
+                        - generic: "0"
+                      - generic:
+                        - button [disabled]:
+                          - img
+            - generic:
+              - button: Tambah Baris
+              - button: Katalog Produk
+          - generic:
+            - generic:
+              - generic:
+                - generic:
+                  - text: Keterangan
+                  - button:
+                    - img
+                - textbox
+              - generic:
+                - generic:
+                  - text: Syarat & Ketentuan
+                  - button:
+                    - img
+                - textbox
+            - generic:
+              - generic:
+                - generic:
+                  - paragraph: Ringkasan Invoice
+                  - paragraph: Diskon, pajak, dan total akhir selalu sinkron dengan item di atas.
+                - generic:
+                  - combobox
+                  - spinbutton: "0"
+                - generic:
+                  - generic:
+                    - generic: Subtotal
+                    - generic: Rp 0
+                  - generic:
+                    - generic: Total Diskon Item
+                    - generic: "- Rp 0"
+                  - generic:
+                    - generic: Diskon Invoice
+                    - generic: "- Rp 0"
+                  - generic:
+                    - generic: Total Pajak
+                    - generic: Rp 0
+                  - generic:
+                    - generic: Total Tagihan
+                    - generic: Rp 0
+    - generic:
+      - generic:
+        - button: Batalkan
+        - button: Simpan Invoice
+        - button [disabled]: Update Draft Items
+        - button [disabled]: Send Invoice
+        - button [disabled]: Mark Paid
+  - dialog "Masukkan Produk" [ref=e938]:
+    - generic [ref=e939]:
+      - generic [ref=e940]:
+        - generic [ref=e941]: Produk
+        - heading "Masukkan Produk" [level=2] [ref=e942]
+        - paragraph [ref=e943]: Item terpilih 1
+      - generic [ref=e944]:
+        - button "Buat Produk Baru" [ref=e946] [cursor=pointer]:
+          - img [ref=e947]
+          - text: Buat Produk Baru
+        - generic [ref=e950]:
+          - generic [ref=e951]:
+            - generic [ref=e952]:
+              - generic [ref=e953]: Kode Layanan
+              - textbox "Cari kode" [ref=e954]
+            - generic [ref=e955]:
+              - generic [ref=e956]: Nama Layanan
+              - textbox "Cari nama layanan" [ref=e957]
+            - generic [ref=e958]:
+              - generic [ref=e959]: Kategori Layanan
+              - textbox "Cari kategori" [ref=e960]
+            - generic [ref=e961]: Satuan
+            - generic [ref=e962]: Harga Jual
+          - generic [ref=e963]:
+            - generic [ref=e964] [cursor=pointer]:
+              - checkbox "SRV-HN2DA8 Audit Layanan SEO Digital Marketing proyek Rp 1.750.000" [checked] [active] [ref=e966]
+              - generic [ref=e967]: SRV-HN2DA8
+              - generic [ref=e968]: Audit Layanan SEO
+              - generic [ref=e969]: Digital Marketing
+              - generic [ref=e970]: proyek
+              - generic [ref=e971]: Rp 1.750.000
+            - generic [ref=e972] [cursor=pointer]:
+              - checkbox "SRV-ALOG_2 Product Launch Event Event event Rp 6.500.000" [ref=e974]
+              - generic [ref=e975]: SRV-ALOG_2
+              - generic [ref=e976]: Product Launch Event
+              - generic [ref=e977]: Event
+              - generic [ref=e978]: event
+              - generic [ref=e979]: Rp 6.500.000
+            - generic [ref=e980] [cursor=pointer]:
+              - checkbox "SRV-ALOG_1 Social Media Management Marketing project Rp 2.500.000" [ref=e982]
+              - generic [ref=e983]: SRV-ALOG_1
+              - generic [ref=e984]: Social Media Management
+              - generic [ref=e985]: Marketing
+              - generic [ref=e986]: project
+              - generic [ref=e987]: Rp 2.500.000
+      - generic [ref=e988]:
+        - button "Simpan" [ref=e995] [cursor=pointer]
+        - button "Batalkan" [ref=e989] [cursor=pointer]
+    - button "Close" [ref=e990] [cursor=pointer]:
+      - img [ref=e991]
+      - generic [ref=e994]: Close

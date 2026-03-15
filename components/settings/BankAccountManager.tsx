@@ -31,7 +31,6 @@ function toErrorMessage(error: unknown, fallback: string): string {
 
 export function BankAccountManager() {
   const [orgs, setOrgs] = useState<OrgItem[]>([]);
-  const [activeOrgId, setActiveOrgId] = useState("");
   const [accounts, setAccounts] = useState<BankAccountItem[]>([]);
   const [bankName, setBankName] = useState("");
   const [accountNumber, setAccountNumber] = useState("");
@@ -40,31 +39,24 @@ export function BankAccountManager() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  const activeBusiness = useMemo(() => orgs[0] ?? null, [orgs]);
   const canSubmit = useMemo(() => {
-    return Boolean(activeOrgId && bankName.trim() && accountNumber.trim() && accountHolder.trim() && !isSubmitting);
-  }, [activeOrgId, accountHolder, accountNumber, bankName, isSubmitting]);
+    return Boolean(bankName.trim() && accountNumber.trim() && accountHolder.trim() && !isSubmitting);
+  }, [accountHolder, accountNumber, bankName, isSubmitting]);
 
   const loadOrganizations = useCallback(async () => {
     const response = await fetch("/api/orgs", { cache: "no-store" });
     const payload = (await response.json()) as { data?: { organizations?: OrgItem[] } } & ApiError;
     if (!response.ok) {
-      throw new Error(payload.error?.message ?? "Failed to load organizations.");
+      throw new Error(payload.error?.message ?? "Failed to load business.");
     }
 
     const nextOrgs = payload.data?.organizations ?? [];
     setOrgs(nextOrgs);
-    if (nextOrgs.length > 0) {
-      setActiveOrgId((current) => current || nextOrgs[0].id);
-    }
   }, []);
 
-  const loadBankAccounts = useCallback(async (orgId: string) => {
-    if (!orgId) {
-      setAccounts([]);
-      return;
-    }
-
-    const response = await fetch(`/api/orgs/bank-accounts?orgId=${encodeURIComponent(orgId)}`, { cache: "no-store" });
+  const loadBankAccounts = useCallback(async () => {
+    const response = await fetch("/api/orgs/bank-accounts", { cache: "no-store" });
     const payload = (await response.json()) as { data?: { accounts?: BankAccountItem[] } } & ApiError;
     if (!response.ok) {
       throw new Error(payload.error?.message ?? "Failed to load bank accounts.");
@@ -103,13 +95,13 @@ export function BankAccountManager() {
     let mounted = true;
 
     async function refresh() {
-      if (!activeOrgId) {
+      if (!activeBusiness) {
         return;
       }
 
       try {
         setError(null);
-        await loadBankAccounts(activeOrgId);
+        await loadBankAccounts();
       } catch (err) {
         if (mounted) {
           setError(toErrorMessage(err, "Failed to refresh bank accounts."));
@@ -122,7 +114,7 @@ export function BankAccountManager() {
     return () => {
       mounted = false;
     };
-  }, [activeOrgId, loadBankAccounts]);
+  }, [activeBusiness, loadBankAccounts]);
 
   async function handleCreate(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -139,7 +131,6 @@ export function BankAccountManager() {
           "Content-Type": "application/json"
         },
         body: JSON.stringify({
-          orgId: activeOrgId,
           bankName,
           accountNumber,
           accountHolder
@@ -154,7 +145,7 @@ export function BankAccountManager() {
       setBankName("");
       setAccountNumber("");
       setAccountHolder("");
-      await loadBankAccounts(activeOrgId);
+      await loadBankAccounts();
     } catch (err) {
       setError(toErrorMessage(err, "Failed to add bank account."));
     } finally {
@@ -171,7 +162,6 @@ export function BankAccountManager() {
           "Content-Type": "application/json"
         },
         body: JSON.stringify({
-          orgId: activeOrgId,
           bankAccountId
         })
       });
@@ -181,7 +171,7 @@ export function BankAccountManager() {
         throw new Error(payload.error?.message ?? "Failed to delete bank account.");
       }
 
-      await loadBankAccounts(activeOrgId);
+      await loadBankAccounts();
     } catch (err) {
       setError(toErrorMessage(err, "Failed to delete bank account."));
     }
@@ -191,25 +181,14 @@ export function BankAccountManager() {
     <section className="mx-auto max-w-5xl space-y-4 rounded-xl border border-border bg-surface/70 p-4">
       <div>
         <h1 className="text-xl font-semibold text-foreground">Bank Transfer Accounts</h1>
-        <p className="text-sm text-muted-foreground">Manual transfer destination accounts (max 5 per organization).</p>
+        <p className="text-sm text-muted-foreground">Manual transfer destination accounts for your business (max 5).</p>
       </div>
 
       <div>
-        <label htmlFor="bank-org-selector" className="mb-2 block text-xs text-muted-foreground">
-          Organization
-        </label>
-        <select
-          id="bank-org-selector"
-          value={activeOrgId}
-          onChange={(event) => setActiveOrgId(event.target.value)}
-          className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground"
-        >
-          {orgs.map((org) => (
-            <option key={org.id} value={org.id}>
-              {org.name}
-            </option>
-          ))}
-        </select>
+        <p className="mb-2 block text-xs text-muted-foreground">Business</p>
+        <p className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground">
+          {activeBusiness?.name ?? "Primary business"}
+        </p>
       </div>
 
       <form onSubmit={handleCreate} className="grid gap-2 md:grid-cols-4">

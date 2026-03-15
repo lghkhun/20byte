@@ -62,14 +62,6 @@ DATABASE_URL=
 REDIS_URL=
 NEXTAUTH_SECRET=
 NEXTAUTH_URL=
-
-WHATSAPP_ACCESS_TOKEN=
-WHATSAPP_PHONE_NUMBER_ID=
-WHATSAPP_WEBHOOK_VERIFY_TOKEN=
-WHATSAPP_APP_SECRET=
-WHATSAPP_TOKEN_ENCRYPTION_KEY=
-WHATSAPP_EMBEDDED_APP_ID=
-WHATSAPP_EMBEDDED_CONFIG_ID=
 WHATSAPP_MOCK_MODE=
 
 ABLY_API_KEY=
@@ -125,44 +117,26 @@ REDIS_URL=redis://localhost:6379
 
 Queues used:
 
-webhook queue  
-media processing queue  
 cleanup queue
 
 ---
 
 # 6. WhatsApp Configuration
 
-WhatsApp Cloud API variables:
+Current WhatsApp transport uses Baileys.
 
-```
-WHATSAPP_ACCESS_TOKEN
-WHATSAPP_PHONE_NUMBER_ID
-WHATSAPP_WEBHOOK_VERIFY_TOKEN
-WHATSAPP_APP_SECRET
-WHATSAPP_TOKEN_ENCRYPTION_KEY
-WHATSAPP_EMBEDDED_APP_ID
-WHATSAPP_EMBEDDED_CONFIG_ID
-```
+Runtime requirements:
 
-These values are obtained from:
+- no Meta App credentials are required
+- auth state is stored under `.runtime/baileys-auth/<orgId>`
+- downloaded media is stored under `.runtime/baileys-media/<orgId>`
+- local/dev may run with `WHATSAPP_MOCK_MODE=true` to bypass live device pairing
 
-Meta Developer Console.
+For real-device testing:
 
-Access tokens must be encrypted in database storage.
-
-`WHATSAPP_TOKEN_ENCRYPTION_KEY` is used for encryption-at-rest in `WaAccount.accessTokenEnc`.
-
-`WHATSAPP_EMBEDDED_APP_ID` and `WHATSAPP_EMBEDDED_CONFIG_ID` are used by embedded-signup bootstrap API.
-
-`WHATSAPP_APP_SECRET` is required to verify `X-Hub-Signature-256` for webhook requests.
-
-For current embedded-signup architecture and Docker runtime:
-
-- `WHATSAPP_ACCESS_TOKEN` and `WHATSAPP_PHONE_NUMBER_ID` are optional placeholders in `.env` and `.env.example`.
-- Runtime outbound messaging uses encrypted credentials stored in `WaAccount.accessTokenEnc` + `WaAccount.phoneNumberId`.
-- Before Meta verification is complete, local/dev may run with `WHATSAPP_MOCK_MODE=true` to bypass live Cloud API calls.
-- `docker-compose.yml` provides safe defaults for `WHATSAPP_WEBHOOK_VERIFY_TOKEN`, `WHATSAPP_APP_SECRET`, `WHATSAPP_TOKEN_ENCRYPTION_KEY`, `WHATSAPP_EMBEDDED_APP_ID`, and `WHATSAPP_EMBEDDED_CONFIG_ID` so local container startup does not fail when verification is pending.
+- set `WHATSAPP_MOCK_MODE=false`
+- open `/dashboard/settings/whatsapp`
+- connect the device using QR or pairing code
 
 ---
 

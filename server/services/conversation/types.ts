@@ -20,6 +20,11 @@ export type ConversationSummary = {
   customerId: string;
   phoneE164: string;
   customerDisplayName: string | null;
+  customerAvatarUrl: string | null;
+  crmPipelineId: string | null;
+  crmPipelineName: string | null;
+  crmStageId: string | null;
+  crmStageName: string | null;
   source: string | null;
   sourceCampaign: string | null;
   sourceAdset: string | null;
@@ -65,6 +70,11 @@ export type ConversationListItem = {
   customerId: string;
   customerPhoneE164: string;
   customerDisplayName: string | null;
+  customerAvatarUrl: string | null;
+  crmPipelineId: string | null;
+  crmPipelineName: string | null;
+  crmStageId: string | null;
+  crmStageName: string | null;
   lastMessagePreview: string | null;
   source: string | null;
   sourceCampaign: string | null;

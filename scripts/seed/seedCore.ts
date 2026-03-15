@@ -8,7 +8,6 @@ import {
   WaTemplateCategory
 } from "@prisma/client";
 
-import { encryptSensitiveToken } from "@/lib/security/tokenCipher";
 import { toDate, type SeedContext } from "@/scripts/seed/types";
 
 export async function seedCore(ctx: SeedContext) {
@@ -85,20 +84,13 @@ export async function seedCore(ctx: SeedContext) {
     });
   }
 
-  if (!process.env.WHATSAPP_TOKEN_ENCRYPTION_KEY) {
-    process.env.WHATSAPP_TOKEN_ENCRYPTION_KEY = "seed-whatsapp-token-key";
-  }
-  const waAccounts = [
-    { id: "seed_wa_alpha", orgId: "seed_org_alpha", metaBusinessId: "meta-business-seed-alpha", wabaId: "waba-seed-alpha", phoneNumberId: "628111000111", displayPhone: "+62 811-1000-111", token: "seed_token_alpha" },
-    { id: "seed_wa_beta", orgId: "seed_org_beta", metaBusinessId: "meta-business-seed-beta", wabaId: "waba-seed-beta", phoneNumberId: "628111000444", displayPhone: "+62 811-1000-444", token: "seed_token_beta" }
-  ] as const;
-  for (const wa of waAccounts) {
-    await prisma.waAccount.upsert({
-      where: { orgId: wa.orgId },
-      create: { id: wa.id, orgId: wa.orgId, metaBusinessId: wa.metaBusinessId, wabaId: wa.wabaId, phoneNumberId: wa.phoneNumberId, displayPhone: wa.displayPhone, accessTokenEnc: encryptSensitiveToken(wa.token) },
-      update: { metaBusinessId: wa.metaBusinessId, wabaId: wa.wabaId, phoneNumberId: wa.phoneNumberId, displayPhone: wa.displayPhone, accessTokenEnc: encryptSensitiveToken(wa.token) }
-    });
-  }
+  await prisma.waAccount.deleteMany({
+    where: {
+      orgId: {
+        in: ["seed_org_alpha", "seed_org_beta"]
+      }
+    }
+  });
 
   const shortlinks = [
     { id: "seed_shortlink_1", orgId: "seed_org_alpha", code: "SEEDMETA01", destinationUrl: "https://wa.me/628111000111?text=Halo%2020byte", source: "meta_ads", campaign: "ramadan-launch", adset: "lookalike-01", adName: "video-ad-01", platform: "facebook", medium: "ctwa", isEnabled: true, disabledAt: null },

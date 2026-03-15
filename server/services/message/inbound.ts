@@ -28,12 +28,15 @@ function buildInboundContext(input: StoreInboundMessageInput) {
     customerPhoneE164,
     waMessageId,
     customerDisplayName: normalizeOptional(input.customerDisplayName),
+    customerAvatarUrl: normalizeOptional(input.customerAvatarUrl),
     shortlinkCode: normalizeOptional(input.shortlinkCode),
     text: normalizeOptional(input.text),
     mediaId: normalizeOptional(input.mediaId),
+    mediaUrl: normalizeOptional(input.mediaUrl),
     mimeType: normalizeOptional(input.mimeType),
     fileName: normalizeOptional(input.fileName),
     fileSize: normalizeFileSize(input.fileSize),
+    durationSec: typeof input.durationSec === "number" && Number.isFinite(input.durationSec) ? Math.max(0, Math.floor(input.durationSec)) : undefined,
     type: input.type
   };
 }
@@ -77,7 +80,14 @@ export async function storeInboundMessage(input: StoreInboundMessageInput): Prom
     resolveAttribution: async (tx: Prisma.TransactionClient) =>
       resolveInboundAttribution(tx, context.orgId, context.shortlinkCode),
     getOrCreateCustomer: async (tx: Prisma.TransactionClient, attribution) =>
-      getOrCreateCustomer(tx, context.orgId, context.customerPhoneE164, context.customerDisplayName, attribution),
+      getOrCreateCustomer(
+        tx,
+        context.orgId,
+        context.customerPhoneE164,
+        context.customerDisplayName,
+        context.customerAvatarUrl,
+        attribution
+      ),
     getOrCreateConversation: async (tx: Prisma.TransactionClient, customerId, attribution, customer) =>
       getOrCreateOpenConversation(tx, context.orgId, customerId, resolveConversationAttribution(customer, attribution))
   });

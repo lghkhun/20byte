@@ -1,6 +1,7 @@
 import { type NextRequest, NextResponse } from "next/server";
 
 import { requireApiSession } from "@/lib/auth/middleware";
+import { resolvePrimaryOrganizationIdForUser } from "@/server/services/organizationService";
 import { deleteCatalogItem, updateCatalogItem } from "@/server/services/catalogService";
 import { ServiceError } from "@/server/services/serviceError";
 
@@ -48,9 +49,13 @@ export async function PATCH(
   }
 
   try {
+    const orgId = await resolvePrimaryOrganizationIdForUser(
+      auth.session.userId,
+      typeof body.orgId === "string" ? body.orgId : ""
+    );
     const item = await updateCatalogItem({
       actorUserId: auth.session.userId,
-      orgId: typeof body.orgId === "string" ? body.orgId : "",
+      orgId,
       itemId: context.params.itemId,
       name: typeof body.name === "string" ? body.name : undefined,
       category: typeof body.category === "string" ? body.category : undefined,
@@ -92,9 +97,11 @@ export async function DELETE(
     return auth.response;
   }
 
-  const orgId = request.nextUrl.searchParams.get("orgId")?.trim() ?? "";
-
   try {
+    const orgId = await resolvePrimaryOrganizationIdForUser(
+      auth.session.userId,
+      request.nextUrl.searchParams.get("orgId")?.trim() ?? ""
+    );
     await deleteCatalogItem(auth.session.userId, orgId, context.params.itemId);
 
     return NextResponse.json(

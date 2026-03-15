@@ -350,3 +350,98 @@ export async function createCustomerNote(
 
   return note;
 }
+
+export async function updateCustomerNote(
+  actorUserId: string,
+  orgIdInput: string,
+  customerIdInput: string,
+  noteIdInput: string,
+  contentInput: string
+) {
+  const orgId = normalize(orgIdInput);
+  const customerId = normalize(customerIdInput);
+  const noteId = normalize(noteIdInput);
+  const content = normalize(contentInput);
+  if (!orgId || !customerId || !noteId) {
+    throw new ServiceError(400, "INVALID_NOTE_UPDATE", "orgId, customerId, and noteId are required.");
+  }
+
+  if (!content) {
+    throw new ServiceError(400, "INVALID_NOTE_CONTENT", "Note content is required.");
+  }
+
+  await requireCustomerAccess(actorUserId, orgId, customerId);
+
+  const updateResult = await prisma.customerNote.updateMany({
+    where: {
+      id: noteId,
+      orgId,
+      customerId
+    },
+    data: {
+      content
+    }
+  });
+
+  if (updateResult.count !== 1) {
+    throw new ServiceError(404, "CUSTOMER_NOTE_NOT_FOUND", "Customer note does not exist.");
+  }
+
+  const note = await prisma.customerNote.findFirst({
+    where: {
+      id: noteId,
+      orgId,
+      customerId
+    },
+    select: {
+      id: true,
+      content: true,
+      authorUserId: true,
+      createdAt: true
+    }
+  });
+
+  if (!note) {
+    throw new ServiceError(404, "CUSTOMER_NOTE_NOT_FOUND", "Customer note does not exist.");
+  }
+
+  void publishCustomerUpdatedEvent({
+    orgId,
+    customerId
+  });
+
+  return note;
+}
+
+export async function deleteCustomerNote(
+  actorUserId: string,
+  orgIdInput: string,
+  customerIdInput: string,
+  noteIdInput: string
+) {
+  const orgId = normalize(orgIdInput);
+  const customerId = normalize(customerIdInput);
+  const noteId = normalize(noteIdInput);
+  if (!orgId || !customerId || !noteId) {
+    throw new ServiceError(400, "INVALID_NOTE_DELETE", "orgId, customerId, and noteId are required.");
+  }
+
+  await requireCustomerAccess(actorUserId, orgId, customerId);
+
+  const deleteResult = await prisma.customerNote.deleteMany({
+    where: {
+      id: noteId,
+      orgId,
+      customerId
+    }
+  });
+
+  if (deleteResult.count !== 1) {
+    throw new ServiceError(404, "CUSTOMER_NOTE_NOT_FOUND", "Customer note does not exist.");
+  }
+
+  void publishCustomerUpdatedEvent({
+    orgId,
+    customerId
+  });
+}

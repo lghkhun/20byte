@@ -1,25 +1,301 @@
 "use client";
 
-import { useRef } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { addDays } from "date-fns";
 import { InvoiceKind, PaymentMilestoneType } from "@prisma/client";
+import { Building2, CalendarDays, ChevronDown, Info, Landmark, Plus, Trash2 } from "lucide-react";
 
 import { InvoiceStatusBadge } from "@/components/invoices/InvoiceStatusBadge";
-import { ServiceCatalogPanel } from "@/components/invoices/ServiceCatalogPanel";
-import { type InvoiceDrawerProps, toRupiahLabel } from "@/components/invoices/invoice-drawer/types";
+import {
+  computeInvoiceLine,
+  INVOICE_TAX_OPTIONS,
+  type InvoiceDrawerProps,
+  toRupiahLabel
+} from "@/components/invoices/invoice-drawer/types";
 import { useInvoiceDrawer } from "@/components/invoices/invoice-drawer/useInvoiceDrawer";
-import { useModalAccessibility } from "@/lib/a11y/useModalAccessibility";
 import { Button } from "@/components/ui/button";
+import { Calendar } from "@/components/ui/calendar";
+import { Card, CardContent, CardFooter } from "@/components/ui/card";
+import {
+  Drawer,
+  DrawerClose,
+  DrawerContent,
+  DrawerDescription,
+  DrawerFooter,
+  DrawerHeader,
+  DrawerTitle
+} from "@/components/ui/drawer";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle
+} from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import { cn } from "@/lib/utils";
 
-export function InvoiceDrawer({ open, orgId, customerId, conversationId, onClose }: InvoiceDrawerProps) {
-  const drawerRef = useRef<HTMLDivElement | null>(null);
-  const closeButtonRef = useRef<HTMLButtonElement | null>(null);
+type MemberOption = {
+  userId: string;
+  name: string | null;
+  email: string;
+  role: string;
+};
+
+type ProfilePayload = {
+  data?: {
+    user?: {
+      id: string;
+      name: string | null;
+      email: string;
+    };
+  };
+};
+
+type BusinessProfilePayload = {
+  data?: {
+    profile?: {
+      id: string;
+      name: string;
+      legalName: string | null;
+      responsibleName: string | null;
+      businessPhone: string | null;
+      businessEmail: string | null;
+      businessAddress: string | null;
+      logoUrl: string | null;
+      invoiceSignatureUrl: string | null;
+    };
+  };
+};
+
+type BusinessProfile = NonNullable<BusinessProfilePayload["data"]>["profile"];
+
+type CatalogItemRecord = {
+  id: string;
+  name: string;
+  category: string | null;
+  unit: string | null;
+  priceCents: number | null;
+  currency: string;
+};
+
+type CatalogResponse = {
+  data?: {
+    items?: CatalogItemRecord[];
+    item?: CatalogItemRecord;
+  };
+  error?: {
+    message?: string;
+  };
+};
+
+type CatalogDraft = {
+  name: string;
+  category: string;
+  unit: string;
+  priceCents: string;
+};
+
+function formatDateLabel(value: Date): string {
+  return new Intl.DateTimeFormat("id-ID", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric"
+  }).format(value);
+}
+
+function toInputDate(value: Date): string {
+  return value.toISOString().slice(0, 10);
+}
+
+function parseInputDate(value: string): Date | undefined {
+  if (!value) {
+    return undefined;
+  }
+
+  const date = new Date(`${value}T00:00:00`);
+  return Number.isNaN(date.getTime()) ? undefined : date;
+}
+
+function FieldHint({ text }: { text: string }) {
+  return (
+    <TooltipProvider delayDuration={150}>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <button type="button" className="inline-flex text-sky-500" aria-label={text}>
+            <Info className="h-4 w-4" />
+          </button>
+        </TooltipTrigger>
+        <TooltipContent>{text}</TooltipContent>
+      </Tooltip>
+    </TooltipProvider>
+  );
+}
+
+function toPlainNumberLabel(value: number): string {
+  return new Intl.NumberFormat("id-ID", {
+    maximumFractionDigits: 0
+  }).format(value);
+}
+
+function createEmptyCatalogDraft(): CatalogDraft {
+  return {
+    name: "",
+    category: "",
+    unit: "",
+    priceCents: ""
+  };
+}
+
+function buildCatalogCode(id: string): string {
+  return `SRV-${id.slice(-6).toUpperCase()}`;
+}
+
+function DueDatePickerField({
+  value,
+  onChange
+}: {
+  value: string;
+  onChange: (next: string) => void;
+}) {
+  const selectedDate = useMemo(() => parseInputDate(value), [value]);
+  const [currentMonth, setCurrentMonth] = useState<Date>(() => {
+    const now = new Date();
+    return new Date(now.getFullYear(), now.getMonth(), 1);
+  });
+
+  useEffect(() => {
+    const baseDate = selectedDate ?? new Date();
+    setCurrentMonth(new Date(baseDate.getFullYear(), baseDate.getMonth(), 1));
+  }, [value, selectedDate]);
+
+  return (
+    <div className="space-y-2">
+      <span className="text-sm font-medium text-foreground">Tgl. Jatuh Tempo</span>
+      <Popover>
+        <PopoverTrigger asChild>
+          <Button
+            type="button"
+            variant="ghost"
+            className="h-11 w-full justify-between rounded-md border border-border bg-muted/40 px-3 text-left font-normal hover:bg-muted/60"
+          >
+            <span className={cn("truncate", !selectedDate && "text-muted-foreground")}>
+              {selectedDate ? formatDateLabel(selectedDate) : "Pilih tanggal jatuh tempo"}
+            </span>
+            <CalendarDays className="h-4 w-4 text-sky-500" />
+          </Button>
+        </PopoverTrigger>
+        <PopoverContent align="start" className="w-[300px] rounded-2xl border border-border p-0">
+          <Card className="w-full rounded-2xl border-0 shadow-none">
+            <CardContent className="p-0">
+              <Calendar
+                mode="single"
+                selected={selectedDate}
+                onSelect={(date) => onChange(date ? toInputDate(date) : "")}
+                month={currentMonth}
+                onMonthChange={setCurrentMonth}
+                fixedWeeks
+                className="rounded-t-2xl px-4 pb-4 pt-4"
+                classNames={{
+                  month_caption: "relative flex items-center justify-center pb-2",
+                  caption_label: "text-sm font-semibold text-foreground",
+                  button_previous:
+                    "absolute left-0 inline-flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground transition hover:bg-muted hover:text-foreground",
+                  button_next:
+                    "absolute right-0 inline-flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground transition hover:bg-muted hover:text-foreground",
+                  weekdays: "mb-1 grid grid-cols-7",
+                  weekday: "flex h-8 items-center justify-center text-xs font-medium text-muted-foreground",
+                  week: "grid grid-cols-7",
+                  day: "flex items-center justify-center",
+                  day_button:
+                    "inline-flex h-8 w-8 items-center justify-center rounded-md text-sm font-normal text-foreground transition hover:bg-muted",
+                  selected: "rounded-md bg-muted font-medium text-foreground hover:bg-muted",
+                  today: "rounded-md bg-muted/70 text-foreground",
+                  outside: "text-muted-foreground opacity-45"
+                }}
+              />
+            </CardContent>
+            <CardFooter className="flex flex-wrap gap-2 border-t px-4 py-3">
+              {[
+                { label: "Today", value: 0 },
+                { label: "Tomorrow", value: 1 },
+                { label: "In 3 days", value: 3 },
+                { label: "In a week", value: 7 },
+                { label: "In 2 weeks", value: 14 }
+              ].map((preset) => (
+                <Button
+                  key={preset.value}
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  className="h-7 min-w-[82px] flex-1 rounded-lg border border-border bg-background px-2 text-xs"
+                  onClick={() => {
+                    const newDate = addDays(new Date(), preset.value);
+                    onChange(toInputDate(newDate));
+                    setCurrentMonth(new Date(newDate.getFullYear(), newDate.getMonth(), 1));
+                  }}
+                >
+                  {preset.label}
+                </Button>
+              ))}
+            </CardFooter>
+          </Card>
+        </PopoverContent>
+      </Popover>
+    </div>
+  );
+}
+
+export function InvoiceDrawer({
+  open,
+  customerId,
+  conversationId,
+  orgId,
+  customerDisplayName,
+  customerPhoneE164,
+  onClose
+}: InvoiceDrawerProps) {
+  const [notes, setNotes] = useState("");
+  const [terms, setTerms] = useState("");
+  const [salesMembers, setSalesMembers] = useState<MemberOption[]>([]);
+  const [selectedSalesperson, setSelectedSalesperson] = useState("");
+  const [currentUserId, setCurrentUserId] = useState("");
+  const [currentUserLabel, setCurrentUserLabel] = useState("Business Owner");
+  const [customerName, setCustomerName] = useState(customerDisplayName?.trim() || "");
+  const [customerPhone, setCustomerPhone] = useState(customerPhoneE164 ?? "");
+  const [isManualCustomerModalOpen, setIsManualCustomerModalOpen] = useState(false);
+  const [manualCustomerName, setManualCustomerName] = useState(customerDisplayName?.trim() || "");
+  const [manualCustomerPhone, setManualCustomerPhone] = useState(customerPhoneE164 ?? "");
+  const [manualCustomerAddress, setManualCustomerAddress] = useState("");
+  const [manualCustomerEmail, setManualCustomerEmail] = useState("");
+  const [businessProfile, setBusinessProfile] = useState<BusinessProfile | null>(null);
+  const [isCatalogModalOpen, setIsCatalogModalOpen] = useState(false);
+  const [isCreateCatalogModalOpen, setIsCreateCatalogModalOpen] = useState(false);
+  const [catalogItems, setCatalogItems] = useState<CatalogItemRecord[]>([]);
+  const [catalogSearchCode, setCatalogSearchCode] = useState("");
+  const [catalogSearchName, setCatalogSearchName] = useState("");
+  const [catalogSearchCategory, setCatalogSearchCategory] = useState("");
+  const [catalogSelectedIds, setCatalogSelectedIds] = useState<string[]>([]);
+  const [catalogError, setCatalogError] = useState<string | null>(null);
+  const [isCatalogLoading, setIsCatalogLoading] = useState(false);
+  const [isCatalogCreating, setIsCatalogCreating] = useState(false);
+  const [catalogDraft, setCatalogDraft] = useState<CatalogDraft>(createEmptyCatalogDraft);
 
   const {
     kind,
     setKind,
     items,
-    milestones,
+    invoiceDiscountType,
+    setInvoiceDiscountType,
+    invoiceDiscountValue,
+    setInvoiceDiscountValue,
+    dpPercentage,
+    setDpPercentage,
+    invoiceDueDate,
+    setInvoiceDueDate,
     invoiceId,
     invoiceNo,
     invoiceStatus,
@@ -29,249 +305,937 @@ export function InvoiceDrawer({ open, orgId, customerId, conversationId, onClose
     isUpdatingItems,
     isSendingInvoice,
     isMarkingPaid,
+    summary,
     totalCents,
     updateItem,
     addItem,
     addItemFromCatalog,
     removeItem,
-    updateMilestone,
     handleCreateInvoice,
     handleUpdateItems,
     handleSendInvoice,
     handleMarkPaid
-  } = useInvoiceDrawer({ open, orgId, customerId, conversationId, onClose });
+  } = useInvoiceDrawer({ open, customerId, conversationId, orgId, customerDisplayName, customerPhoneE164, onClose });
 
-  useModalAccessibility({
-    open,
-    onClose,
-    containerRef: drawerRef,
-    initialFocusRef: closeButtonRef
-  });
+  useEffect(() => {
+    if (!open) {
+      return;
+    }
 
-  if (!open) {
-    return null;
+    setCustomerName(customerDisplayName?.trim() || "");
+    setCustomerPhone(customerPhoneE164 ?? "");
+    setManualCustomerName(customerDisplayName?.trim() || "");
+    setManualCustomerPhone(customerPhoneE164 ?? "");
+    setManualCustomerAddress("");
+    setManualCustomerEmail("");
+    setNotes("");
+    setTerms("");
+  }, [open, customerDisplayName, customerPhoneE164]);
+
+  useEffect(() => {
+    if (open) {
+      return;
+    }
+
+    setIsCatalogModalOpen(false);
+    setIsCreateCatalogModalOpen(false);
+    setCatalogItems([]);
+    setCatalogSearchCode("");
+    setCatalogSearchName("");
+    setCatalogSearchCategory("");
+    setCatalogSelectedIds([]);
+    setCatalogError(null);
+    setIsCatalogLoading(false);
+    setIsCatalogCreating(false);
+    setCatalogDraft(createEmptyCatalogDraft());
+  }, [open]);
+
+  function handleOpenManualCustomerModal() {
+    setManualCustomerName(customerName.trim() || customerDisplayName?.trim() || "");
+    setManualCustomerPhone(customerPhone.trim() || customerPhoneE164 || "");
+    setIsManualCustomerModalOpen(true);
   }
 
-  const canCreateDraft = !isSubmitting && Boolean(orgId) && Boolean(customerId);
+  function handleApplyManualCustomer() {
+    setCustomerName(manualCustomerName.trim());
+    setCustomerPhone(manualCustomerPhone.trim());
+    setIsManualCustomerModalOpen(false);
+  }
+
+  const loadCatalogItems = useCallback(async () => {
+    setCatalogError(null);
+    setIsCatalogLoading(true);
+    try {
+      const query = new URLSearchParams();
+      if (orgId) {
+        query.set("orgId", orgId);
+      }
+
+      const response = await fetch(`/api/catalog?${query.toString()}`, {
+        cache: "no-store"
+      });
+      const body = (await response.json().catch(() => null)) as CatalogResponse | null;
+      if (!response.ok) {
+        setCatalogError(body?.error?.message ?? "Gagal memuat katalog produk.");
+        return;
+      }
+
+      setCatalogItems(body?.data?.items ?? []);
+    } catch {
+      setCatalogError("Terjadi gangguan jaringan saat memuat katalog produk.");
+    } finally {
+      setIsCatalogLoading(false);
+    }
+  }, [orgId]);
+
+  useEffect(() => {
+    if (!open || !isCatalogModalOpen) {
+      return;
+    }
+
+    void loadCatalogItems();
+  }, [isCatalogModalOpen, loadCatalogItems, open]);
+
+  async function handleCreateCatalog() {
+    if (isCatalogCreating) {
+      return;
+    }
+
+    setCatalogError(null);
+    setIsCatalogCreating(true);
+    try {
+      const response = await fetch("/api/catalog", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          orgId: orgId ?? undefined,
+          name: catalogDraft.name.trim(),
+          category: catalogDraft.category.trim() || undefined,
+          unit: catalogDraft.unit.trim() || undefined,
+          priceCents: Number(catalogDraft.priceCents)
+        })
+      });
+
+      const body = (await response.json().catch(() => null)) as CatalogResponse | null;
+      if (!response.ok) {
+        setCatalogError(body?.error?.message ?? "Gagal membuat item katalog.");
+        return;
+      }
+
+      setCatalogDraft(createEmptyCatalogDraft());
+      setIsCreateCatalogModalOpen(false);
+      await loadCatalogItems();
+    } catch {
+      setCatalogError("Terjadi gangguan jaringan saat membuat item katalog.");
+    } finally {
+      setIsCatalogCreating(false);
+    }
+  }
+
+  function toggleCatalogSelection(itemId: string) {
+    setCatalogSelectedIds((current) => (current.includes(itemId) ? current.filter((id) => id !== itemId) : [...current, itemId]));
+  }
+
+  function handleApplyCatalogItems() {
+    const selectedItems = catalogItems.filter((item) => catalogSelectedIds.includes(item.id));
+    selectedItems.forEach((item) =>
+      addItemFromCatalog({
+        name: item.name,
+        unit: item.unit ?? "",
+        priceCents: item.priceCents ?? 0
+      })
+    );
+    setCatalogSelectedIds([]);
+    setIsCatalogModalOpen(false);
+  }
+
+  useEffect(() => {
+    if (!open) {
+      return;
+    }
+
+    let ignore = false;
+
+    async function bootstrapDrawer() {
+      try {
+        const [profileResponse, membersResponse, businessResponse] = await Promise.all([
+          fetch("/api/auth/profile", { cache: "no-store" }),
+          orgId ? fetch(`/api/orgs/members?orgId=${encodeURIComponent(orgId)}`, { cache: "no-store" }) : Promise.resolve(null),
+          fetch(`/api/orgs/business${orgId ? `?orgId=${encodeURIComponent(orgId)}` : ""}`, { cache: "no-store" })
+        ]);
+
+        const profilePayload = (await profileResponse.json().catch(() => null)) as ProfilePayload | null;
+        const user = profilePayload?.data?.user;
+        const nextUserId = user?.id ?? "";
+        const nextUserLabel = user?.name?.trim() || user?.email || "Business Owner";
+
+        if (!ignore) {
+          setCurrentUserId(nextUserId);
+          setCurrentUserLabel(nextUserLabel);
+        }
+
+        const businessPayload = (await businessResponse.json().catch(() => null)) as BusinessProfilePayload | null;
+        if (!ignore) {
+          setBusinessProfile(businessPayload?.data?.profile ?? null);
+        }
+
+        if (!membersResponse) {
+          if (!ignore) {
+            setSalesMembers([]);
+            setSelectedSalesperson(nextUserId);
+          }
+          return;
+        }
+
+        const membersPayload = (await membersResponse.json().catch(() => null)) as { data?: { members?: MemberOption[] } } | null;
+        const nextMembers = membersPayload?.data?.members ?? [];
+
+        if (!ignore) {
+          setSalesMembers(nextMembers);
+          const fallbackMember =
+            nextMembers.find((member) => member.userId === nextUserId) ??
+            nextMembers.find((member) => member.role === "OWNER") ??
+            nextMembers[0] ??
+            null;
+          setSelectedSalesperson(fallbackMember?.userId ?? nextUserId);
+        }
+      } catch {
+        if (!ignore) {
+          setSalesMembers([]);
+          setSelectedSalesperson(currentUserId);
+          setBusinessProfile(null);
+        }
+      }
+    }
+
+    void bootstrapDrawer();
+    return () => {
+      ignore = true;
+    };
+  }, [currentUserId, open, orgId]);
+
+  const canCreateDraft = !isSubmitting && Boolean(customerId);
   const canUpdateDraft = !isUpdatingItems && Boolean(invoiceId);
   const canSendInvoice = !isSendingInvoice && Boolean(invoiceId);
   const canMarkPaid = !isMarkingPaid && Boolean(invoiceId);
+  const lineSummaries = items.map((item) => computeInvoiceLine(item));
+  const dpAmountCents = kind === InvoiceKind.DP_AND_FINAL ? Math.round((totalCents * dpPercentage) / 100) : totalCents;
+  const finalAmountCents = kind === InvoiceKind.DP_AND_FINAL ? Math.max(0, totalCents - dpAmountCents) : 0;
+  const activeSalesperson =
+    salesMembers.find((member) => member.userId === selectedSalesperson)?.name?.trim() ||
+    salesMembers.find((member) => member.userId === selectedSalesperson)?.email ||
+    currentUserLabel;
+  const filteredCatalogItems = catalogItems.filter((item) => {
+    const code = buildCatalogCode(item.id).toLowerCase();
+    const name = item.name.toLowerCase();
+    const category = (item.category ?? "").toLowerCase();
+
+    return (
+      (!catalogSearchCode.trim() || code.includes(catalogSearchCode.trim().toLowerCase())) &&
+      (!catalogSearchName.trim() || name.includes(catalogSearchName.trim().toLowerCase())) &&
+      (!catalogSearchCategory.trim() || category.includes(catalogSearchCategory.trim().toLowerCase()))
+    );
+  });
 
   return (
-    <div className="fixed inset-0 z-50 bg-black/55 backdrop-blur-sm" role="dialog" aria-modal="true" aria-label="Invoice drawer">
-      <div ref={drawerRef} className="ml-auto h-full w-full max-w-2xl overflow-y-auto border-l border-border bg-surface">
-        <div className="sticky top-0 z-[2] border-b border-border bg-surface/95 px-4 py-3 backdrop-blur sm:px-5">
-          <div className="flex items-start justify-between gap-3">
-            <div>
-              <h2 className="text-lg font-semibold text-foreground">Create Invoice</h2>
-              <p className="text-xs text-muted-foreground">Build invoice from current chat context.</p>
-              {invoiceNo ? <p className="mt-1 text-xs text-emerald-300">Invoice: {invoiceNo}</p> : null}
-              {invoiceStatus ? (
-                <div className="mt-2">
-                  <InvoiceStatusBadge status={invoiceStatus} />
-                </div>
-              ) : null}
-            </div>
-            <Button ref={closeButtonRef} type="button" variant="ghost" onClick={onClose}>
-              Close
-            </Button>
-          </div>
-        </div>
-
-        <form id="invoice-drawer-form" className="space-y-4 px-4 pb-28 pt-4 sm:px-5 sm:pb-24" onSubmit={handleCreateInvoice}>
-          <section className="rounded-lg border border-border bg-background/40 p-3">
-            <p className="text-xs uppercase tracking-wide text-muted-foreground">Invoice Type</p>
-            <div className="mt-2 grid gap-2 sm:grid-cols-2">
-              <button
-                type="button"
-                onClick={() => setKind(InvoiceKind.FULL)}
-                className={
-                  kind === InvoiceKind.FULL
-                    ? "rounded-md border border-emerald-500/40 bg-emerald-500/10 px-3 py-2 text-left text-xs text-emerald-300"
-                    : "rounded-md border border-border px-3 py-2 text-left text-xs text-foreground"
-                }
-              >
-                Full Payment
-              </button>
-              <button
-                type="button"
-                onClick={() => setKind(InvoiceKind.DP_AND_FINAL)}
-                className={
-                  kind === InvoiceKind.DP_AND_FINAL
-                    ? "rounded-md border border-emerald-500/40 bg-emerald-500/10 px-3 py-2 text-left text-xs text-emerald-300"
-                    : "rounded-md border border-border px-3 py-2 text-left text-xs text-foreground"
-                }
-              >
-                Down Payment + Final
-              </button>
-            </div>
-          </section>
-
-          <section className="rounded-lg border border-border bg-background/40 p-3">
-            <div className="mb-3 flex items-center justify-between">
-              <p className="text-xs uppercase tracking-wide text-muted-foreground">Invoice Items</p>
-              <Button type="button" variant="secondary" onClick={addItem}>
-                Add Item
-              </Button>
-            </div>
-            <div className="mb-3">
-              <ServiceCatalogPanel orgId={orgId} onUseItem={addItemFromCatalog} />
-            </div>
+    <Drawer open={open} onOpenChange={(nextOpen) => (!nextOpen ? onClose() : undefined)} direction="right">
+      <DrawerContent>
+        <DrawerHeader>
+          <div className="flex items-start justify-between gap-4">
             <div className="space-y-3">
-              {items.map((item, index) => (
-                <article key={item.id} className="rounded-md border border-border p-3">
-                  <div className="grid gap-2 sm:grid-cols-2">
-                    <Input
-                      value={item.name}
-                      placeholder="Item name"
-                      onChange={(event) => updateItem(index, { name: event.target.value })}
-                    />
-                    <Input
-                      value={item.unit}
-                      placeholder="Unit (optional)"
-                      onChange={(event) => updateItem(index, { unit: event.target.value })}
-                    />
-                    <Input
-                      type="number"
-                      min={1}
-                      value={item.qty}
-                      placeholder="Qty"
-                      onChange={(event) => updateItem(index, { qty: Number(event.target.value) })}
-                    />
-                    <Input
-                      type="number"
-                      min={0}
-                      value={item.priceCents}
-                      placeholder="Price (IDR)"
-                      onChange={(event) => updateItem(index, { priceCents: Number(event.target.value) })}
-                    />
+              <div>
+                <DrawerTitle>Invoice</DrawerTitle>
+                <DrawerDescription>Susun invoice customer dari percakapan aktif.</DrawerDescription>
+              </div>
+              <div className="flex flex-wrap items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setKind(InvoiceKind.FULL)}
+                  className={cn(
+                    "rounded-md border px-3 py-2 text-xs font-medium transition",
+                    kind === InvoiceKind.FULL
+                      ? "border-primary/20 bg-primary text-primary-foreground"
+                      : "border-border bg-background text-muted-foreground hover:bg-accent"
+                  )}
+                >
+                  Full Payment
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setKind(InvoiceKind.DP_AND_FINAL)}
+                  className={cn(
+                    "rounded-md border px-3 py-2 text-xs font-medium transition",
+                    kind === InvoiceKind.DP_AND_FINAL
+                      ? "border-sky-500/20 bg-sky-500 text-white"
+                      : "border-border bg-background text-muted-foreground hover:bg-accent"
+                  )}
+                >
+                  Down Payment
+                </button>
+                {invoiceNo ? (
+                  <span className="rounded-md border border-border bg-background px-3 py-1 text-xs text-muted-foreground">{invoiceNo}</span>
+                ) : null}
+                {invoiceStatus ? <InvoiceStatusBadge status={invoiceStatus} /> : null}
+              </div>
+            </div>
+            <DrawerClose asChild>
+              <Button type="button" variant="ghost">
+                Close
+              </Button>
+            </DrawerClose>
+          </div>
+        </DrawerHeader>
+
+        <form id="invoice-drawer-form" className="flex min-h-0 flex-1 flex-col overflow-hidden" onSubmit={handleCreateInvoice}>
+          <div className="inbox-scroll min-h-0 flex-1 overflow-y-auto overscroll-contain px-6 pb-36 pt-5">
+            <div className="space-y-6">
+              <section className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_320px]">
+                <div className="space-y-4">
+                  <div className="grid gap-4 lg:grid-cols-2">
+                    <label className="space-y-2">
+                      <span className="text-sm font-medium text-foreground">Salesperson</span>
+                      <div className="rounded-md border border-border bg-muted/40 px-3">
+                        <select
+                          value={selectedSalesperson}
+                          onChange={(event) => setSelectedSalesperson(event.target.value)}
+                          className="h-11 w-full bg-transparent text-sm outline-none"
+                        >
+                          {salesMembers.length === 0 ? <option value={currentUserId}>{currentUserLabel}</option> : null}
+                          {salesMembers.map((member) => (
+                            <option key={member.userId} value={member.userId}>
+                              {(member.name?.trim() || member.email)} • {member.role}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                    </label>
+
+                    <DueDatePickerField value={invoiceDueDate} onChange={setInvoiceDueDate} />
+
+                    <label className="space-y-2">
+                      <span className="flex items-center justify-between gap-2 text-sm font-medium text-foreground">
+                        Pelanggan
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          className="h-7 rounded-md border border-border px-2 text-[11px] text-muted-foreground hover:text-foreground"
+                          onClick={handleOpenManualCustomerModal}
+                        >
+                          <Plus className="mr-1 h-3.5 w-3.5" />
+                          Tambah Manual
+                        </Button>
+                      </span>
+                      <Input
+                        value={customerName}
+                        onChange={(event) => setCustomerName(event.target.value)}
+                        placeholder="Nama pelanggan"
+                        className="h-11 rounded-md border-border bg-muted/40"
+                      />
+                    </label>
+
+                    <label className="space-y-2">
+                      <span className="flex items-center justify-between gap-2 text-sm font-medium text-foreground">
+                        Nomor WhatsApp
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          className="h-7 rounded-md border border-border px-2 text-[11px] text-muted-foreground hover:text-foreground"
+                          onClick={handleOpenManualCustomerModal}
+                        >
+                          <Plus className="mr-1 h-3.5 w-3.5" />
+                          Tambah Manual
+                        </Button>
+                      </span>
+                      <Input
+                        value={customerPhone}
+                        onChange={(event) => setCustomerPhone(event.target.value)}
+                        placeholder="+628..."
+                        className="h-11 rounded-md border-border bg-muted/40"
+                      />
+                    </label>
                   </div>
-                  <Input
-                    className="mt-2"
-                    value={item.description}
-                    placeholder="Description (optional)"
-                    onChange={(event) => updateItem(index, { description: event.target.value })}
-                  />
-                  <div className="mt-2 flex items-center justify-between">
-                    <p className="text-xs text-muted-foreground">
-                      Subtotal: {toRupiahLabel(Math.max(0, item.qty) * Math.max(0, item.priceCents))}
+
+                  {kind === InvoiceKind.DP_AND_FINAL ? (
+                    <div className="grid gap-4 rounded-md border border-sky-100 bg-sky-50/70 p-4 lg:grid-cols-[minmax(0,1fr)_140px]">
+                      <div className="space-y-1">
+                        <p className="text-sm font-medium text-foreground">Skema Down Payment</p>
+                        <p className="text-xs text-muted-foreground">
+                          Atur persen DP. Ringkasan otomatis membagi DP dan pelunasan berdasarkan total akhir invoice.
+                        </p>
+                      </div>
+                      <label className="space-y-2">
+                        <span className="text-xs font-medium uppercase tracking-[0.18em] text-sky-700">DP (%)</span>
+                        <Input
+                          type="number"
+                          min={1}
+                          max={100}
+                          value={dpPercentage}
+                          onChange={(event) => setDpPercentage(Number(event.target.value))}
+                          className="h-11 rounded-md border-sky-200 bg-white"
+                        />
+                      </label>
+                    </div>
+                  ) : null}
+                </div>
+
+                <div className="rounded-md border border-border bg-card p-4">
+                  <div className="flex items-center gap-2 text-sm font-medium text-foreground">
+                    Default Business Invoice
+                    <FieldHint text="Logo, tanda tangan invoice, dan nama penanggung jawab diambil dari Business Settings." />
+                  </div>
+                  <div className="mt-4 space-y-3 text-sm">
+                    <div className="flex items-start gap-3 rounded-md border border-border bg-muted/30 p-3">
+                      <Building2 className="mt-0.5 h-4 w-4 text-sky-600" />
+                      <div>
+                        <p className="font-medium text-foreground">{businessProfile?.name || "Business belum diatur"}</p>
+                        <p className="text-xs text-muted-foreground">{businessProfile?.legalName || "Nama legal belum diisi."}</p>
+                      </div>
+                    </div>
+                    <div className="flex items-start gap-3 rounded-md border border-border bg-muted/30 p-3">
+                      <Landmark className="mt-0.5 h-4 w-4 text-sky-600" />
+                      <div>
+                        <p className="font-medium text-foreground">{businessProfile?.responsibleName || activeSalesperson}</p>
+                        <p className="text-xs text-muted-foreground">Tanda tangan default bisnis akan dipakai otomatis.</p>
+                      </div>
+                    </div>
+                    <p className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+                      Ubah logo bisnis, tanda tangan invoice, atau penanggung jawab dari halaman Business Settings.
                     </p>
-                    <Button type="button" variant="ghost" onClick={() => removeItem(index)} disabled={items.length <= 1}>
-                      Remove
-                    </Button>
                   </div>
-                </article>
-              ))}
-            </div>
-          </section>
+                </div>
+              </section>
 
-          <section className="rounded-lg border border-border bg-background/40 p-3">
-            <p className="mb-3 text-xs uppercase tracking-wide text-muted-foreground">Milestones</p>
-            <div className="space-y-2">
-              {milestones.map((milestone, index) => (
-                <article key={`${milestone.type}-${index}`} className="rounded-md border border-border p-3">
-                  <p className="mb-2 text-xs text-foreground">{milestone.type}</p>
-                  <div className="grid gap-2 sm:grid-cols-2">
+              <section className="space-y-4">
+                <div className="overflow-hidden rounded-md border border-slate-200 bg-white">
+                  <div className="overflow-x-auto">
+                    <div className="min-w-[1180px]">
+                      <div className="grid grid-cols-[1.35fr_1.3fr_110px_140px_148px_160px_150px_36px] gap-x-4 bg-slate-700 px-4 text-xs font-semibold text-white">
+                        <div className="flex items-center gap-1 py-3">Produk <span className="text-rose-300">*</span></div>
+                        <div className="flex items-center gap-1 py-3">Deskripsi <span className="text-rose-300">*</span></div>
+                        <div className="flex items-center gap-1 py-3">Kuantitas <span className="text-rose-300">*</span></div>
+                        <div className="flex items-center gap-1 py-3">Harga <span className="text-rose-300">*</span></div>
+                        <div className="py-3">Diskon</div>
+                        <div className="flex items-center gap-1 py-3">
+                          Pajak
+                          <FieldHint text="Pilih jenis pajak per item. Jika tidak dipilih, item dihitung tanpa pajak." />
+                        </div>
+                        <div className="py-3 text-right">Jumlah</div>
+                        <div className="py-3" />
+                      </div>
+
+                      <div className="bg-white">
+                        {items.map((item, index) => {
+                          const lineSummary = lineSummaries[index];
+
+                          return (
+                            <div
+                              key={item.id}
+                              className="grid grid-cols-[1.35fr_1.3fr_110px_140px_148px_160px_150px_36px] gap-x-4 border-t border-slate-200 px-4 py-4 first:border-t-0"
+                            >
+                              <Input
+                                value={item.name}
+                                placeholder="Nama produk"
+                                onChange={(event) => updateItem(index, { name: event.target.value })}
+                                className="h-11 rounded-none border-0 border-b border-slate-300 bg-slate-100 px-3 shadow-none focus-visible:ring-0"
+                              />
+                              <Input
+                                value={item.description}
+                                placeholder="Deskripsi produk"
+                                onChange={(event) => updateItem(index, { description: event.target.value })}
+                                className="h-11 rounded-none border-0 border-b border-slate-300 bg-slate-100 px-3 shadow-none focus-visible:ring-0"
+                              />
+                              <Input
+                                type="number"
+                                min={1}
+                                step={1}
+                                inputMode="numeric"
+                                value={item.qty}
+                                placeholder="1"
+                                onChange={(event) => {
+                                  const nextQty = Number(event.target.value);
+                                  updateItem(index, {
+                                    qty: Number.isFinite(nextQty) ? Math.max(1, Math.floor(nextQty)) : 1
+                                  });
+                                }}
+                                className="h-11 rounded-none border-0 border-b border-slate-300 bg-slate-100 px-3 text-left font-medium tabular-nums shadow-none focus-visible:ring-0"
+                              />
+                              <Input
+                                type="number"
+                                min={0}
+                                value={item.priceCents}
+                                placeholder="0"
+                                onChange={(event) => updateItem(index, { priceCents: Number(event.target.value) })}
+                                className="h-11 rounded-none border-0 border-b border-slate-300 bg-slate-100 px-3 text-left font-medium tabular-nums shadow-none focus-visible:ring-0"
+                              />
+                              <div className="grid h-11 grid-cols-[60px_1fr_24px] rounded-none border-0 border-b border-slate-300 bg-slate-100">
+                                <div className="relative">
+                                  <select
+                                    value={item.discountType}
+                                    onChange={(event) => updateItem(index, { discountType: event.target.value as "%" | "IDR" })}
+                                    className="h-full w-full appearance-none bg-transparent pl-2 pr-6 text-sm outline-none"
+                                  >
+                                    <option value="%">%</option>
+                                    <option value="IDR">Rp</option>
+                                  </select>
+                                  <ChevronDown className="pointer-events-none absolute right-1 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-500" />
+                                </div>
+                                <input
+                                  type="number"
+                                  min={0}
+                                  value={item.discountValue}
+                                  onChange={(event) => updateItem(index, { discountValue: Number(event.target.value) })}
+                                  className="border-l border-slate-300 bg-transparent px-3 text-sm outline-none"
+                                />
+                                <div className="flex items-center justify-center text-sm text-slate-500">
+                                  {item.discountType === "%" ? "%" : ""}
+                                </div>
+                              </div>
+                              <div className="relative h-11 border-0 border-b border-slate-300 bg-slate-100">
+                                <select
+                                  value={item.taxLabel}
+                                  onChange={(event) => updateItem(index, { taxLabel: event.target.value })}
+                                  className="h-full w-full appearance-none bg-transparent px-3 pr-8 text-sm text-slate-500 outline-none"
+                                >
+                                  {INVOICE_TAX_OPTIONS.map((option) => (
+                                    <option key={option.value || "NONE"} value={option.value}>
+                                      {option.value ? option.label : "No Tax Selected"}
+                                    </option>
+                                  ))}
+                                </select>
+                                <ChevronDown className="pointer-events-none absolute right-2 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-500" />
+                              </div>
+                              <div className="flex h-11 items-center justify-end py-1 text-right">
+                                <div className="text-sm font-medium tabular-nums text-slate-600">
+                                  {toPlainNumberLabel(lineSummary?.totalCents ?? 0)}
+                                </div>
+                              </div>
+                              <div className="flex h-11 items-center justify-end">
+                                <button
+                                  type="button"
+                                  disabled={items.length <= 1}
+                                  onClick={() => removeItem(index)}
+                                  aria-label="Hapus baris produk"
+                                  className="inline-flex h-7 w-7 items-center justify-center text-rose-500 transition hover:text-rose-600 disabled:cursor-not-allowed disabled:text-slate-300"
+                                >
+                                  <Trash2 className="h-4.5 w-4.5 stroke-[1.6]" />
+                                </button>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="flex flex-wrap gap-3">
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    className="rounded-md bg-lime-500 px-5 text-white shadow hover:bg-lime-600"
+                    onClick={addItem}
+                  >
+                    Tambah Baris
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    className="rounded-md bg-sky-500 px-5 text-white shadow hover:bg-sky-600"
+                    onClick={() => setIsCatalogModalOpen(true)}
+                  >
+                    Katalog Produk
+                  </Button>
+                </div>
+              </section>
+
+              <section className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_420px]">
+                <div className="space-y-4">
+                  <div className="space-y-2">
+                    <label className="flex items-center gap-2 text-sm font-medium text-foreground">
+                      Keterangan
+                      <FieldHint text="Catatan ini akan muncul di invoice customer." />
+                    </label>
+                    <textarea
+                      value={notes}
+                      onChange={(event) => setNotes(event.target.value)}
+                      className="min-h-28 w-full rounded-md border border-border bg-white px-4 py-3 outline-none transition focus:border-primary"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <label className="flex items-center gap-2 text-sm font-medium text-foreground">
+                      Syarat & Ketentuan
+                      <FieldHint text="Tuliskan syarat pembayaran atau ketentuan kerja sama invoice." />
+                    </label>
+                    <textarea
+                      value={terms}
+                      onChange={(event) => setTerms(event.target.value)}
+                      className="min-h-28 w-full rounded-md border border-border bg-white px-4 py-3 outline-none transition focus:border-primary"
+                    />
+                  </div>
+                </div>
+
+                <div className="rounded-md border border-border bg-card p-5">
+                  <div className="space-y-4">
+                    <div>
+                      <p className="text-sm font-semibold text-foreground">Ringkasan Invoice</p>
+                      <p className="text-xs text-muted-foreground">Diskon, pajak, dan total akhir selalu sinkron dengan item di atas.</p>
+                    </div>
+
+                    <div className="grid gap-3 sm:grid-cols-[72px_1fr]">
+                      <select
+                        value={invoiceDiscountType}
+                        onChange={(event) => setInvoiceDiscountType(event.target.value as "%" | "IDR")}
+                        className="h-11 rounded-md border border-border bg-muted/40 px-3 text-sm outline-none"
+                      >
+                        <option value="%">%</option>
+                        <option value="IDR">Rp</option>
+                      </select>
+                      <Input
+                        type="number"
+                        min={0}
+                        value={invoiceDiscountValue}
+                        onChange={(event) => setInvoiceDiscountValue(Number(event.target.value))}
+                        placeholder="Diskon invoice"
+                        className="h-11 rounded-md border-border bg-muted/40"
+                      />
+                    </div>
+
+                    <div className="space-y-3 text-sm">
+                      <div className="flex items-center justify-between border-b border-slate-200 pb-3">
+                        <span>Subtotal</span>
+                        <span>{toRupiahLabel(summary.subtotalCents)}</span>
+                      </div>
+                      <div className="flex items-center justify-between border-b border-slate-200 pb-3">
+                        <span>Total Diskon Item</span>
+                        <span>- {toRupiahLabel(summary.lineDiscountCents)}</span>
+                      </div>
+                      <div className="flex items-center justify-between border-b border-slate-200 pb-3">
+                        <span>Diskon Invoice</span>
+                        <span>- {toRupiahLabel(summary.invoiceDiscountCents)}</span>
+                      </div>
+                      <div className="flex items-center justify-between border-b border-slate-200 pb-3">
+                        <span>Total Pajak</span>
+                        <span>{toRupiahLabel(summary.taxCents)}</span>
+                      </div>
+                      <div className="flex items-center justify-between text-base font-semibold">
+                        <span>Total Tagihan</span>
+                        <span>{toRupiahLabel(summary.totalCents)}</span>
+                      </div>
+                    </div>
+
+                    {kind === InvoiceKind.DP_AND_FINAL ? (
+                      <div className="grid gap-3 rounded-md bg-sky-50 p-4 text-sm sm:grid-cols-2">
+                        <div className="rounded-md bg-white p-4">
+                          <p className="text-xs uppercase tracking-[0.2em] text-sky-700">DP</p>
+                          <p className="mt-2 text-xl font-semibold text-foreground">{toRupiahLabel(dpAmountCents)}</p>
+                          <p className="mt-1 text-xs text-muted-foreground">{dpPercentage}% dari total invoice</p>
+                        </div>
+                        <div className="rounded-md bg-white p-4">
+                          <p className="text-xs uppercase tracking-[0.2em] text-sky-700">Pelunasan</p>
+                          <p className="mt-2 text-xl font-semibold text-foreground">{toRupiahLabel(finalAmountCents)}</p>
+                          <p className="mt-1 text-xs text-muted-foreground">Sisa tagihan setelah DP dibayar</p>
+                        </div>
+                      </div>
+                    ) : null}
+                  </div>
+                </div>
+              </section>
+
+              {error ? <p className="text-sm text-destructive">{error}</p> : null}
+              {success ? <p className="text-sm text-emerald-600">{success}</p> : null}
+            </div>
+          </div>
+        </form>
+        <Dialog open={isManualCustomerModalOpen} onOpenChange={setIsManualCustomerModalOpen}>
+          <DialogContent className="sm:max-w-[520px]">
+            <DialogHeader>
+              <DialogTitle>Tambah Pelanggan Manual</DialogTitle>
+              <DialogDescription>Lengkapi data pelanggan. Nama dan nomor WhatsApp terisi otomatis.</DialogDescription>
+            </DialogHeader>
+            <div className="grid gap-4 py-2">
+              <label className="space-y-2">
+                <span className="text-sm font-medium text-foreground">Nama Pelanggan</span>
+                <Input
+                  value={manualCustomerName}
+                  onChange={(event) => setManualCustomerName(event.target.value)}
+                  placeholder="Nama pelanggan"
+                  className="h-11 rounded-md border-border bg-muted/30"
+                />
+              </label>
+              <label className="space-y-2">
+                <span className="text-sm font-medium text-foreground">Nomor WhatsApp</span>
+                <Input
+                  value={manualCustomerPhone}
+                  onChange={(event) => setManualCustomerPhone(event.target.value)}
+                  placeholder="+628..."
+                  className="h-11 rounded-md border-border bg-muted/30"
+                />
+              </label>
+              <label className="space-y-2">
+                <span className="text-sm font-medium text-foreground">Alamat</span>
+                <Input
+                  value={manualCustomerAddress}
+                  onChange={(event) => setManualCustomerAddress(event.target.value)}
+                  placeholder="Alamat pelanggan"
+                  className="h-11 rounded-md border-border bg-muted/30"
+                />
+              </label>
+              <label className="space-y-2">
+                <span className="text-sm font-medium text-foreground">Email</span>
+                <Input
+                  type="email"
+                  value={manualCustomerEmail}
+                  onChange={(event) => setManualCustomerEmail(event.target.value)}
+                  placeholder="email@pelanggan.com"
+                  className="h-11 rounded-md border-border bg-muted/30"
+                />
+              </label>
+            </div>
+            <DialogFooter>
+              <Button type="button" variant="ghost" onClick={() => setIsManualCustomerModalOpen(false)}>
+                Batal
+              </Button>
+              <Button
+                type="button"
+                onClick={handleApplyManualCustomer}
+                className="bg-sky-600 text-white hover:bg-sky-700"
+                disabled={!manualCustomerName.trim() || !manualCustomerPhone.trim()}
+              >
+                Simpan Data
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        <Dialog open={isCatalogModalOpen} onOpenChange={setIsCatalogModalOpen}>
+          <DialogContent className="max-w-[1180px] gap-0 overflow-hidden border-slate-200 p-0">
+            <div className="bg-white">
+              <DialogHeader className="border-b border-slate-200 px-6 py-6">
+                <div className="inline-flex w-fit rounded-sm bg-sky-50 px-2 py-1 text-xs text-sky-600">Produk</div>
+                <DialogTitle className="pt-2 text-[36px] font-semibold tracking-[-0.03em] text-slate-700">Masukkan Produk</DialogTitle>
+                <DialogDescription className="pt-6 text-base text-slate-600">
+                  Item terpilih <span className="rounded-full bg-lime-100 px-2 py-0.5 font-semibold text-lime-700">{catalogSelectedIds.length}</span>
+                </DialogDescription>
+              </DialogHeader>
+
+              <div className="px-6 py-5">
+                <div className="mb-5 flex items-center justify-end">
+                  <Button
+                    type="button"
+                    className="h-11 rounded-full bg-sky-500 px-6 text-white shadow-[0_10px_24px_rgba(14,165,233,0.24)] hover:bg-sky-600"
+                    onClick={() => setIsCreateCatalogModalOpen(true)}
+                  >
+                    <Plus className="mr-2 h-4 w-4" />
+                    Buat Produk Baru
+                  </Button>
+                </div>
+
+                <div className="overflow-hidden rounded-xl border border-slate-200">
+                  <div className="grid grid-cols-[56px_160px_1.25fr_1fr_120px_140px] items-center gap-3 border-b border-slate-200 bg-slate-50 px-4 py-3 text-sm font-medium text-slate-700">
+                    <div />
+                    <div>
+                      <div>Kode Layanan</div>
+                      <Input
+                        value={catalogSearchCode}
+                        onChange={(event) => setCatalogSearchCode(event.target.value)}
+                        placeholder="Cari kode"
+                        className="mt-2 h-9 rounded-none border-slate-300 bg-white text-sm shadow-none focus-visible:ring-0"
+                      />
+                    </div>
+                    <div>
+                      <div>Nama Layanan</div>
+                      <Input
+                        value={catalogSearchName}
+                        onChange={(event) => setCatalogSearchName(event.target.value)}
+                        placeholder="Cari nama layanan"
+                        className="mt-2 h-9 rounded-none border-slate-300 bg-white text-sm shadow-none focus-visible:ring-0"
+                      />
+                    </div>
+                    <div>
+                      <div>Kategori Layanan</div>
+                      <Input
+                        value={catalogSearchCategory}
+                        onChange={(event) => setCatalogSearchCategory(event.target.value)}
+                        placeholder="Cari kategori"
+                        className="mt-2 h-9 rounded-none border-slate-300 bg-white text-sm shadow-none focus-visible:ring-0"
+                      />
+                    </div>
+                    <div>Satuan</div>
+                    <div>Harga Jual</div>
+                  </div>
+
+                  <div className="max-h-[460px] overflow-y-auto">
+                    {isCatalogLoading ? (
+                      <div className="px-6 py-10 text-sm text-slate-500">Memuat katalog produk...</div>
+                    ) : filteredCatalogItems.length === 0 ? (
+                      <div className="px-6 py-10 text-sm text-slate-500">Belum ada item katalog yang cocok.</div>
+                    ) : (
+                      filteredCatalogItems.map((item) => {
+                        const isSelected = catalogSelectedIds.includes(item.id);
+
+                        return (
+                          <label
+                            key={item.id}
+                            className="grid cursor-pointer grid-cols-[56px_160px_1.25fr_1fr_120px_140px] items-center gap-3 border-t border-slate-100 px-4 py-4 text-[15px] text-slate-600 first:border-t-0 hover:bg-sky-50/40"
+                          >
+                            <div className="flex justify-center">
+                              <input
+                                type="checkbox"
+                                checked={isSelected}
+                                onChange={() => toggleCatalogSelection(item.id)}
+                                className="h-5 w-5 rounded border-slate-300 text-sky-500 focus:ring-sky-500"
+                              />
+                            </div>
+                            <div>{buildCatalogCode(item.id)}</div>
+                            <div className="font-medium text-slate-700">{item.name}</div>
+                            <div>{item.category || "-"}</div>
+                            <div>{item.unit || "-"}</div>
+                            <div>{toRupiahLabel(item.priceCents ?? 0)}</div>
+                          </label>
+                        );
+                      })
+                    )}
+                  </div>
+                </div>
+
+                {catalogError ? <p className="mt-3 text-sm text-destructive">{catalogError}</p> : null}
+              </div>
+
+              <DialogFooter className="border-t border-slate-200 px-6 py-5 sm:justify-center sm:space-x-5">
+                <Button
+                  type="button"
+                  className="h-11 min-w-[140px] rounded-full bg-lime-500 text-white hover:bg-lime-600"
+                  onClick={handleApplyCatalogItems}
+                  disabled={catalogSelectedIds.length === 0}
+                >
+                  Simpan
+                </Button>
+                <Button
+                  type="button"
+                  variant="secondary"
+                  className="h-11 min-w-[140px] rounded-full bg-slate-200 text-slate-600 hover:bg-slate-300"
+                  onClick={() => setIsCatalogModalOpen(false)}
+                >
+                  Batalkan
+                </Button>
+              </DialogFooter>
+            </div>
+          </DialogContent>
+        </Dialog>
+
+        <Dialog open={isCreateCatalogModalOpen} onOpenChange={setIsCreateCatalogModalOpen}>
+          <DialogContent className="max-w-[640px] border-slate-200 p-0">
+            <div className="bg-white">
+              <DialogHeader className="border-b border-slate-200 px-6 py-6">
+                <div className="inline-flex w-fit rounded-sm bg-sky-50 px-2 py-1 text-xs text-sky-600">Katalog Jasa</div>
+                <DialogTitle className="pt-2 text-2xl font-semibold text-slate-700">Buat Katalog Produk</DialogTitle>
+                <DialogDescription className="pt-1 text-sm text-slate-500">
+                  Simpan layanan yang sering dijual agar bisa ditambahkan ke invoice lebih cepat.
+                </DialogDescription>
+              </DialogHeader>
+
+              <div className="grid gap-4 px-6 py-6">
+                <label className="space-y-2">
+                  <span className="text-sm font-medium text-slate-700">Nama Layanan</span>
+                  <Input
+                    value={catalogDraft.name}
+                    onChange={(event) => setCatalogDraft((current) => ({ ...current, name: event.target.value }))}
+                    placeholder="Contoh: Jasa Pembuatan Website"
+                    className="h-11 rounded-md border-slate-300 bg-slate-50"
+                  />
+                </label>
+                <label className="space-y-2">
+                  <span className="text-sm font-medium text-slate-700">Kategori Layanan</span>
+                  <Input
+                    value={catalogDraft.category}
+                    onChange={(event) => setCatalogDraft((current) => ({ ...current, category: event.target.value }))}
+                    placeholder="Contoh: Digital Marketing"
+                    className="h-11 rounded-md border-slate-300 bg-slate-50"
+                  />
+                </label>
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <label className="space-y-2">
+                    <span className="text-sm font-medium text-slate-700">Satuan</span>
+                    <Input
+                      value={catalogDraft.unit}
+                      onChange={(event) => setCatalogDraft((current) => ({ ...current, unit: event.target.value }))}
+                      placeholder="Contoh: paket, proyek, sesi, bulan"
+                      className="h-11 rounded-md border-slate-300 bg-slate-50"
+                    />
+                  </label>
+                  <label className="space-y-2">
+                    <span className="text-sm font-medium text-slate-700">Harga Jual</span>
                     <Input
                       type="number"
                       min={0}
-                      value={milestone.amountCents}
-                      placeholder="Amount (IDR)"
-                      onChange={(event) => updateMilestone(index, { amountCents: Number(event.target.value) })}
+                      value={catalogDraft.priceCents}
+                      onChange={(event) => setCatalogDraft((current) => ({ ...current, priceCents: event.target.value }))}
+                      placeholder="0"
+                      className="h-11 rounded-md border-slate-300 bg-slate-50"
                     />
-                    <Input
-                      type="date"
-                      value={milestone.dueDate}
-                      onChange={(event) => updateMilestone(index, { dueDate: event.target.value })}
-                    />
-                  </div>
-                </article>
-              ))}
+                  </label>
+                </div>
+              </div>
+
+              <DialogFooter className="border-t border-slate-200 px-6 py-5">
+                <Button
+                  type="button"
+                  variant="secondary"
+                  className="h-11 rounded-full bg-slate-200 text-slate-600 hover:bg-slate-300"
+                  onClick={() => setIsCreateCatalogModalOpen(false)}
+                >
+                  Batalkan
+                </Button>
+                <Button
+                  type="button"
+                  className="h-11 rounded-full bg-sky-500 text-white hover:bg-sky-600"
+                  onClick={() => void handleCreateCatalog()}
+                  disabled={!catalogDraft.name.trim() || !catalogDraft.priceCents.trim() || isCatalogCreating}
+                >
+                  {isCatalogCreating ? "Menyimpan..." : "Simpan Katalog"}
+                </Button>
+              </DialogFooter>
             </div>
-            <p className="mt-2 text-xs text-muted-foreground">
-              Milestone total: {toRupiahLabel(milestones.reduce((acc, milestone) => acc + Math.max(0, milestone.amountCents), 0))}
-            </p>
-          </section>
+          </DialogContent>
+        </Dialog>
 
-          <section className="rounded-lg border border-border bg-background/40 p-3">
-            <p className="text-sm font-medium text-foreground">Invoice Total: {toRupiahLabel(totalCents)}</p>
-            <p className="mt-1 text-xs text-muted-foreground">Format follows DOC 07: INV-YYYY-XXXX (auto generated).</p>
-            <div className="mt-3 flex flex-wrap gap-2">
-              <InvoiceStatusBadge status="DRAFT" />
-              <InvoiceStatusBadge status="SENT" />
-              <InvoiceStatusBadge status="PARTIALLY_PAID" />
-              <InvoiceStatusBadge status="PAID" />
-              <InvoiceStatusBadge status="OVERDUE" />
-            </div>
-          </section>
-
-          {error ? <p className="text-sm text-destructive">{error}</p> : null}
-          {success ? <p className="text-sm text-emerald-300">{success}</p> : null}
-        </form>
-
-        <div className="sticky bottom-0 z-[2] border-t border-border bg-surface/95 px-4 py-3 backdrop-blur sm:px-5">
-          <div className="flex flex-wrap gap-2">
-            <Button type="submit" form="invoice-drawer-form" disabled={!canCreateDraft}>
-              {isSubmitting ? "Creating..." : "Create Draft Invoice"}
+        <DrawerFooter className="shrink-0 shadow-[0_-12px_24px_hsl(var(--foreground)/0.04)]">
+          <div className="flex flex-wrap items-center justify-end gap-3">
+            <DrawerClose asChild>
+              <Button type="button" variant="secondary" className="rounded-md bg-rose-400 px-6 text-white hover:bg-rose-500">
+                Batalkan
+              </Button>
+            </DrawerClose>
+            <Button type="submit" form="invoice-drawer-form" className="rounded-md bg-sky-500 px-6 text-white hover:bg-sky-600" disabled={!canCreateDraft}>
+              {isSubmitting ? "Menyimpan..." : "Simpan Invoice"}
             </Button>
-            <Button
-              type="button"
-              variant="secondary"
-              onClick={() => {
-                void handleUpdateItems();
-              }}
-              disabled={!canUpdateDraft}
-            >
+            <Button type="button" variant="secondary" className="rounded-md" onClick={() => void handleUpdateItems()} disabled={!canUpdateDraft}>
               {isUpdatingItems ? "Updating..." : "Update Draft Items"}
             </Button>
-            <Button
-              type="button"
-              variant="secondary"
-              onClick={() => {
-                void handleSendInvoice();
-              }}
-              disabled={!canSendInvoice}
-            >
+            <Button type="button" variant="secondary" className="rounded-md" onClick={() => void handleSendInvoice()} disabled={!canSendInvoice}>
               {isSendingInvoice ? "Sending..." : "Send Invoice"}
             </Button>
             {kind === InvoiceKind.DP_AND_FINAL ? (
               <>
-                <Button
-                  type="button"
-                  variant="secondary"
-                  onClick={() => {
-                    void handleMarkPaid(PaymentMilestoneType.DP);
-                  }}
-                  disabled={!canMarkPaid}
-                >
+                <Button type="button" variant="secondary" className="rounded-md" onClick={() => void handleMarkPaid(PaymentMilestoneType.DP)} disabled={!canMarkPaid}>
                   {isMarkingPaid ? "Updating..." : "Mark DP Paid"}
                 </Button>
-                <Button
-                  type="button"
-                  variant="secondary"
-                  onClick={() => {
-                    void handleMarkPaid(PaymentMilestoneType.FINAL);
-                  }}
-                  disabled={!canMarkPaid}
-                >
+                <Button type="button" variant="secondary" className="rounded-md" onClick={() => void handleMarkPaid(PaymentMilestoneType.FINAL)} disabled={!canMarkPaid}>
                   {isMarkingPaid ? "Updating..." : "Mark Final Paid"}
                 </Button>
               </>
             ) : (
-              <Button
-                type="button"
-                variant="secondary"
-                onClick={() => {
-                  void handleMarkPaid(PaymentMilestoneType.FULL);
-                }}
-                disabled={!canMarkPaid}
-              >
+              <Button type="button" variant="secondary" className="rounded-md" onClick={() => void handleMarkPaid(PaymentMilestoneType.FULL)} disabled={!canMarkPaid}>
                 {isMarkingPaid ? "Updating..." : "Mark Paid"}
               </Button>
             )}
           </div>
-        </div>
-      </div>
-    </div>
+        </DrawerFooter>
+      </DrawerContent>
+    </Drawer>
   );
 }

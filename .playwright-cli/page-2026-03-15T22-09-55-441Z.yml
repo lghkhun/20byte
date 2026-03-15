@@ -1,0 +1,71 @@
+- generic [ref=e2]:
+  - generic [ref=e5]:
+    - list [ref=e7]:
+      - listitem [ref=e8]:
+        - link "20 20byte Chat-first CRM" [ref=e9] [cursor=pointer]:
+          - /url: /inbox
+          - generic [ref=e11]: "20"
+          - generic:
+            - generic: 20byte
+            - generic: Chat-first CRM
+    - generic [ref=e12]:
+      - generic [ref=e13]:
+        - generic [ref=e14]: Platform
+        - list [ref=e15]:
+          - listitem [ref=e16]:
+            - link "Dashboard" [ref=e17] [cursor=pointer]:
+              - /url: /dashboard
+              - img [ref=e18]
+              - generic: Dashboard
+          - listitem [ref=e23]:
+            - link "Inbox" [ref=e24] [cursor=pointer]:
+              - /url: /inbox
+              - img [ref=e25]
+              - generic: Inbox
+          - listitem [ref=e27]:
+            - link "Customers" [ref=e28] [cursor=pointer]:
+              - /url: /customers
+              - img [ref=e29]
+              - generic: Customers
+          - listitem [ref=e34]:
+            - link "Invoices" [ref=e35] [cursor=pointer]:
+              - /url: /invoices
+              - img [ref=e36]
+              - generic: Invoices
+      - generic [ref=e42]:
+        - generic [ref=e43]: Business Tools
+        - list [ref=e45]:
+          - listitem [ref=e46]:
+            - link "Business" [ref=e47] [cursor=pointer]:
+              - /url: /dashboard/settings/business
+              - img [ref=e48]
+              - generic: Business
+          - listitem [ref=e56]:
+            - link "WhatsApp" [ref=e57] [cursor=pointer]:
+              - /url: /dashboard/settings/whatsapp
+              - img [ref=e58]
+              - generic: WhatsApp
+          - listitem [ref=e61]:
+            - link "CRM Pipeline" [ref=e62] [cursor=pointer]:
+              - /url: /crm/pipelines
+              - img [ref=e63]
+              - generic: CRM Pipeline
+          - listitem [ref=e67]:
+            - link "General" [ref=e68] [cursor=pointer]:
+              - /url: /settings
+              - img [ref=e69]
+              - generic: General
+    - list [ref=e73]:
+      - listitem [ref=e74]:
+        - button "SO Seed Owner owner@seed.20byte.local" [ref=e75] [cursor=pointer]:
+          - generic [ref=e77]: SO
+          - generic:
+            - generic: Seed Owner
+            - generic: owner@seed.20byte.local
+          - img [ref=e78]
+  - main [ref=e81]:
+    - main [ref=e82]:
+      - generic [ref=e87]:
+        - img [ref=e89]
+        - paragraph [ref=e92]: No Business Found
+        - paragraph [ref=e93]: No business is linked to this account yet.

@@ -1,6 +1,7 @@
 import { type NextRequest, NextResponse } from "next/server";
 
 import { requireApiSession } from "@/lib/auth/middleware";
+import { resolvePrimaryOrganizationIdForUser } from "@/server/services/organizationService";
 import { createCatalogItem, listCatalogItems } from "@/server/services/catalogService";
 import { ServiceError } from "@/server/services/serviceError";
 
@@ -46,12 +47,15 @@ export async function GET(request: NextRequest) {
     return auth.response;
   }
 
-  const orgId = request.nextUrl.searchParams.get("orgId")?.trim() ?? "";
   const q = request.nextUrl.searchParams.get("q")?.trim();
   const page = parseInteger(request.nextUrl.searchParams.get("page"));
   const limit = parseInteger(request.nextUrl.searchParams.get("limit"));
 
   try {
+    const orgId = await resolvePrimaryOrganizationIdForUser(
+      auth.session.userId,
+      request.nextUrl.searchParams.get("orgId")?.trim() ?? ""
+    );
     const result = await listCatalogItems(auth.session.userId, orgId, q, page, limit);
 
     return NextResponse.json(
@@ -90,9 +94,13 @@ export async function POST(request: NextRequest) {
   }
 
   try {
+    const orgId = await resolvePrimaryOrganizationIdForUser(
+      auth.session.userId,
+      typeof body.orgId === "string" ? body.orgId : ""
+    );
     const item = await createCatalogItem({
       actorUserId: auth.session.userId,
-      orgId: typeof body.orgId === "string" ? body.orgId : "",
+      orgId,
       name: typeof body.name === "string" ? body.name : "",
       category: typeof body.category === "string" ? body.category : undefined,
       unit: typeof body.unit === "string" ? body.unit : undefined,

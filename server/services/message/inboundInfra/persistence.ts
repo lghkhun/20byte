@@ -9,11 +9,14 @@ type InboundContext = {
   customerPhoneE164: string;
   waMessageId: string;
   customerDisplayName?: string;
+  customerAvatarUrl?: string;
   text?: string;
   mediaId?: string;
+  mediaUrl?: string;
   mimeType?: string;
   fileName?: string;
   fileSize?: number;
+  durationSec?: number;
   type: StoreInboundMessageInput["type"];
 };
 
@@ -81,9 +84,11 @@ export async function storeInboundMessageInTransaction(params: {
         type: context.type,
         text: context.text,
         mediaId: context.mediaId,
+        mediaUrl: context.mediaUrl,
         mimeType: context.mimeType,
         fileName: context.fileName,
-        fileSize: context.fileSize
+        fileSize: context.fileSize,
+        durationSec: context.durationSec
       },
       select: {
         id: true,

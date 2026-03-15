@@ -1,10 +1,5 @@
-import { OrganizationOnboarding } from "@/components/onboarding/OrganizationOnboarding";
+import { redirect } from "next/navigation";
 
 export default function OnboardingPage() {
-  return (
-    <div className="mx-auto w-full max-w-6xl px-4 py-8 md:px-6">
-      <OrganizationOnboarding />
-    </div>
-  );
+  redirect("/dashboard/settings/whatsapp");
 }
-

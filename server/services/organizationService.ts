@@ -31,13 +31,16 @@ type OrganizationSummary = {
   createdAt: Date;
 };
 
-type OnboardingStatus = {
-  orgId: string;
-  orgName: string;
-  isCompleted: boolean;
-  currentStep: number;
-  totalSteps: number;
-  nextStep: "CONNECT_WHATSAPP" | "DONE";
+export type OrganizationBusinessProfile = {
+  id: string;
+  name: string;
+  legalName: string | null;
+  responsibleName: string | null;
+  businessPhone: string | null;
+  businessEmail: string | null;
+  businessAddress: string | null;
+  logoUrl: string | null;
+  invoiceSignatureUrl: string | null;
 };
 
 type OrganizationMemberSummary = {
@@ -55,6 +58,11 @@ function normalizeEmail(value: string): string {
 
 function normalizeOrgName(value: string): string {
   return value.trim();
+}
+
+function normalizeOptionalText(value: string | null | undefined): string | null {
+  const normalized = value?.trim() ?? "";
+  return normalized ? normalized : null;
 }
 
 function validateOrgName(name: string): string {
@@ -92,6 +100,32 @@ export async function createOrganizationForUser(input: CreateOrganizationInput):
   const name = validateOrgName(input.name);
 
   return prisma.$transaction(async (tx) => {
+    const existingOwnedOrganization = await tx.orgMember.findFirst({
+      where: {
+        userId: input.userId,
+        role: Role.OWNER
+      },
+      include: {
+        org: {
+          select: {
+            id: true,
+            name: true
+          }
+        }
+      },
+      orderBy: {
+        createdAt: "asc"
+      }
+    });
+
+    if (existingOwnedOrganization) {
+      throw new ServiceError(
+        409,
+        "OWNER_ALREADY_HAS_ORGANIZATION",
+        `MVP saat ini hanya mendukung 1 bisnis per akun owner. Akun ini sudah memiliki bisnis "${existingOwnedOrganization.org.name}".`
+      );
+    }
+
     const organization = await tx.org.create({
       data: {
         name
@@ -150,14 +184,31 @@ export async function listOrganizationsForUser(userId: string): Promise<Organiza
   }));
 }
 
-export async function getOrganizationOnboardingStatus(
-  userId: string,
-  orgId: string
-): Promise<OnboardingStatus> {
-  const membership = await requireMembership(userId, orgId);
-  if (!canAccessOrganizationSettings(membership.role)) {
-    throw new ServiceError(403, "FORBIDDEN_SETTINGS_ACCESS", "Your role cannot access onboarding settings.");
+export async function getPrimaryOrganizationForUser(userId: string): Promise<OrganizationSummary | null> {
+  const organizations = await listOrganizationsForUser(userId);
+  return organizations[0] ?? null;
+}
+
+export async function resolvePrimaryOrganizationIdForUser(userId: string, candidateOrgId: string): Promise<string> {
+  const normalizedCandidate = candidateOrgId.trim();
+  if (normalizedCandidate) {
+    return normalizedCandidate;
   }
+
+  const organization = await getPrimaryOrganizationForUser(userId);
+  if (!organization) {
+    throw new ServiceError(404, "ORG_NOT_FOUND", "No business is available for this account.");
+  }
+
+  return organization.id;
+}
+
+export async function getOrganizationBusinessProfile(
+  actorUserId: string,
+  candidateOrgId = ""
+): Promise<OrganizationBusinessProfile> {
+  const orgId = await resolvePrimaryOrganizationIdForUser(actorUserId, candidateOrgId);
+  await requireMembership(actorUserId, orgId);
 
   const organization = await prisma.org.findUnique({
     where: {
@@ -165,30 +216,70 @@ export async function getOrganizationOnboardingStatus(
     },
     select: {
       id: true,
-      name: true
+      name: true,
+      legalName: true,
+      responsibleName: true,
+      businessPhone: true,
+      businessEmail: true,
+      businessAddress: true,
+      logoUrl: true,
+      invoiceSignatureUrl: true
     }
   });
 
   if (!organization) {
-    throw new ServiceError(404, "ORG_NOT_FOUND", "Organization does not exist.");
+    throw new ServiceError(404, "ORG_NOT_FOUND", "No business is available for this account.");
   }
 
-  const waAccountCount = await prisma.waAccount.count({
+  return organization;
+}
+
+export async function updateOrganizationBusinessProfile(input: {
+  actorUserId: string;
+  orgId?: string;
+  name: string;
+  legalName?: string | null;
+  responsibleName?: string | null;
+  businessPhone?: string | null;
+  businessEmail?: string | null;
+  businessAddress?: string | null;
+  logoUrl?: string | null;
+  invoiceSignatureUrl?: string | null;
+}): Promise<OrganizationBusinessProfile> {
+  const orgId = await resolvePrimaryOrganizationIdForUser(input.actorUserId, input.orgId?.trim() ?? "");
+  const membership = await requireMembership(input.actorUserId, orgId);
+  if (!canAccessOrganizationSettings(membership.role)) {
+    throw new ServiceError(403, "FORBIDDEN_SETTINGS_ACCESS", "Your role cannot access organization settings.");
+  }
+
+  const updated = await prisma.org.update({
     where: {
-      orgId
+      id: orgId
+    },
+    data: {
+      name: validateOrgName(input.name),
+      legalName: normalizeOptionalText(input.legalName),
+      responsibleName: normalizeOptionalText(input.responsibleName),
+      businessPhone: normalizeOptionalText(input.businessPhone),
+      businessEmail: normalizeOptionalText(input.businessEmail),
+      businessAddress: normalizeOptionalText(input.businessAddress),
+      logoUrl: normalizeOptionalText(input.logoUrl),
+      invoiceSignatureUrl: normalizeOptionalText(input.invoiceSignatureUrl)
+    },
+    select: {
+      id: true,
+      name: true,
+      legalName: true,
+      responsibleName: true,
+      businessPhone: true,
+      businessEmail: true,
+      businessAddress: true,
+      logoUrl: true,
+      invoiceSignatureUrl: true
     }
   });
 
-  const isCompleted = waAccountCount > 0;
-
-  return {
-    orgId: organization.id,
-    orgName: organization.name,
-    isCompleted,
-    currentStep: isCompleted ? 2 : 1,
-    totalSteps: 2,
-    nextStep: isCompleted ? "DONE" : "CONNECT_WHATSAPP"
-  };
+  return updated;
 }
 
 export async function listOrganizationMembers(
