@@ -1,13 +1,15 @@
 "use client";
 
-import { type FormEvent, useEffect, useMemo, useState } from "react";
+import { type FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import Image from "next/image";
 import { ChevronDown, FileText, ImageIcon, Link2, NotebookPen, PanelsTopLeft, Workflow } from "lucide-react";
 
 import { ActivityTimelineSection } from "@/components/inbox/crm/ActivityTimelineSection";
 import { InvoicesSection } from "@/components/inbox/crm/InvoicesSection";
 import type { CrmActivityItem, CrmInvoiceItem, CrmTimelineItem } from "@/components/inbox/crm/types";
+import { normalizeRuntimeUrl } from "@/components/inbox/bubble/utils";
 import type { ConversationItem, MessageItem } from "@/components/inbox/types";
+import { useModalAccessibility } from "@/lib/a11y/useModalAccessibility";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 
@@ -37,6 +39,27 @@ type PipelineItem = {
   name: string;
   isDefault: boolean;
   stages: PipelineStage[];
+};
+
+type PipelineBoardCard = {
+  id: string;
+  customerName: string;
+  customerPhoneE164: string;
+  unreadCount: number;
+  lastMessagePreview: string | null;
+};
+
+type PipelineBoardColumn = {
+  stageId: string;
+  stageName: string;
+  stageColor: string;
+  cardCount: number;
+  cards: PipelineBoardCard[];
+};
+
+type PipelineBoard = {
+  pipeline: PipelineItem;
+  columns: PipelineBoardColumn[];
 };
 
 type CrmContextPanelProps = {
@@ -87,6 +110,18 @@ function formatDateTime(value: string | null): string {
     hour: "2-digit",
     minute: "2-digit"
   }).format(date);
+}
+
+function stageColorClass(color: string): string {
+  const map: Record<string, string> = {
+    emerald: "border-emerald-500/30 bg-emerald-500/10 text-emerald-700",
+    amber: "border-amber-500/30 bg-amber-500/10 text-amber-700",
+    sky: "border-sky-500/30 bg-sky-500/10 text-sky-700",
+    violet: "border-violet-500/30 bg-violet-500/10 text-violet-700",
+    rose: "border-rose-500/30 bg-rose-500/10 text-rose-700",
+    slate: "border-slate-500/30 bg-slate-500/10 text-slate-700"
+  };
+  return map[color] ?? "border-border bg-muted/40 text-foreground";
 }
 
 function AccordionCard({
@@ -175,6 +210,27 @@ export function CrmContextPanel({
   const [selectedPipelineId, setSelectedPipelineId] = useState("");
   const [selectedStageId, setSelectedStageId] = useState("");
   const [isSavingPipeline, setIsSavingPipeline] = useState(false);
+  const [pipelineBoard, setPipelineBoard] = useState<PipelineBoard | null>(null);
+  const [isLoadingPipelineBoard, setIsLoadingPipelineBoard] = useState(false);
+  const [movingStageId, setMovingStageId] = useState<string | null>(null);
+  const assignModalContainerRef = useRef<HTMLDivElement | null>(null);
+  const assignModalCloseButtonRef = useRef<HTMLButtonElement | null>(null);
+  const editNoteModalContainerRef = useRef<HTMLDivElement | null>(null);
+  const editNoteModalCloseButtonRef = useRef<HTMLButtonElement | null>(null);
+
+  useModalAccessibility({
+    open: isAssignModalOpen,
+    onClose: () => setIsAssignModalOpen(false),
+    containerRef: assignModalContainerRef,
+    initialFocusRef: assignModalCloseButtonRef
+  });
+
+  useModalAccessibility({
+    open: Boolean(editingNote),
+    onClose: () => setEditingNote(null),
+    containerRef: editNoteModalContainerRef,
+    initialFocusRef: editNoteModalCloseButtonRef
+  });
   const canOperateInvoice = activeOrgRole === "OWNER" || activeOrgRole === "ADMIN" || activeOrgRole === "CS";
   const labelColorPresets = ["emerald", "amber", "sky", "violet", "rose", "slate"];
 
@@ -223,6 +279,49 @@ export function CrmContextPanel({
       ignore = true;
     };
   }, [conversation]);
+
+  useEffect(() => {
+    let ignore = false;
+
+    async function loadBoard() {
+      if (!selectedPipelineId) {
+        setPipelineBoard(null);
+        return;
+      }
+
+      setIsLoadingPipelineBoard(true);
+      setPipelineError(null);
+      try {
+        const response = await fetch(`/api/crm/pipelines/board?pipelineId=${encodeURIComponent(selectedPipelineId)}&status=OPEN`, {
+          cache: "no-store"
+        });
+        const payload = (await response.json().catch(() => null)) as { data?: { board?: PipelineBoard }; error?: { message?: string } } | null;
+        if (!response.ok) {
+          if (!ignore) {
+            setPipelineError(payload?.error?.message ?? "Failed to load pipeline kanban.");
+          }
+          return;
+        }
+
+        if (!ignore) {
+          setPipelineBoard(payload?.data?.board ?? null);
+        }
+      } catch {
+        if (!ignore) {
+          setPipelineError("Network error while loading pipeline kanban.");
+        }
+      } finally {
+        if (!ignore) {
+          setIsLoadingPipelineBoard(false);
+        }
+      }
+    }
+
+    void loadBoard();
+    return () => {
+      ignore = true;
+    };
+  }, [selectedPipelineId]);
 
   const activePipeline = useMemo(
     () => pipelines.find((pipeline) => pipeline.id === selectedPipelineId) ?? null,
@@ -274,7 +373,7 @@ export function CrmContextPanel({
           if (!message.text) {
             return [];
           }
-          return message.text.match(regex) ?? [];
+          return (message.text.match(regex) ?? []).map((link) => normalizeRuntimeUrl(link));
         })
       )
     );
@@ -398,6 +497,13 @@ export function CrmContextPanel({
       }
 
       await onRefreshConversation();
+      const boardResponse = await fetch(`/api/crm/pipelines/board?pipelineId=${encodeURIComponent(selectedPipelineId)}&status=OPEN`, {
+        cache: "no-store"
+      });
+      const boardPayload = (await boardResponse.json().catch(() => null)) as { data?: { board?: PipelineBoard } } | null;
+      if (boardResponse.ok) {
+        setPipelineBoard(boardPayload?.data?.board ?? null);
+      }
     } catch {
       setPipelineError("Network error while saving pipeline.");
     } finally {
@@ -405,9 +511,20 @@ export function CrmContextPanel({
     }
   }
 
+  async function moveConversationToStage(stageId: string) {
+    if (!conversation || !selectedPipelineId || !stageId || movingStageId) {
+      return;
+    }
+
+    setMovingStageId(stageId);
+    setSelectedStageId(stageId);
+    await handleSavePipeline();
+    setMovingStageId(null);
+  }
+
   if (isLoading) {
     return (
-      <aside className="h-full min-h-0 rounded-[20px] border border-border/80 bg-card/95 p-4 shadow-sm">
+      <aside className="inbox-scroll h-full min-h-0 overflow-y-auto overscroll-contain rounded-[20px] border border-border/80 bg-card/95 p-4 shadow-sm">
         <p className="text-sm text-muted-foreground">Loading CRM context...</p>
       </aside>
     );
@@ -415,7 +532,7 @@ export function CrmContextPanel({
 
   if (!conversation) {
     return (
-      <aside className="h-full min-h-0 rounded-[24px] border border-border/80 bg-card/95 p-5 shadow-sm">
+      <aside className="inbox-scroll h-full min-h-0 overflow-y-auto overscroll-contain rounded-[24px] border border-border/80 bg-card/95 p-5 shadow-sm">
         <div className="rounded-[20px] border border-dashed border-border/80 bg-background/60 p-5">
           <h2 className="text-base font-semibold text-foreground">CRM Context</h2>
           <p className="mt-2 text-sm leading-6 text-muted-foreground">Pilih percakapan untuk melihat profile customer, pipeline, catatan internal, media, dan invoice terkait.</p>
@@ -425,7 +542,7 @@ export function CrmContextPanel({
   }
 
   return (
-    <aside className="h-full min-h-0 space-y-3 pb-3">
+    <aside className="inbox-scroll h-full min-h-0 space-y-3 overflow-y-auto overscroll-contain pb-3">
       <section className="rounded-[24px] border border-border/80 bg-card/95 shadow-sm">
         <div className="flex items-start gap-3 px-4 py-4">
           {conversation.customerAvatarUrl ? (
@@ -498,6 +615,54 @@ export function CrmContextPanel({
           <Button type="button" onClick={() => void handleSavePipeline()} disabled={!selectedPipelineId || !selectedStageId || isSavingPipeline} className="h-10 w-full rounded-xl">
             {isSavingPipeline ? "Saving..." : "Simpan Pipeline"}
           </Button>
+          <div className="rounded-xl border border-border/70 bg-background/50 p-2">
+            <div className="mb-2 flex items-center justify-between px-1">
+              <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">Kanban (Open)</p>
+              {pipelineBoard ? <p className="text-[11px] text-muted-foreground">{pipelineBoard.pipeline.name}</p> : null}
+            </div>
+            <div className="inbox-scroll flex gap-2 overflow-x-auto pb-1">
+              {(pipelineBoard?.columns ?? activePipeline?.stages.map((stage) => ({
+                stageId: stage.id,
+                stageName: stage.name,
+                stageColor: stage.color,
+                cardCount: 0,
+                cards: []
+              })) ?? []
+              ).map((column) => {
+                const isCurrentStage = selectedStageId === column.stageId;
+                const currentCard = column.cards.find((card) => card.id === conversation.id) ?? null;
+                return (
+                  <article key={column.stageId} className={`w-56 shrink-0 rounded-xl border p-2 ${isCurrentStage ? "border-primary/40 bg-primary/5" : "border-border/70 bg-card/80"}`}>
+                    <div className="mb-2 flex items-center justify-between gap-2">
+                      <p className="truncate text-xs font-semibold text-foreground">{column.stageName}</p>
+                      <span className={`rounded-full border px-2 py-0.5 text-[10px] ${stageColorClass(column.stageColor)}`}>{column.cardCount}</span>
+                    </div>
+                    {currentCard ? (
+                      <div className="rounded-lg border border-primary/30 bg-primary/10 p-2">
+                        <p className="truncate text-xs font-semibold text-foreground">{currentCard.customerName}</p>
+                        <p className="truncate text-[11px] text-muted-foreground">{currentCard.customerPhoneE164}</p>
+                      </div>
+                    ) : (
+                      <p className="line-clamp-2 rounded-lg border border-dashed border-border/70 px-2 py-2 text-[11px] text-muted-foreground">
+                        {column.cards[0]?.customerName ? `${column.cards[0].customerName}: ${column.cards[0].lastMessagePreview ?? "tanpa preview"}` : "Belum ada kartu pada stage ini."}
+                      </p>
+                    )}
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant={isCurrentStage ? "default" : "secondary"}
+                      className="mt-2 h-7 w-full rounded-lg text-[11px]"
+                      disabled={isSavingPipeline || movingStageId === column.stageId}
+                      onClick={() => void moveConversationToStage(column.stageId)}
+                    >
+                      {movingStageId === column.stageId ? "Memindahkan..." : isCurrentStage ? "Stage Aktif" : "Pindah ke sini"}
+                    </Button>
+                  </article>
+                );
+              })}
+            </div>
+            {isLoadingPipelineBoard ? <p className="mt-2 text-[11px] text-muted-foreground">Loading kanban...</p> : null}
+          </div>
           {isLoadingPipelines ? <p className="text-xs text-muted-foreground">Loading pipelines...</p> : null}
           {pipelineError ? <p className="text-xs text-destructive">{pipelineError}</p> : null}
         </div>
@@ -680,11 +845,16 @@ export function CrmContextPanel({
       </div>
 
       {isAssignModalOpen ? (
-        <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/45 p-4 backdrop-blur-sm">
-          <div className="w-full max-w-lg rounded-[28px] border border-border/80 bg-card p-5 shadow-2xl">
+        <div
+          className="fixed inset-0 z-[70] flex items-center justify-center bg-black/45 p-4 backdrop-blur-sm"
+          role="dialog"
+          aria-modal="true"
+          aria-label="Assign conversation"
+        >
+          <div ref={assignModalContainerRef} className="w-full max-w-lg rounded-[28px] border border-border/80 bg-card p-5 shadow-2xl">
             <div className="flex items-center justify-between">
               <h3 className="text-lg font-semibold text-foreground">Assign conversation</h3>
-              <Button type="button" variant="ghost" onClick={() => setIsAssignModalOpen(false)}>
+              <Button ref={assignModalCloseButtonRef} type="button" variant="ghost" onClick={() => setIsAssignModalOpen(false)}>
                 Close
               </Button>
             </div>
@@ -709,14 +879,19 @@ export function CrmContextPanel({
       ) : null}
 
       {editingNote ? (
-        <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/45 p-4 backdrop-blur-sm">
-          <div className="w-full max-w-2xl rounded-[28px] border border-border/80 bg-card p-5 shadow-2xl">
+        <div
+          className="fixed inset-0 z-[70] flex items-center justify-center bg-black/45 p-4 backdrop-blur-sm"
+          role="dialog"
+          aria-modal="true"
+          aria-label="Detail catatan"
+        >
+          <div ref={editNoteModalContainerRef} className="w-full max-w-2xl rounded-[28px] border border-border/80 bg-card p-5 shadow-2xl">
             <div className="flex items-center justify-between">
               <div>
                 <h3 className="text-lg font-semibold text-foreground">Detail catatan</h3>
                 <p className="text-sm text-muted-foreground">{formatDateTime(editingNote.createdAt)}</p>
               </div>
-              <Button type="button" variant="ghost" onClick={() => setEditingNote(null)}>
+              <Button ref={editNoteModalCloseButtonRef} type="button" variant="ghost" onClick={() => setEditingNote(null)}>
                 Close
               </Button>
             </div>

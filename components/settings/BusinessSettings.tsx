@@ -7,6 +7,7 @@ import { Building2, Landmark, Upload } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { useSettingsHeaderAction } from "@/components/settings/settings-header-actions";
 
 type BusinessProfile = {
   id: string;
@@ -90,6 +91,7 @@ function UploadAssetCard({
 }
 
 export function BusinessSettings() {
+  const formId = "settings-business-form";
   const [profile, setProfile] = useState<BusinessProfile | null>(null);
   const [name, setName] = useState("");
   const [legalName, setLegalName] = useState("");
@@ -104,6 +106,16 @@ export function BusinessSettings() {
   const [success, setSuccess] = useState<string | null>(null);
 
   const canSave = useMemo(() => Boolean(name.trim()) && !isSaving, [isSaving, name]);
+  const saveAction = useMemo(
+    () => (
+      <Button disabled={!canSave} type="submit" form={formId} className="h-10 rounded-xl">
+        {isSaving ? "Saving..." : "Simpan Business"}
+      </Button>
+    ),
+    [canSave, formId, isSaving]
+  );
+
+  useSettingsHeaderAction("10-business-save", saveAction);
 
   const applyProfile = useCallback((nextProfile: BusinessProfile) => {
     setProfile(nextProfile);
@@ -217,18 +229,11 @@ export function BusinessSettings() {
   }
 
   return (
-    <section className="mx-auto max-w-5xl space-y-4 rounded-md border border-border bg-surface/70 p-4">
-      <div>
-        <h1 className="text-xl font-semibold text-foreground">Business Settings</h1>
-        <p className="text-sm text-muted-foreground">
-          Kelola identitas bisnis dan aset default invoice. Logo, tanda tangan, dan penanggung jawab akan dipakai otomatis saat membuat invoice.
-        </p>
-      </div>
-
+    <section className="space-y-6">
       {isLoading ? <p className="text-sm text-muted-foreground">Loading business profile...</p> : null}
 
       {!isLoading && profile ? (
-        <form className="space-y-4" onSubmit={handleSubmit}>
+        <form id={formId} className="space-y-6" onSubmit={handleSubmit}>
           <div className="grid gap-4 lg:grid-cols-2">
             <div className="space-y-2">
               <label className="text-sm font-medium text-foreground" htmlFor="business-name">
@@ -284,6 +289,13 @@ export function BusinessSettings() {
             </div>
           </div>
 
+          <div className="space-y-3">
+            <div>
+              <h3 className="text-base font-semibold text-foreground">Asset Invoice</h3>
+              <p className="mt-1 text-sm text-muted-foreground">Logo dan tanda tangan default dipakai otomatis saat membuat invoice baru.</p>
+            </div>
+          </div>
+
           <div className="grid gap-4 lg:grid-cols-2">
             <UploadAssetCard
               title="Logo Business"
@@ -305,12 +317,6 @@ export function BusinessSettings() {
 
           {error ? <p className="rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm text-destructive">{error}</p> : null}
           {success ? <p className="rounded-md border border-primary/40 bg-primary/10 px-3 py-2 text-sm text-primary">{success}</p> : null}
-
-          <div className="flex justify-end">
-            <Button disabled={!canSave} type="submit" className="rounded-md">
-              {isSaving ? "Saving..." : "Save Business Settings"}
-            </Button>
-          </div>
         </form>
       ) : null}
     </section>

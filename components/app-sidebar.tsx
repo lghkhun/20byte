@@ -2,10 +2,10 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Building2, FileText, LayoutDashboard, MessageCircle, Settings, ShieldCheck, Users, Workflow } from "lucide-react";
+import { FileText, LayoutDashboard, Link2, MessageCircle, Users, Workflow } from "lucide-react";
+import { useState } from "react";
 
 import { NavMain } from "@/components/nav-main";
-import { NavSecondary } from "@/components/nav-secondary";
 import { NavUser } from "@/components/nav-user";
 import {
   Sidebar,
@@ -22,6 +22,7 @@ type AppSidebarProps = {
   user: {
     email: string;
     name: string | null;
+    avatarUrl?: string | null;
   } | null;
 };
 
@@ -45,35 +46,23 @@ const navMain = [
     title: "Invoices",
     url: "/invoices",
     icon: FileText
-  }
-] as const;
-
-const navSecondary = [
-  {
-    title: "Business",
-    url: "/dashboard/settings/business",
-    icon: Building2
   },
   {
-    title: "WhatsApp",
-    url: "/dashboard/settings/whatsapp",
-    icon: ShieldCheck
+    title: "Shortlink",
+    url: "/shortlinks",
+    icon: Link2
   },
   {
     title: "CRM Pipeline",
     url: "/crm/pipelines",
     icon: Workflow
-  },
-  {
-    title: "General",
-    url: "/settings",
-    icon: Settings
   }
 ] as const;
 
 export function AppSidebar({ user }: AppSidebarProps) {
   const pathname = usePathname();
   const { setOpen, isMobile } = useSidebar();
+  const [isAccountMenuOpen, setIsAccountMenuOpen] = useState(false);
 
   return (
     <Sidebar
@@ -85,7 +74,7 @@ export function AppSidebar({ user }: AppSidebarProps) {
         }
       }}
       onMouseLeave={() => {
-        if (!isMobile) {
+        if (!isMobile && !isAccountMenuOpen) {
           setOpen(false);
         }
       }}
@@ -119,10 +108,9 @@ export function AppSidebar({ user }: AppSidebarProps) {
       </SidebarHeader>
       <SidebarContent>
         <NavMain currentPath={pathname} items={navMain.map((item) => ({ ...item, isActive: pathname === item.url || pathname.startsWith(`${item.url}/`) }))} />
-        <NavSecondary currentPath={pathname} items={navSecondary} title="Business Tools" className="mt-auto" />
       </SidebarContent>
       <SidebarFooter>
-        <NavUser user={user} />
+        <NavUser user={user} onMenuOpenChange={setIsAccountMenuOpen} />
       </SidebarFooter>
     </Sidebar>
   );

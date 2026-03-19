@@ -15,10 +15,21 @@ export async function listInvoices(input: ListInvoicesInput): Promise<InvoiceLis
   await requireInvoiceAccess(input.actorUserId, orgId);
   const page = normalizePage(input.page);
   const limit = normalizeLimit(input.limit);
+  const query = normalize(input.q);
 
   const where: Prisma.InvoiceWhereInput = {
     orgId,
-    ...(input.status ? { status: input.status } : {})
+    ...(input.status ? { status: input.status } : {}),
+    ...(query
+      ? {
+          OR: [
+            { invoiceNo: { contains: query } },
+            { publicToken: { contains: query } },
+            { customer: { displayName: { contains: query } } },
+            { customer: { phoneE164: { contains: query } } }
+          ]
+        }
+      : {})
   };
 
   const [total, rows] = await prisma.$transaction([
@@ -30,6 +41,8 @@ export async function listInvoices(input: ListInvoicesInput): Promise<InvoiceLis
       take: limit,
       select: {
         id: true,
+        customerId: true,
+        publicToken: true,
         invoiceNo: true,
         status: true,
         kind: true,
@@ -51,6 +64,8 @@ export async function listInvoices(input: ListInvoicesInput): Promise<InvoiceLis
   return {
     invoices: rows.map((row) => ({
       id: row.id,
+      customerId: row.customerId,
+      publicToken: row.publicToken,
       invoiceNo: row.invoiceNo,
       status: row.status,
       kind: row.kind,

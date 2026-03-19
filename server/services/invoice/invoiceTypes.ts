@@ -118,6 +118,8 @@ export type SendInvoiceResult = {
 
 export type InvoiceListItem = {
   id: string;
+  customerId: string;
+  publicToken: string;
   invoiceNo: string;
   status: InvoiceStatus;
   kind: InvoiceKind;
@@ -157,6 +159,7 @@ export type ListInvoicesInput = {
   page?: number;
   limit?: number;
   status?: InvoiceStatus;
+  q?: string;
 };
 
 export type GetInvoiceTimelineInput = {

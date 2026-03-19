@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 
 import { ChatWindow } from "@/components/inbox/ChatWindow";
 import { AttachProofShortcutModal } from "@/components/inbox/AttachProofShortcutModal";
@@ -18,6 +19,9 @@ import { EmptyStatePanel, ErrorStatePanel } from "@/components/ui/state-panels";
 import { PanelRightClose, PanelRightOpen } from "lucide-react";
 
 export function InboxWorkspace() {
+  const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
   const { density } = useInboxWorkspacePreferences();
   const {
     orgId,
@@ -95,6 +99,27 @@ export function InboxWorkspace() {
   const [crmPanelWidth, setCrmPanelWidth] = useState(340);
   const [isResizingCrm, setIsResizingCrm] = useState(false);
   const resizeOriginRef = useRef<{ startX: number; startWidth: number } | null>(null);
+  const handledDeepLinkConversationIdRef = useRef<string | null>(null);
+  useEffect(() => {
+    const deepLinkedConversationId = searchParams.get("conversationId")?.trim() ?? "";
+    if (!orgId || !deepLinkedConversationId) {
+      return;
+    }
+
+    if (handledDeepLinkConversationIdRef.current === deepLinkedConversationId) {
+      return;
+    }
+
+    handledDeepLinkConversationIdRef.current = deepLinkedConversationId;
+    setSelectedConversationId(deepLinkedConversationId);
+    void loadConversation(deepLinkedConversationId);
+
+    const nextParams = new URLSearchParams(searchParams.toString());
+    nextParams.delete("conversationId");
+    const nextQueryString = nextParams.toString();
+    router.replace(nextQueryString ? `${pathname}?${nextQueryString}` : pathname);
+  }, [loadConversation, orgId, pathname, router, searchParams, setSelectedConversationId]);
+
   useEffect(() => {
     if (selectedConversationId) {
       setMobilePane("chat");
@@ -170,7 +195,7 @@ export function InboxWorkspace() {
 
       {orgId ? (
         <div className="flex h-full min-h-0 flex-1 flex-col overflow-hidden">
-          <div className="mb-3 flex items-center gap-2 rounded-xl border border-border/80 bg-card/85 p-1.5 shadow-sm lg:hidden">
+          <div className="mb-2 flex items-center gap-2 rounded-xl border border-border/80 bg-card/85 p-1.5 shadow-sm lg:hidden">
             <Button
               type="button"
               variant={mobilePane === "list" ? "secondary" : "ghost"}
@@ -193,7 +218,7 @@ export function InboxWorkspace() {
 
           <div className={`${gridLayoutClass} max-h-full flex-1 overflow-hidden`} style={{ ["--crm-panel-width" as string]: `${crmPanelWidth}px` }}>
             <div
-              className={`flex h-full min-h-0 max-h-full flex-col overflow-hidden rounded-[24px] border border-border/70 bg-card/95 shadow-sm shadow-black/5 ${
+              className={`inbox-scroll flex h-full min-h-0 max-h-full flex-col overflow-y-auto overscroll-contain rounded-[24px] border border-border/70 bg-card/95 shadow-sm shadow-black/5 ${
                 mobilePane === "chat" ? "hidden lg:block" : ""
               } ${mobilePane === "list" ? "inbox-fade-slide" : ""}`}
             >
@@ -219,7 +244,7 @@ export function InboxWorkspace() {
               />
             </div>
 
-            <div className={`min-h-0 min-w-0 max-h-full overflow-hidden ${mobilePane === "list" ? "hidden lg:block" : ""} ${mobilePane === "chat" ? "inbox-fade-slide" : ""}`}>
+            <div className={`inbox-scroll min-h-0 min-w-0 max-h-full overflow-y-auto overscroll-contain ${mobilePane === "list" ? "hidden lg:block" : ""} ${mobilePane === "chat" ? "inbox-fade-slide" : ""}`}>
               <div className="mb-2 flex items-center justify-between gap-2 lg:hidden">
                 <Button type="button" variant="ghost" size="sm" className="h-8" onClick={() => setMobilePane("list")}>
                   Back to conversations
@@ -257,7 +282,7 @@ export function InboxWorkspace() {
             </div>
 
             {isDesktopCrmOpen ? (
-              <div data-panel="crm-panel" className="relative hidden h-full min-h-0 max-h-full overflow-hidden lg:block">
+              <div data-panel="crm-panel" className="inbox-scroll relative hidden h-full min-h-0 max-h-full overflow-y-auto overscroll-contain lg:block">
                 <button
                   type="button"
                   className="absolute -left-1 top-0 z-10 h-full w-2 cursor-col-resize rounded-full bg-transparent"

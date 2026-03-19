@@ -29,13 +29,17 @@ export function NavMain({
     url: string;
     icon: LucideIcon;
     isActive?: boolean;
-    items?: {
+    items?: ReadonlyArray<{
       title: string;
       url: string;
-    }[];
+    }>;
   }>;
   currentPath?: string;
 }) {
+  function toPathname(url: string): string {
+    return url.split("?")[0] ?? url;
+  }
+
   return (
     <SidebarGroup>
       <SidebarGroupLabel>Platform</SidebarGroupLabel>
@@ -61,7 +65,7 @@ export function NavMain({
                     <SidebarMenuSub>
                       {item.items?.map((subItem) => (
                         <SidebarMenuSubItem key={subItem.title}>
-                          <SidebarMenuSubButton asChild isActive={currentPath === subItem.url}>
+                          <SidebarMenuSubButton asChild isActive={currentPath === toPathname(subItem.url)}>
                             <Link href={subItem.url}>
                               <span>{subItem.title}</span>
                             </Link>

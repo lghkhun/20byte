@@ -1,0 +1,13 @@
+[GET] http://127.0.0.1:3100/api/crm/pipelines => [200] OK
+[GET] http://127.0.0.1:3100/api/crm/pipelines => [200] OK
+[GET] http://127.0.0.1:3100/inbox?_rsc=11gn1 => [200] OK
+[GET] http://127.0.0.1:3100/dashboard?_rsc=11gn1 => [200] OK
+[GET] http://127.0.0.1:3100/customers?_rsc=11gn1 => [200] OK
+[GET] http://127.0.0.1:3100/invoices?_rsc=11gn1 => [200] OK
+[GET] http://127.0.0.1:3100/settings?_rsc=11gn1 => [200] OK
+[GET] http://127.0.0.1:3100/ui-kit?_rsc=11gn1 => [200] OK
+[GET] http://127.0.0.1:3100/inbox?_rsc=11gn1 => [200] OK
+[GET] http://127.0.0.1:3100/dashboard?_rsc=11gn1 => [200] OK
+[GET] http://127.0.0.1:3100/api/crm/pipelines/board?pipelineId=cmmpxizv10001i0gmcsza8d72&status=OPEN&assigneeUserId=ALL&activityFrom=&activityTo= => [200] OK
+[GET] http://127.0.0.1:3100/inbox?conversationId=cmmq0cvfe000si0gmjzbqu8tn&_rsc=11gn1 => [200] OK
+[GET] http://127.0.0.1:3100/inbox?conversationId=cmmq0cvfe000si0gmjzbqu8tn&_rsc=11gn1 => [200] OK

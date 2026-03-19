@@ -39,6 +39,7 @@ type ProfileResult = {
   id: string;
   email: string;
   name: string | null;
+  avatarUrl: string | null;
   createdAt: Date;
   updatedAt: Date;
 };
@@ -186,6 +187,7 @@ export async function getProfile(userId: string): Promise<ProfileResult> {
       id: true,
       email: true,
       name: true,
+      avatarUrl: true,
       createdAt: true,
       updatedAt: true
     }
@@ -233,6 +235,7 @@ export async function updateProfile(userId: string, input: UpdateProfileInput): 
       id: true,
       email: true,
       name: true,
+      avatarUrl: true,
       passwordHash: true,
       createdAt: true,
       updatedAt: true
@@ -262,6 +265,7 @@ export async function updateProfile(userId: string, input: UpdateProfileInput): 
       id: user.id,
       email: user.email,
       name: user.name,
+      avatarUrl: user.avatarUrl,
       createdAt: user.createdAt,
       updatedAt: user.updatedAt
     };
@@ -274,10 +278,43 @@ export async function updateProfile(userId: string, input: UpdateProfileInput): 
       id: true,
       email: true,
       name: true,
+      avatarUrl: true,
       createdAt: true,
       updatedAt: true
     }
   });
 
   return updatedUser;
+}
+
+export async function updateProfileAvatar(userId: string, avatarUrl: string | null): Promise<ProfileResult> {
+  if (!userId.trim()) {
+    throw new ServiceError(400, "MISSING_USER_ID", "userId is required.");
+  }
+
+  const user = await prisma.user.findUnique({
+    where: { id: userId },
+    select: {
+      id: true
+    }
+  });
+
+  if (!user) {
+    throw new ServiceError(404, "USER_NOT_FOUND", "User account not found.");
+  }
+
+  return prisma.user.update({
+    where: { id: userId },
+    data: {
+      avatarUrl
+    },
+    select: {
+      id: true,
+      email: true,
+      name: true,
+      avatarUrl: true,
+      createdAt: true,
+      updatedAt: true
+    }
+  });
 }

@@ -1,0 +1,143 @@
+- generic [active] [ref=e1]:
+  - generic [ref=e2]:
+    - generic [ref=e5]:
+      - list [ref=e7]:
+        - listitem [ref=e8]:
+          - link "20 20byte Chat-first CRM" [ref=e9] [cursor=pointer]:
+            - /url: /inbox
+            - generic [ref=e11]: "20"
+            - generic [ref=e12]:
+              - generic [ref=e13]: 20byte
+              - generic [ref=e14]: Chat-first CRM
+      - generic [ref=e15]:
+        - generic [ref=e16]:
+          - generic [ref=e17]: Platform
+          - list [ref=e18]:
+            - listitem [ref=e19]:
+              - link "Dashboard" [ref=e20] [cursor=pointer]:
+                - /url: /dashboard
+                - img [ref=e21]
+                - generic [ref=e26]: Dashboard
+            - listitem [ref=e27]:
+              - link "Inbox" [ref=e28] [cursor=pointer]:
+                - /url: /inbox
+                - img [ref=e29]
+                - generic [ref=e31]: Inbox
+            - listitem [ref=e32]:
+              - link "Customers" [ref=e33] [cursor=pointer]:
+                - /url: /customers
+                - img [ref=e34]
+                - generic [ref=e39]: Customers
+            - listitem [ref=e40]:
+              - link "Invoices" [ref=e41] [cursor=pointer]:
+                - /url: /invoices
+                - img [ref=e42]
+                - generic [ref=e45]: Invoices
+            - listitem [ref=e46]:
+              - link "CRM Pipeline" [ref=e47] [cursor=pointer]:
+                - /url: /crm/pipelines
+                - img [ref=e48]
+                - generic [ref=e52]: CRM Pipeline
+            - listitem [ref=e53]:
+              - link "Settings" [ref=e54] [cursor=pointer]:
+                - /url: /settings
+                - img [ref=e55]
+                - generic [ref=e58]: Settings
+              - button "Toggle" [ref=e59] [cursor=pointer]:
+                - img [ref=e60]
+                - generic [ref=e62]: Toggle
+            - listitem [ref=e63]:
+              - link "UI Kit" [ref=e64] [cursor=pointer]:
+                - /url: /ui-kit
+                - img [ref=e65]
+                - generic [ref=e71]: UI Kit
+        - generic [ref=e72]:
+          - generic [ref=e73]: Business Tools
+          - list [ref=e75]:
+            - listitem [ref=e76]:
+              - link "Settings" [ref=e77] [cursor=pointer]:
+                - /url: /settings
+                - img [ref=e78]
+                - generic [ref=e81]: Settings
+      - list [ref=e83]:
+        - listitem [ref=e84]:
+          - button "SO Seed Owner owner@seed.20byte.local" [ref=e85] [cursor=pointer]:
+            - generic [ref=e87]: SO
+            - generic [ref=e88]:
+              - generic [ref=e89]: Seed Owner
+              - generic [ref=e90]: owner@seed.20byte.local
+            - img [ref=e91]
+    - main [ref=e94]:
+      - main [ref=e95]:
+        - generic [ref=e99]:
+          - generic [ref=e100]:
+            - generic [ref=e101]:
+              - heading "Database Kontak" [level=1] [ref=e102]
+              - paragraph [ref=e103]: "Total: 0 kontak aktif di bisnis Anda."
+            - generic [ref=e104]:
+              - button "◌ Logs" [disabled]:
+                - generic: ◌
+                - text: Logs
+              - button "Export" [disabled]:
+                - img
+                - text: Export
+              - button "Import" [disabled]:
+                - img
+                - text: Import
+              - button "Tambah Kontak" [ref=e105] [cursor=pointer]:
+                - img
+                - text: Tambah Kontak
+          - tablist [ref=e107]:
+            - tab "All Contacts" [selected] [ref=e108] [cursor=pointer]:
+              - img [ref=e109]
+              - text: All Contacts
+            - tab "Label Management" [ref=e113] [cursor=pointer]:
+              - img [ref=e114]
+              - text: Label Management
+          - generic [ref=e118]:
+            - generic [ref=e119]:
+              - generic [ref=e120]:
+                - generic [ref=e121]:
+                  - img
+                  - textbox "Cari nama atau nomor..." [ref=e122]
+                - combobox [ref=e123] [cursor=pointer]:
+                  - generic: Semua Label
+                  - img [ref=e124]
+              - button "Columns" [ref=e127] [cursor=pointer]
+            - table [ref=e130]:
+              - rowgroup [ref=e131]:
+                - row "Select all Nama WhatsApp Ditambahkan Percakapan Labels" [ref=e132]:
+                  - columnheader "Select all" [ref=e133]:
+                    - checkbox "Select all" [ref=e134] [cursor=pointer]
+                  - columnheader [ref=e135]
+                  - columnheader "Nama" [ref=e136]:
+                    - button "Nama" [ref=e137] [cursor=pointer]:
+                      - text: Nama
+                      - img
+                  - columnheader "WhatsApp" [ref=e138]:
+                    - button "WhatsApp" [ref=e139] [cursor=pointer]:
+                      - text: WhatsApp
+                      - img
+                  - columnheader "Ditambahkan" [ref=e140]:
+                    - button "Ditambahkan" [ref=e141] [cursor=pointer]:
+                      - text: Ditambahkan
+                      - img
+                  - columnheader "Percakapan" [ref=e142]:
+                    - button "Percakapan" [ref=e143] [cursor=pointer]:
+                      - text: Percakapan
+                      - img
+                  - columnheader "Labels" [ref=e144]
+                  - columnheader [ref=e145]
+              - rowgroup [ref=e146]:
+                - row "Loading customers..." [ref=e147]:
+                  - cell "Loading customers..." [ref=e148]
+            - generic [ref=e149]:
+              - paragraph [ref=e150]: 0 dari 0 kontak terpilih.
+              - generic [ref=e151]:
+                - combobox [ref=e152] [cursor=pointer]:
+                  - generic: 10 baris
+                  - img [ref=e153]
+                - button "Previous" [disabled]
+                - button "Next" [disabled]
+  - region "Notifications alt+T"
+  - alert [ref=e155]

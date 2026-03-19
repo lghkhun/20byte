@@ -1,0 +1,468 @@
+- generic:
+  - generic:
+    - generic:
+      - generic:
+        - generic:
+          - generic:
+            - list:
+              - listitem:
+                - link:
+                  - /url: /inbox
+                  - generic:
+                    - generic: "20"
+                  - generic:
+                    - generic: 20byte
+                    - generic: Chat-first CRM
+          - generic:
+            - generic:
+              - generic: Platform
+              - list:
+                - listitem:
+                  - link:
+                    - /url: /dashboard
+                    - img
+                    - generic: Dashboard
+                - listitem:
+                  - link:
+                    - /url: /inbox
+                    - img
+                    - generic: Inbox
+                - listitem:
+                  - link:
+                    - /url: /customers
+                    - img
+                    - generic: Customers
+                - listitem:
+                  - link:
+                    - /url: /invoices
+                    - img
+                    - generic: Invoices
+                - listitem:
+                  - link:
+                    - /url: /crm/pipelines
+                    - img
+                    - generic: CRM Pipeline
+                - listitem:
+                  - link:
+                    - /url: /settings
+                    - img
+                    - generic: Settings
+                  - button:
+                    - img
+                    - generic: Toggle
+                - listitem:
+                  - link:
+                    - /url: /ui-kit
+                    - img
+                    - generic: UI Kit
+            - generic:
+              - generic: Business Tools
+              - generic:
+                - list:
+                  - listitem:
+                    - link:
+                      - /url: /settings
+                      - img
+                      - generic: Settings
+          - generic:
+            - list:
+              - listitem:
+                - button:
+                  - generic:
+                    - generic: SO
+                  - generic:
+                    - generic: Seed Owner
+                    - generic: owner@seed.20byte.local
+                  - img
+    - main:
+      - main:
+        - generic:
+          - generic:
+            - generic:
+              - generic:
+                - generic:
+                  - generic:
+                    - img
+                  - generic:
+                    - heading [level=1]: Invoice System
+                    - paragraph: Kelola invoice, pengiriman, pelunasan, dan sinkronisasi stage CRM dari satu workspace.
+                - generic:
+                  - generic: All Invoices
+                  - button: Create Invoice
+                  - link:
+                    - /url: /inbox
+                    - text: Buka Inbox CRM
+                    - img
+              - generic:
+                - article:
+                  - paragraph: Paid invoices
+                  - paragraph: "1"
+                - article:
+                  - paragraph: Unpaid invoices
+                  - paragraph: "12"
+                - article:
+                  - paragraph: Total revenue
+                  - paragraph: Rp 27.000
+              - generic:
+                - generic:
+                  - generic:
+                    - heading [level=2]: Invoices
+                    - paragraph: Seed Org Alpha invoice registry
+                  - generic:
+                    - generic:
+                      - img
+                      - textbox:
+                        - /placeholder: Search...
+                    - combobox:
+                      - generic: ALL
+                      - img
+                    - button: Columns
+                - generic:
+                  - generic:
+                    - table:
+                      - rowgroup:
+                        - row:
+                          - columnheader:
+                            - checkbox
+                          - columnheader
+                          - columnheader:
+                            - button:
+                              - text: Number
+                              - img
+                          - columnheader:
+                            - button:
+                              - text: Customer
+                              - img
+                          - columnheader:
+                            - button:
+                              - text: Public Link
+                              - img
+                          - columnheader:
+                            - button:
+                              - text: Date
+                              - img
+                          - columnheader:
+                            - button:
+                              - text: Amount
+                              - img
+                          - columnheader:
+                            - button:
+                              - text: Status
+                              - img
+                          - columnheader
+                      - rowgroup:
+                        - row:
+                          - cell:
+                            - checkbox
+                          - cell
+                          - cell:
+                            - button: INV-2026-0013
+                          - cell:
+                            - generic:
+                              - paragraph: "+628662776277"
+                              - paragraph: "+628662776277"
+                          - cell:
+                            - link:
+                              - /url: /i/HZefaapyh3uPw-3Gngw4T5gCdXxmELkP
+                              - generic: /i/HZefaapyh3uPw-3Gngw4T5gCdXxmELkP
+                              - img
+                          - cell: 16/03/2026
+                          - cell: Rp 27.500
+                          - cell:
+                            - generic: SENT
+                          - cell:
+                            - generic:
+                              - button:
+                                - generic: Open actions
+                                - img
+                        - row:
+                          - cell:
+                            - checkbox
+                          - cell
+                          - cell:
+                            - button: INV-2026-0014
+                          - cell:
+                            - generic:
+                              - paragraph: "+628662776277"
+                              - paragraph: "+628662776277"
+                          - cell:
+                            - link:
+                              - /url: /i/0mymqko8cXyQo8Ax201IBav-doHL1orT
+                              - generic: /i/0mymqko8cXyQo8Ax201IBav-doHL1orT
+                              - img
+                          - cell: 16/03/2026
+                          - cell: Rp 27.500
+                          - cell:
+                            - generic: DRAFT
+                          - cell:
+                            - generic:
+                              - button:
+                                - generic: Open actions
+                                - img
+                        - row:
+                          - cell:
+                            - checkbox
+                          - cell
+                          - cell:
+                            - button: INV-2026-0012
+                          - cell:
+                            - generic:
+                              - paragraph: "+628662776277"
+                              - paragraph: "+628662776277"
+                          - cell:
+                            - link:
+                              - /url: /i/_FP3oI8xRsw1wPY-Q2-VIBOPA-zyBN2G
+                              - generic: /i/_FP3oI8xRsw1wPY-Q2-VIBOPA-zyBN2G
+                              - img
+                          - cell: 16/03/2026
+                          - cell: Rp 27.500
+                          - cell:
+                            - generic: DRAFT
+                          - cell:
+                            - generic:
+                              - button:
+                                - generic: Open actions
+                                - img
+                        - row:
+                          - cell:
+                            - checkbox
+                          - cell
+                          - cell:
+                            - button: INV-2026-0011
+                          - cell:
+                            - generic:
+                              - paragraph: "+628662776277"
+                              - paragraph: "+628662776277"
+                          - cell:
+                            - link:
+                              - /url: /i/U0V1UuTHv6b0mNZ5yxM1nYSiCy1DdT5l
+                              - generic: /i/U0V1UuTHv6b0mNZ5yxM1nYSiCy1DdT5l
+                              - img
+                          - cell: 16/03/2026
+                          - cell: Rp 27.500
+                          - cell:
+                            - generic: DRAFT
+                          - cell:
+                            - generic:
+                              - button:
+                                - generic: Open actions
+                                - img
+                        - row:
+                          - cell:
+                            - checkbox
+                          - cell
+                          - cell:
+                            - button: INV-2026-0010
+                          - cell:
+                            - generic:
+                              - paragraph: "+628662776277"
+                              - paragraph: "+628662776277"
+                          - cell:
+                            - link:
+                              - /url: /i/lbrBZoravdyfdXq1nTe9BS9gsJm4q6Dy
+                              - generic: /i/lbrBZoravdyfdXq1nTe9BS9gsJm4q6Dy
+                              - img
+                          - cell: 16/03/2026
+                          - cell: Rp 27.500
+                          - cell:
+                            - generic: DRAFT
+                          - cell:
+                            - generic:
+                              - button:
+                                - generic: Open actions
+                                - img
+                        - row:
+                          - cell:
+                            - checkbox
+                          - cell
+                          - cell:
+                            - button: INV-2026-0009
+                          - cell:
+                            - generic:
+                              - paragraph: "+628662776277"
+                              - paragraph: "+628662776277"
+                          - cell:
+                            - link:
+                              - /url: /i/gwsFIaYkeloL4h-qUbDHFQl3nkItneUR
+                              - generic: /i/gwsFIaYkeloL4h-qUbDHFQl3nkItneUR
+                              - img
+                          - cell: 16/03/2026
+                          - cell: Rp 27.500
+                          - cell:
+                            - generic: DRAFT
+                          - cell:
+                            - generic:
+                              - button:
+                                - generic: Open actions
+                                - img
+                        - row:
+                          - cell:
+                            - checkbox
+                          - cell
+                          - cell:
+                            - button: INV-2026-0008
+                          - cell:
+                            - generic:
+                              - paragraph: "+628662776277"
+                              - paragraph: "+628662776277"
+                          - cell:
+                            - link:
+                              - /url: /i/9ivcM4-brWq5JJ1_A8njtEQbJzayxrKR
+                              - generic: /i/9ivcM4-brWq5JJ1_A8njtEQbJzayxrKR
+                              - img
+                          - cell: 16/03/2026
+                          - cell: Rp 17.500
+                          - cell:
+                            - generic: DRAFT
+                          - cell:
+                            - generic:
+                              - button:
+                                - generic: Open actions
+                                - img
+                        - row:
+                          - cell:
+                            - checkbox
+                          - cell
+                          - cell:
+                            - button: INV-2026-0007
+                          - cell:
+                            - generic:
+                              - paragraph: "+628662776277"
+                              - paragraph: "+628662776277"
+                          - cell:
+                            - link:
+                              - /url: /i/FrdwKLWUGy0nChP8Sg5zKR7PUQYmC8Ae
+                              - generic: /i/FrdwKLWUGy0nChP8Sg5zKR7PUQYmC8Ae
+                              - img
+                          - cell: 16/03/2026
+                          - cell: Rp 17.500
+                          - cell:
+                            - generic: DRAFT
+                          - cell:
+                            - generic:
+                              - button:
+                                - generic: Open actions
+                                - img
+                        - row:
+                          - cell:
+                            - checkbox
+                          - cell
+                          - cell:
+                            - button: INV-2026-0006
+                          - cell:
+                            - generic:
+                              - paragraph: "+628662776277"
+                              - paragraph: "+628662776277"
+                          - cell:
+                            - link:
+                              - /url: /i/zldU6_1o7spn49Aow-SPPZzWgYneTpk4
+                              - generic: /i/zldU6_1o7spn49Aow-SPPZzWgYneTpk4
+                              - img
+                          - cell: 16/03/2026
+                          - cell: Rp 17.500
+                          - cell:
+                            - generic: DRAFT
+                          - cell:
+                            - generic:
+                              - button:
+                                - generic: Open actions
+                                - img
+                        - row:
+                          - cell:
+                            - checkbox
+                          - cell
+                          - cell:
+                            - button: INV-2026-0005
+                          - cell:
+                            - generic:
+                              - paragraph: Rama Wedding
+                              - paragraph: "+628111000222"
+                          - cell:
+                            - link:
+                              - /url: /i/seed-public-token-5
+                              - generic: /i/seed-public-token-5
+                              - img
+                          - cell: 07/03/2026
+                          - cell: Rp 9.000
+                          - cell:
+                            - generic: VOID
+                          - cell:
+                            - generic:
+                              - button:
+                                - generic: Open actions
+                                - img
+                - generic:
+                  - paragraph: 14 invoices
+                  - generic:
+                    - combobox:
+                      - generic: 10 rows
+                      - img
+                    - button [disabled]: Previous
+                    - button: Next
+  - region "Notifications alt+T"
+  - alert
+  - dialog "Create Invoice from Invoices" [ref=e427]:
+    - generic [ref=e428]:
+      - heading "Create Invoice from Invoices" [level=2] [ref=e429]
+      - paragraph [ref=e430]: Pilih customer dari database (search-select). Sistem akan gunakan/buat conversation otomatis agar invoice tetap terhubung ke CRM.
+    - generic [ref=e432]:
+      - paragraph [ref=e433]: Search Select Customer
+      - textbox "Search customer name or WhatsApp..." [active] [ref=e434]
+      - generic [ref=e436]:
+        - button "Salsa Agency +628111000333 existing convo" [ref=e437] [cursor=pointer]:
+          - generic [ref=e438]:
+            - paragraph [ref=e439]: Salsa Agency
+            - paragraph [ref=e440]: "+628111000333"
+          - generic [ref=e441]: existing convo
+        - button "Rama Wedding +628111000222 existing convo" [ref=e442] [cursor=pointer]:
+          - generic [ref=e443]:
+            - paragraph [ref=e444]: Rama Wedding
+            - paragraph [ref=e445]: "+628111000222"
+          - generic [ref=e446]: existing convo
+        - button "Dina Catering +628111000111 existing convo" [ref=e447] [cursor=pointer]:
+          - generic [ref=e448]:
+            - paragraph [ref=e449]: Dina Catering
+            - paragraph [ref=e450]: "+628111000111"
+          - generic [ref=e451]: existing convo
+        - button "+628662776277 +628662776277 existing convo" [ref=e452] [cursor=pointer]:
+          - generic [ref=e453]:
+            - paragraph [ref=e454]: "+628662776277"
+            - paragraph [ref=e455]: "+628662776277"
+          - generic [ref=e456]: existing convo
+        - button "+62892662777828 +62892662777828 existing convo" [ref=e457] [cursor=pointer]:
+          - generic [ref=e458]:
+            - paragraph [ref=e459]: "+62892662777828"
+            - paragraph [ref=e460]: "+62892662777828"
+          - generic [ref=e461]: existing convo
+        - button "+62897762777728 +62897762777728 existing convo" [ref=e462] [cursor=pointer]:
+          - generic [ref=e463]:
+            - paragraph [ref=e464]: "+62897762777728"
+            - paragraph [ref=e465]: "+62897762777728"
+          - generic [ref=e466]: existing convo
+        - button "BUnda +628993904333 existing convo" [ref=e467] [cursor=pointer]:
+          - generic [ref=e468]:
+            - paragraph [ref=e469]: BUnda
+            - paragraph [ref=e470]: "+628993904333"
+          - generic [ref=e471]: existing convo
+        - button "+6289524789183 +6289524789183 existing convo" [ref=e472] [cursor=pointer]:
+          - generic [ref=e473]:
+            - paragraph [ref=e474]: "+6289524789183"
+            - paragraph [ref=e475]: "+6289524789183"
+          - generic [ref=e476]: existing convo
+        - button "LGH Khun +6289524789181 existing convo" [ref=e477] [cursor=pointer]:
+          - generic [ref=e478]:
+            - paragraph [ref=e479]: LGH Khun
+            - paragraph [ref=e480]: "+6289524789181"
+          - generic [ref=e481]: existing convo
+        - button "LGH Khun +117579125403866 existing convo" [ref=e482] [cursor=pointer]:
+          - generic [ref=e483]:
+            - paragraph [ref=e484]: LGH Khun
+            - paragraph [ref=e485]: "+117579125403866"
+          - generic [ref=e486]: existing convo
+    - generic [ref=e487]:
+      - button "Cancel" [ref=e488] [cursor=pointer]
+      - button "Buat Manual" [ref=e489] [cursor=pointer]
+      - button "Continue" [disabled]
+    - button "Close" [ref=e490] [cursor=pointer]:
+      - img [ref=e491]
+      - generic [ref=e494]: Close

@@ -1,0 +1,116 @@
+- generic [active] [ref=e1]:
+  - generic [ref=e2]:
+    - main [ref=e3]:
+      - main [ref=e4]:
+        - generic [ref=e5]:
+          - button "Toggle Sidebar" [ref=e7] [cursor=pointer]:
+            - img
+            - generic [ref=e8]: Toggle Sidebar
+          - generic [ref=e10]:
+            - generic [ref=e11]:
+              - generic [ref=e12]:
+                - img [ref=e14]
+                - generic [ref=e17]:
+                  - heading "Invoice System" [level=1] [ref=e18]
+                  - paragraph [ref=e19]: Kelola invoice, pengiriman, pelunasan, dan sinkronisasi stage CRM dari satu workspace.
+              - generic [ref=e20]:
+                - generic [ref=e21]: All Invoices
+                - button "Create Invoice" [ref=e22] [cursor=pointer]
+                - link "Buka Inbox CRM" [ref=e23] [cursor=pointer]:
+                  - /url: /inbox
+                  - text: Buka Inbox CRM
+                  - img [ref=e24]
+            - generic [ref=e27]:
+              - article [ref=e28]:
+                - paragraph [ref=e29]: Paid invoices
+                - paragraph [ref=e30]: "0"
+              - article [ref=e31]:
+                - paragraph [ref=e32]: Unpaid invoices
+                - paragraph [ref=e33]: "0"
+              - article [ref=e34]:
+                - paragraph [ref=e35]: Total revenue
+                - paragraph [ref=e36]: Rp 0
+            - generic [ref=e37]:
+              - generic [ref=e38]:
+                - generic [ref=e39]:
+                  - heading "Invoices" [level=2] [ref=e40]
+                  - paragraph [ref=e41]: Business invoice registry
+                - generic [ref=e42]:
+                  - generic [ref=e43]:
+                    - img
+                    - textbox [ref=e44]:
+                      - /placeholder: Search...
+                  - combobox [ref=e45] [cursor=pointer]:
+                    - generic: ALL
+                    - img [ref=e46]
+                  - button "Columns" [ref=e48] [cursor=pointer]
+              - table [ref=e51]:
+                - rowgroup [ref=e52]:
+                  - row "Select all Number Customer Public Link Date Amount Status" [ref=e53]:
+                    - columnheader "Select all" [ref=e54]:
+                      - checkbox "Select all" [ref=e55] [cursor=pointer]
+                    - columnheader [ref=e56]
+                    - columnheader "Number" [ref=e57]:
+                      - button "Number" [ref=e58] [cursor=pointer]:
+                        - text: Number
+                        - img
+                    - columnheader "Customer" [ref=e59]:
+                      - button "Customer" [ref=e60] [cursor=pointer]:
+                        - text: Customer
+                        - img
+                    - columnheader "Public Link" [ref=e61]:
+                      - button "Public Link" [ref=e62] [cursor=pointer]:
+                        - text: Public Link
+                        - img
+                    - columnheader "Date" [ref=e63]:
+                      - button "Date" [ref=e64] [cursor=pointer]:
+                        - text: Date
+                        - img
+                    - columnheader "Amount" [ref=e65]:
+                      - button "Amount" [ref=e66] [cursor=pointer]:
+                        - text: Amount
+                        - img
+                    - columnheader "Status" [ref=e67]:
+                      - button "Status" [ref=e68] [cursor=pointer]:
+                        - text: Status
+                        - img
+                    - columnheader [ref=e69]
+                - rowgroup [ref=e70]:
+                  - row "Loading invoices..." [ref=e71]:
+                    - cell "Loading invoices..." [ref=e72]
+              - generic [ref=e73]:
+                - paragraph [ref=e74]: 0 invoices
+                - generic [ref=e75]:
+                  - combobox [ref=e76] [cursor=pointer]:
+                    - generic: 10 rows
+                    - img [ref=e77]
+                  - button "Previous" [disabled]
+                  - button "Next" [disabled]
+    - navigation "Mobile navigation" [ref=e79]:
+      - list [ref=e80]:
+        - listitem [ref=e81]:
+          - link "Dashboard" [ref=e82] [cursor=pointer]:
+            - /url: /dashboard
+            - img [ref=e83]
+        - listitem [ref=e88]:
+          - link "Inbox" [ref=e89] [cursor=pointer]:
+            - /url: /inbox
+            - img [ref=e90]
+        - listitem [ref=e92]:
+          - link "Customers" [ref=e93] [cursor=pointer]:
+            - /url: /customers
+            - img [ref=e94]
+        - listitem [ref=e99]:
+          - link "Invoices" [ref=e100] [cursor=pointer]:
+            - /url: /invoices
+            - img [ref=e101]
+        - listitem [ref=e104]:
+          - link "Pipeline" [ref=e105] [cursor=pointer]:
+            - /url: /crm/pipelines
+            - img [ref=e106]
+        - listitem [ref=e110]:
+          - link "Settings" [ref=e111] [cursor=pointer]:
+            - /url: /settings
+            - img [ref=e112]
+  - region "Notifications alt+T"
+  - alert [ref=e115]

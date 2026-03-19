@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 
 import { AppSidebar } from "@/components/app-sidebar";
+import { MobileBottomNav } from "@/components/layout/MobileBottomNav";
 import { ThemeToggle } from "@/components/ui/theme-toggle";
 import { SidebarInset, SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
 
@@ -11,6 +12,7 @@ type AppShellProps = {
   user: {
     email: string;
     name: string | null;
+    avatarUrl?: string | null;
   } | null;
   children: React.ReactNode;
 };
@@ -18,8 +20,14 @@ type AppShellProps = {
 const publicRoutes = new Set(["/", "/login", "/register"]);
 
 export function AppShell({ user, children }: AppShellProps) {
-  const pathname = usePathname();
-  const isPublicRoute = publicRoutes.has(pathname);
+  const pathname = usePathname() ?? "";
+
+  const isPublicInvoiceRoute = pathname.startsWith("/i/");
+  const isPublicRoute = publicRoutes.has(pathname) || isPublicInvoiceRoute;
+
+  if (isPublicInvoiceRoute) {
+    return <main className="h-screen overflow-auto bg-background">{children}</main>;
+  }
 
   if (isPublicRoute) {
     return (
@@ -38,10 +46,10 @@ export function AppShell({ user, children }: AppShellProps) {
   }
 
   return (
-    <SidebarProvider defaultOpen={false}>
+    <SidebarProvider defaultOpen={true} className="h-dvh overflow-hidden">
       <AppSidebar user={user} />
-      <SidebarInset className="min-h-0 overflow-hidden md:m-0 md:rounded-none md:shadow-none">
-        <main className="flex h-full min-h-0 flex-1 overflow-hidden p-2 md:p-4">
+      <SidebarInset className="h-full min-h-0 overflow-hidden md:m-0 md:rounded-none md:shadow-none">
+        <main className="flex h-full min-h-0 flex-1 overflow-hidden p-2 pb-[5.25rem] md:p-4">
           <div className="flex h-full min-h-0 w-full flex-1 flex-col overflow-hidden rounded-[28px] border border-border/80 bg-surface/90 shadow-[0_20px_60px_hsl(var(--foreground)/0.06)] backdrop-blur">
             <div className="px-2 pt-2 md:hidden">
               <SidebarTrigger className="rounded-lg border border-border/70 bg-card hover:bg-accent" />
@@ -52,6 +60,7 @@ export function AppShell({ user, children }: AppShellProps) {
           </div>
         </main>
       </SidebarInset>
+      <MobileBottomNav pathname={pathname} />
     </SidebarProvider>
   );
 }

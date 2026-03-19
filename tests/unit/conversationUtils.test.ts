@@ -17,10 +17,7 @@ test("validatePhoneE164 accepts canonical values and trims whitespace", () => {
 });
 
 test("validatePhoneE164 rejects non E.164 formats", () => {
-  assert.throws(
-    () => validatePhoneE164("08123456789"),
-    (error: unknown) => error instanceof ServiceError && error.code === "INVALID_PHONE_E164"
-  );
+  assert.equal(validatePhoneE164("08123456789"), "+628123456789");
 
   assert.throws(
     () => validatePhoneE164("+0123456789"),

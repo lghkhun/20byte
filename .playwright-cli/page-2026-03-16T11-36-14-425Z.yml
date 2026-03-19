@@ -1,0 +1,263 @@
+- generic [active] [ref=e1]:
+  - generic [ref=e2]:
+    - generic [ref=e5]:
+      - list [ref=e7]:
+        - listitem [ref=e8]:
+          - link "20 20byte Chat-first CRM" [ref=e9] [cursor=pointer]:
+            - /url: /inbox
+            - generic [ref=e11]: "20"
+            - generic [ref=e12]:
+              - generic [ref=e13]: 20byte
+              - generic [ref=e14]: Chat-first CRM
+      - generic [ref=e15]:
+        - generic [ref=e16]:
+          - generic [ref=e17]: Platform
+          - list [ref=e18]:
+            - listitem [ref=e19]:
+              - link "Dashboard" [ref=e20] [cursor=pointer]:
+                - /url: /dashboard
+                - img [ref=e21]
+                - generic [ref=e26]: Dashboard
+            - listitem [ref=e27]:
+              - link "Inbox" [ref=e28] [cursor=pointer]:
+                - /url: /inbox
+                - img [ref=e29]
+                - generic [ref=e31]: Inbox
+            - listitem [ref=e32]:
+              - link "Customers" [ref=e33] [cursor=pointer]:
+                - /url: /customers
+                - img [ref=e34]
+                - generic [ref=e39]: Customers
+            - listitem [ref=e40]:
+              - link "Invoices" [ref=e41] [cursor=pointer]:
+                - /url: /invoices
+                - img [ref=e42]
+                - generic [ref=e45]: Invoices
+            - listitem [ref=e46]:
+              - link "CRM Pipeline" [ref=e47] [cursor=pointer]:
+                - /url: /crm/pipelines
+                - img [ref=e48]
+                - generic [ref=e52]: CRM Pipeline
+            - listitem [ref=e53]:
+              - link "Settings" [ref=e54] [cursor=pointer]:
+                - /url: /settings
+                - img [ref=e55]
+                - generic [ref=e58]: Settings
+              - button "Toggle" [ref=e59] [cursor=pointer]:
+                - img [ref=e60]
+                - generic [ref=e62]: Toggle
+            - listitem [ref=e63]:
+              - link "UI Kit" [ref=e64] [cursor=pointer]:
+                - /url: /ui-kit
+                - img [ref=e65]
+                - generic [ref=e71]: UI Kit
+        - generic [ref=e72]:
+          - generic [ref=e73]: Business Tools
+          - list [ref=e75]:
+            - listitem [ref=e76]:
+              - link "Settings" [ref=e77] [cursor=pointer]:
+                - /url: /settings
+                - img [ref=e78]
+                - generic [ref=e81]: Settings
+      - list [ref=e83]:
+        - listitem [ref=e84]:
+          - button "SO Seed Owner owner@seed.20byte.local" [ref=e85] [cursor=pointer]:
+            - generic [ref=e87]: SO
+            - generic [ref=e88]:
+              - generic [ref=e89]: Seed Owner
+              - generic [ref=e90]: owner@seed.20byte.local
+            - img [ref=e91]
+    - main [ref=e94]:
+      - main [ref=e95]:
+        - generic [ref=e98]:
+          - generic [ref=e100]:
+            - generic [ref=e102]:
+              - img [ref=e104]
+              - generic [ref=e108]:
+                - heading "CRM Pipeline Kanban" [level=1] [ref=e109]
+                - paragraph [ref=e110]: Pipeline bisnis jasa, tersinkron langsung dengan stage di inbox CRM.
+            - generic [ref=e111]:
+              - paragraph [ref=e112]: Pipeline Aktif
+              - paragraph [ref=e113]: Pipellead default
+          - generic [ref=e114]:
+            - generic [ref=e115]:
+              - combobox [ref=e116] [cursor=pointer]:
+                - generic: Pipellead default
+                - img [ref=e117]
+              - combobox [ref=e119] [cursor=pointer]:
+                - generic: Open
+                - img [ref=e120]
+              - combobox [ref=e122] [cursor=pointer]:
+                - generic: Semua assignee
+                - img [ref=e123]
+              - textbox "Activity from date" [ref=e125]
+              - textbox "Activity to date" [ref=e126]
+            - generic [ref=e127]:
+              - button "Refresh Board" [ref=e128] [cursor=pointer]
+              - button "Export CSV" [ref=e145] [cursor=pointer]
+              - button "Reset Filter" [ref=e129] [cursor=pointer]
+              - generic [ref=e130]:
+                - button "Compact" [ref=e131] [cursor=pointer]
+                - button "Comfortable" [ref=e132] [cursor=pointer]
+          - generic [ref=e133]:
+            - tablist [ref=e134]:
+              - tab "Kanban Board" [selected] [ref=e135] [cursor=pointer]
+              - tab "Pipeline Settings" [ref=e136] [cursor=pointer]
+            - tabpanel "Kanban Board" [ref=e137]:
+              - generic [ref=e138]:
+                - generic [ref=e139]:
+                  - generic [ref=e140]:
+                    - heading "Kanban Board" [level=2] [ref=e141]
+                    - paragraph [ref=e142]: Drag & drop kartu ke stage target, atau gunakan quick action.
+                  - paragraph [ref=e146]: "Pipeline aktif: Pipellead default"
+                - generic [ref=e147]:
+                  - article [ref=e148]:
+                    - paragraph [ref=e149]: Inisiasi Chat
+                    - paragraph [ref=e150]: "2"
+                    - paragraph [ref=e151]: "Ke Invoice: 150%"
+                  - article [ref=e152]:
+                    - paragraph [ref=e153]: Invoice
+                    - paragraph [ref=e154]: "3"
+                    - paragraph [ref=e155]: "Ke Follow Up: 0%"
+                  - article [ref=e156]:
+                    - paragraph [ref=e157]: Follow Up
+                    - paragraph [ref=e158]: "0"
+                    - paragraph [ref=e159]: "Ke Sudah Bayar: -"
+                  - article [ref=e160]:
+                    - paragraph [ref=e161]: Sudah Bayar
+                    - paragraph [ref=e162]: "0"
+                    - paragraph [ref=e163]: Stage terakhir
+                - generic [ref=e164]:
+                  - article [ref=e165]:
+                    - generic [ref=e166]:
+                      - heading "Belum Masuk Stage" [level=3] [ref=e167]
+                      - generic [ref=e168]: "3"
+                    - generic [ref=e169]:
+                      - generic [ref=e170]:
+                        - paragraph [ref=e171]: Salsa Agency
+                        - paragraph [ref=e172]: "+628111000333"
+                        - paragraph [ref=e173]: "Here is your invoice: /i/seed-public-token-3 [Automated]"
+                      - generic [ref=e174]:
+                        - paragraph [ref=e175]: Dina Catering
+                        - paragraph [ref=e176]: "+628111000111"
+                        - paragraph [ref=e177]: Invoice sudah dikirim, silakan cek link pembayaran. [Automated]
+                      - generic [ref=e178]:
+                        - paragraph [ref=e179]: "+6289524789183"
+                        - paragraph [ref=e180]: "+6289524789183"
+                        - paragraph [ref=e181]: Belum ada pesan
+                  - article [ref=e182]:
+                    - generic [ref=e183]:
+                      - generic [ref=e184]:
+                        - heading "Inisiasi Chat" [level=3] [ref=e185]
+                        - paragraph [ref=e186]: Tahap 1
+                      - generic [ref=e187]: "2"
+                    - generic [ref=e188]:
+                      - generic [ref=e189]:
+                        - generic [ref=e191]:
+                          - paragraph [ref=e192]: "+62892662777828"
+                          - paragraph [ref=e193]: "+62892662777828"
+                        - paragraph [ref=e194]: Belum ada pesan
+                        - generic [ref=e195]:
+                          - generic [ref=e196]: "Invoice: 0"
+                          - generic [ref=e197]: "Belum lunas: 0"
+                        - generic [ref=e198]:
+                          - paragraph [ref=e199]: "Aktivitas: Belum ada aktivitas"
+                          - generic [ref=e200]:
+                            - button "Move card" [ref=e201] [cursor=pointer]:
+                              - generic [ref=e202]: Move card
+                              - img
+                            - link "Buka Inbox" [ref=e203] [cursor=pointer]:
+                              - /url: /inbox?conversationId=cmmq0cvfe000si0gmjzbqu8tn
+                      - generic [ref=e204]:
+                        - generic [ref=e206]:
+                          - paragraph [ref=e207]: "+62897762777728"
+                          - paragraph [ref=e208]: "+62897762777728"
+                        - paragraph [ref=e209]: Belum ada pesan
+                        - generic [ref=e210]:
+                          - generic [ref=e211]: "Invoice: 0"
+                          - generic [ref=e212]: "Belum lunas: 0"
+                        - generic [ref=e213]:
+                          - paragraph [ref=e214]: "Aktivitas: Belum ada aktivitas"
+                          - generic [ref=e215]:
+                            - button "Move card" [ref=e216] [cursor=pointer]:
+                              - generic [ref=e217]: Move card
+                              - img
+                            - link "Buka Inbox" [ref=e218] [cursor=pointer]:
+                              - /url: /inbox?conversationId=cmmq0cede000oi0gmhfnpmgka
+                    - button "Masukkan 1 lead dari unassigned" [ref=e219] [cursor=pointer]
+                  - article [ref=e220]:
+                    - generic [ref=e221]:
+                      - generic [ref=e222]:
+                        - heading "Invoice" [level=3] [ref=e223]
+                        - paragraph [ref=e224]: Tahap 2
+                      - generic [ref=e225]: "3"
+                    - generic [ref=e226]:
+                      - generic [ref=e227]:
+                        - generic [ref=e229]:
+                          - paragraph [ref=e230]: "+628662776277"
+                          - paragraph [ref=e231]: "+628662776277"
+                        - paragraph [ref=e232]: audit smoke message
+                        - generic [ref=e233]:
+                          - generic [ref=e234]: "Invoice: 9"
+                          - generic [ref=e235]: "Belum lunas: 9"
+                        - generic [ref=e236]:
+                          - paragraph [ref=e237]: "Aktivitas: 16 Mar, 18.27"
+                          - generic [ref=e238]:
+                            - button "Move card" [ref=e239] [cursor=pointer]:
+                              - generic [ref=e240]: Move card
+                              - img
+                            - link "Buka Inbox" [ref=e241] [cursor=pointer]:
+                              - /url: /inbox?conversationId=cmmq0d4gu000wi0gmp8jkmz74
+                      - generic [ref=e242]:
+                        - generic [ref=e244]:
+                          - paragraph [ref=e245]: BUnda
+                          - paragraph [ref=e246]: "+628993904333"
+                        - paragraph [ref=e247]: halo
+                        - generic [ref=e248]:
+                          - generic [ref=e249]: "Invoice: 0"
+                          - generic [ref=e250]: "Belum lunas: 0"
+                        - generic [ref=e251]:
+                          - paragraph [ref=e252]: "Aktivitas: 14 Mar, 13.39"
+                          - generic [ref=e253]:
+                            - button "Move card" [ref=e254] [cursor=pointer]:
+                              - generic [ref=e255]: Move card
+                              - img
+                            - link "Buka Inbox" [ref=e256] [cursor=pointer]:
+                              - /url: /inbox?conversationId=cmmpyh1zh000ii0gmqpmd564b
+                      - generic [ref=e257]:
+                        - generic [ref=e258]:
+                          - generic [ref=e259]:
+                            - paragraph [ref=e260]: LGH Khun
+                            - paragraph [ref=e261]: "+6289524789181"
+                          - generic [ref=e262]: 2 unread
+                        - paragraph [ref=e263]: kok gambarnya ga masuk?
+                        - generic [ref=e264]:
+                          - generic [ref=e265]: "Invoice: 0"
+                          - generic [ref=e266]: "Belum lunas: 0"
+                        - generic [ref=e267]:
+                          - paragraph [ref=e268]: "Aktivitas: 14 Mar, 13.30"
+                          - generic [ref=e269]:
+                            - button "Move card" [ref=e270] [cursor=pointer]:
+                              - generic [ref=e271]: Move card
+                              - img
+                            - link "Buka Inbox" [ref=e272] [cursor=pointer]:
+                              - /url: /inbox?conversationId=cmmpuyyps0003i0c9fmk1j2v5
+                    - button "Masukkan 1 lead dari unassigned" [ref=e273] [cursor=pointer]
+                  - article [ref=e274]:
+                    - generic [ref=e275]:
+                      - generic [ref=e276]:
+                        - heading "Follow Up" [level=3] [ref=e277]
+                        - paragraph [ref=e278]: Tahap 3
+                      - generic [ref=e279]: "0"
+                    - paragraph [ref=e281]: Belum ada kartu di stage ini.
+                    - button "Masukkan 1 lead dari unassigned" [ref=e282] [cursor=pointer]
+                  - article [ref=e283]:
+                    - generic [ref=e284]:
+                      - generic [ref=e285]:
+                        - heading "Sudah Bayar" [level=3] [ref=e286]
+                        - paragraph [ref=e287]: Tahap 4
+                      - generic [ref=e288]: "0"
+                    - paragraph [ref=e290]: Belum ada kartu di stage ini.
+                    - button "Masukkan 1 lead dari unassigned" [ref=e291] [cursor=pointer]
+  - region "Notifications alt+T"
+  - alert [ref=e144]

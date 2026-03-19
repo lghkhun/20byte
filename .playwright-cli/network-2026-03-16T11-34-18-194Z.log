@@ -1,0 +1,11 @@
+[GET] http://127.0.0.1:3100/api/orgs => [200] OK
+[GET] http://127.0.0.1:3100/api/conversations?filter=UNASSIGNED&status=OPEN&page=1&limit=20 => [200] OK
+[GET] http://127.0.0.1:3100/api/realtime/ably/token?orgId=seed_org_alpha&rnd=24357423815138635 => [200] OK
+[POST] https://main.realtime.ably.net/keys/NKLWoA.CndBbA/requestToken?rnd=666985113260511 => [201] 
+[GET] http://127.0.0.1:3100/api/conversations/cmmq0d4gu000wi0gmp8jkmz74 => [200] OK
+[GET] http://127.0.0.1:3100/api/customers/cmmq0d4fz000ui0gm5eb8aq7o/tags => [200] OK
+[GET] http://127.0.0.1:3100/api/customers/cmmq0d4fz000ui0gm5eb8aq7o/notes?page=1&limit=20 => [200] OK
+[GET] http://127.0.0.1:3100/api/conversations/cmmq0d4gu000wi0gmp8jkmz74/crm-context => [200] OK
+[GET] http://127.0.0.1:3100/api/crm/pipelines => [200] OK
+[GET] http://127.0.0.1:3100/api/crm/pipelines/board?pipelineId=cmmpxizv10001i0gmcsza8d72&status=OPEN => [200] OK
+[GET] http://127.0.0.1:3100/api/messages?conversationId=cmmq0d4gu000wi0gmp8jkmz74&page=1&limit=30 => [200] OK

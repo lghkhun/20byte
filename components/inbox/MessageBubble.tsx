@@ -1,7 +1,7 @@
 "use client";
 
 import { MediaContent } from "@/components/inbox/bubble/MediaContent";
-import { formatTime, renderMediaLabel } from "@/components/inbox/bubble/utils";
+import { formatTime, normalizeRuntimeUrl, renderMediaLabel } from "@/components/inbox/bubble/utils";
 import type { MessageItem } from "@/components/inbox/types";
 import { Button } from "@/components/ui/button";
 
@@ -11,15 +11,16 @@ function renderTextWithLinks(text: string) {
 
   return parts.map((part, index) => {
     if (/^https?:\/\//i.test(part)) {
+      const normalizedUrl = normalizeRuntimeUrl(part);
       return (
         <a
           key={`${part}-${index}`}
-          href={part}
+          href={normalizedUrl}
           target="_blank"
           rel="noreferrer"
           className="break-all text-primary underline underline-offset-2"
         >
-          {part}
+          {normalizedUrl}
         </a>
       );
     }

@@ -541,8 +541,8 @@ export function InvoiceDrawer({
 
   return (
     <Drawer open={open} onOpenChange={(nextOpen) => (!nextOpen ? onClose() : undefined)} direction="right">
-      <DrawerContent>
-        <DrawerHeader>
+      <DrawerContent className="data-[vaul-drawer-direction=right]:border-l-border">
+        <DrawerHeader className="shrink-0 border-b border-border/70 px-5 py-4 md:px-6">
           <div className="flex items-start justify-between gap-4">
             <div className="space-y-3">
               <div>
@@ -589,7 +589,7 @@ export function InvoiceDrawer({
         </DrawerHeader>
 
         <form id="invoice-drawer-form" className="flex min-h-0 flex-1 flex-col overflow-hidden" onSubmit={handleCreateInvoice}>
-          <div className="inbox-scroll min-h-0 flex-1 overflow-y-auto overscroll-contain px-6 pb-36 pt-5">
+          <div className="inbox-scroll min-h-0 flex-1 overflow-y-auto overscroll-contain px-5 pb-36 pt-4 md:px-6 md:pt-5">
             <div className="space-y-6">
               <section className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_320px]">
                 <div className="space-y-4">
@@ -1203,7 +1203,7 @@ export function InvoiceDrawer({
           </DialogContent>
         </Dialog>
 
-        <DrawerFooter className="shrink-0 shadow-[0_-12px_24px_hsl(var(--foreground)/0.04)]">
+        <DrawerFooter className="shrink-0 border-t border-border/70 bg-background px-5 py-4 shadow-[0_-12px_24px_hsl(var(--foreground)/0.04)] md:px-6">
           <div className="flex flex-wrap items-center justify-end gap-3">
             <DrawerClose asChild>
               <Button type="button" variant="secondary" className="rounded-md bg-rose-400 px-6 text-white hover:bg-rose-500">

@@ -31,3 +31,23 @@ export function renderMediaLabel(message: MessageItem): string | null {
 
   return null;
 }
+
+export function normalizeRuntimeUrl(rawUrl: string): string {
+  if (typeof window === "undefined") {
+    return rawUrl;
+  }
+
+  try {
+    const parsed = new URL(rawUrl);
+    const isLegacyLocalhost =
+      (parsed.hostname === "localhost" || parsed.hostname === "127.0.0.1") && parsed.port === "3000";
+
+    if (!isLegacyLocalhost) {
+      return rawUrl;
+    }
+
+    return `${window.location.origin}${parsed.pathname}${parsed.search}${parsed.hash}`;
+  } catch {
+    return rawUrl;
+  }
+}

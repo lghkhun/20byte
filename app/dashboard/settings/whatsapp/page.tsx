@@ -1,5 +1,5 @@
-import { WhatsAppConnectionSettings } from "@/components/settings/WhatsAppConnectionSettings";
+import { redirect } from "next/navigation";
 
 export default function WhatsAppSettingsPage() {
-  return <WhatsAppConnectionSettings />;
+  redirect("/settings?tab=whatsapp");
 }

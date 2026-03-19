@@ -249,7 +249,7 @@ export function ChatWindow({
   }
 
   return (
-    <section data-panel="chat-window" className="relative flex h-full min-h-0 max-h-full flex-col overflow-hidden rounded-[24px] border border-border/70 bg-card/95 shadow-md shadow-black/5 backdrop-blur-sm">
+    <section data-panel="chat-window" className="inbox-scroll relative flex h-full min-h-0 max-h-full flex-col overflow-y-auto overscroll-contain rounded-[24px] border border-border/70 bg-card/95 shadow-md shadow-black/5 backdrop-blur-sm">
       <ChatHeader
         conversation={conversation}
         displayName={displayName}

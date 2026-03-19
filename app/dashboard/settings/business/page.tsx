@@ -1,5 +1,5 @@
-import { BusinessSettings } from "@/components/settings/BusinessSettings";
+import { redirect } from "next/navigation";
 
 export default function BusinessSettingsPage() {
-  return <BusinessSettings />;
+  redirect("/settings?tab=business");
 }

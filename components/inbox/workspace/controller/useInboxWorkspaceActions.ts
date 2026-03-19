@@ -44,13 +44,11 @@ export function useInboxWorkspaceActions(state: InboxWorkspaceState, loaders: In
       const payload = (await response.json().catch(() => null)) as SendMessageResponse | null;
       if (!response.ok) {
         setMessageError(payload?.error?.message ?? "Failed to send message.");
-        await loadMessages(selectedConversationId);
-        await loadConversations();
+        await Promise.all([loadMessages(selectedConversationId), loadConversations()]);
         return;
       }
 
-      await loadMessages(selectedConversationId);
-      await loadConversations();
+      await Promise.all([loadMessages(selectedConversationId), loadConversations()]);
     },
     [loadConversations, loadMessages, orgId, selectedConversationId, setMessageError]
   );
@@ -114,13 +112,11 @@ export function useInboxWorkspaceActions(state: InboxWorkspaceState, loaders: In
       const payload = (await response.json().catch(() => null)) as SendMessageResponse | null;
       if (!response.ok) {
         setMessageError(payload?.error?.message ?? "Failed to send template message.");
-        await loadMessages(selectedConversationId);
-        await loadConversations();
+        await Promise.all([loadMessages(selectedConversationId), loadConversations()]);
         return;
       }
 
-      await loadMessages(selectedConversationId);
-      await loadConversations();
+      await Promise.all([loadMessages(selectedConversationId), loadConversations()]);
     },
     [loadConversations, loadMessages, orgId, selectedConversationId, setMessageError]
   );
@@ -145,13 +141,11 @@ export function useInboxWorkspaceActions(state: InboxWorkspaceState, loaders: In
       const payload = (await response.json().catch(() => null)) as SendMessageResponse | null;
       if (!response.ok) {
         setMessageError(payload?.error?.message ?? "Failed to process attachment.");
-        await loadMessages(selectedConversationId);
-        await loadConversations();
+        await Promise.all([loadMessages(selectedConversationId), loadConversations()]);
         return;
       }
 
-      await loadMessages(selectedConversationId);
-      await loadConversations();
+      await Promise.all([loadMessages(selectedConversationId), loadConversations()]);
     },
     [loadConversations, loadMessages, orgId, selectedConversationId, setMessageError]
   );
@@ -212,8 +206,7 @@ export function useInboxWorkspaceActions(state: InboxWorkspaceState, loaders: In
         return;
       }
 
-      await loadMessages(selectedConversationId);
-      await loadConversations();
+      await Promise.all([loadMessages(selectedConversationId), loadConversations()]);
     },
     [loadConversations, loadMessages, orgId, selectedConversationId, setMessageError]
   );

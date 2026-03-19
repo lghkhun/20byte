@@ -1,0 +1,122 @@
+- generic [active] [ref=e1]:
+  - alert [ref=e2]
+  - generic [ref=e3]:
+    - generic [ref=e6]:
+      - list [ref=e8]:
+        - listitem [ref=e9]:
+          - link "20 20byte Chat-first CRM" [ref=e10] [cursor=pointer]:
+            - /url: /inbox
+            - generic [ref=e12]: "20"
+            - generic [ref=e13]:
+              - generic [ref=e14]: 20byte
+              - generic [ref=e15]: Chat-first CRM
+      - generic [ref=e16]:
+        - generic [ref=e17]:
+          - generic [ref=e18]: Platform
+          - list [ref=e19]:
+            - listitem [ref=e20]:
+              - link "Dashboard" [ref=e21] [cursor=pointer]:
+                - /url: /dashboard
+                - img [ref=e22]
+                - generic [ref=e27]: Dashboard
+            - listitem [ref=e28]:
+              - link "Inbox" [ref=e29] [cursor=pointer]:
+                - /url: /inbox
+                - img [ref=e30]
+                - generic [ref=e32]: Inbox
+            - listitem [ref=e33]:
+              - link "Customers" [ref=e34] [cursor=pointer]:
+                - /url: /customers
+                - img [ref=e35]
+                - generic [ref=e40]: Customers
+            - listitem [ref=e41]:
+              - link "Invoices" [ref=e42] [cursor=pointer]:
+                - /url: /invoices
+                - img [ref=e43]
+                - generic [ref=e46]: Invoices
+            - listitem [ref=e47]:
+              - link "CRM Pipeline" [ref=e48] [cursor=pointer]:
+                - /url: /crm/pipelines
+                - img [ref=e49]
+                - generic [ref=e53]: CRM Pipeline
+            - listitem [ref=e54]:
+              - link "Settings" [ref=e55] [cursor=pointer]:
+                - /url: /settings
+                - img [ref=e56]
+                - generic [ref=e59]: Settings
+              - button "Toggle" [expanded] [ref=e60] [cursor=pointer]:
+                - img [ref=e61]
+                - generic [ref=e63]: Toggle
+              - list [ref=e65]:
+                - listitem [ref=e66]:
+                  - link "Business" [ref=e67] [cursor=pointer]:
+                    - /url: /settings?tab=business
+                    - generic [ref=e68]: Business
+                - listitem [ref=e69]:
+                  - link "Team" [ref=e70] [cursor=pointer]:
+                    - /url: /settings?tab=team
+                    - generic [ref=e71]: Team
+                - listitem [ref=e72]:
+                  - link "WhatsApp" [ref=e73] [cursor=pointer]:
+                    - /url: /settings?tab=whatsapp
+                    - generic [ref=e74]: WhatsApp
+                - listitem [ref=e75]:
+                  - link "Shortlinks" [ref=e76] [cursor=pointer]:
+                    - /url: /settings?tab=shortlinks
+                    - generic [ref=e77]: Shortlinks
+                - listitem [ref=e78]:
+                  - link "Profile" [ref=e79] [cursor=pointer]:
+                    - /url: /settings?tab=profile
+                    - generic [ref=e80]: Profile
+        - generic [ref=e81]:
+          - generic [ref=e82]: Business Tools
+          - list [ref=e84]:
+            - listitem [ref=e85]:
+              - link "Settings" [ref=e86] [cursor=pointer]:
+                - /url: /settings
+                - img [ref=e87]
+                - generic [ref=e90]: Settings
+      - list [ref=e92]:
+        - listitem [ref=e93]:
+          - button "SO Seed Owner owner@seed.20byte.local" [ref=e94] [cursor=pointer]:
+            - generic [ref=e96]: SO
+            - generic [ref=e97]:
+              - generic [ref=e98]: Seed Owner
+              - generic [ref=e99]: owner@seed.20byte.local
+            - img [ref=e100]
+    - main [ref=e103]:
+      - main [ref=e104]:
+        - generic [ref=e107]:
+          - generic [ref=e108]:
+            - heading "Settings" [level=1] [ref=e109]
+            - paragraph [ref=e110]: Semua pengaturan utama bisnis, tim, WhatsApp, shortlinks, dan profil ada dalam satu halaman.
+            - generic [ref=e111]:
+              - button "Business" [ref=e112] [cursor=pointer]
+              - button "Team" [ref=e113] [cursor=pointer]
+              - button "WhatsApp" [ref=e114] [cursor=pointer]
+              - button "Shortlinks" [ref=e115] [cursor=pointer]
+              - button "Profile" [ref=e116] [cursor=pointer]
+          - region "Business settings" [ref=e117]:
+            - generic [ref=e118]:
+              - generic [ref=e119]:
+                - generic [ref=e120]:
+                  - heading "Business Settings" [level=1] [ref=e121]
+                  - paragraph [ref=e122]: Kelola identitas bisnis dan aset default invoice. Logo, tanda tangan, penanggung jawab, dan rekening bank dipakai otomatis saat membuat invoice.
+                - paragraph [ref=e123]: Loading business profile...
+              - generic [ref=e124]:
+                - generic [ref=e125]:
+                  - heading "Bank Transfer Accounts" [level=1] [ref=e126]
+                  - paragraph [ref=e127]: Manual transfer destination accounts for your business (max 5). These accounts are snapshotted into each new invoice.
+                - generic [ref=e128]:
+                  - paragraph [ref=e129]: Business
+                  - paragraph [ref=e130]: Seed Org Alpha
+                - generic [ref=e131]:
+                  - generic [ref=e132]: Bank name
+                  - textbox "Bank name" [ref=e133]
+                  - generic [ref=e134]: Account number
+                  - textbox "Account number" [ref=e135]
+                  - generic [ref=e136]: Account holder
+                  - textbox "Account holder" [ref=e137]
+                  - button "Add Account" [disabled] [ref=e138]
+                - paragraph [ref=e139]: "Configured: 0/5 accounts."
+                - paragraph [ref=e140]: No bank account configured.

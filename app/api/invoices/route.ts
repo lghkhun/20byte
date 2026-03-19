@@ -242,6 +242,7 @@ export async function GET(request: NextRequest) {
   const status = Object.values(InvoiceStatus).includes(statusValue as InvoiceStatus)
     ? (statusValue as InvoiceStatus)
     : undefined;
+  const q = request.nextUrl.searchParams.get("q")?.trim() ?? "";
 
   try {
     const orgId = await resolvePrimaryOrganizationIdForUser(
@@ -253,7 +254,8 @@ export async function GET(request: NextRequest) {
       orgId,
       page,
       limit,
-      status
+      status,
+      q
     });
 
     return NextResponse.json(

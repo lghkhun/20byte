@@ -3,6 +3,7 @@ import { InvoiceStatus } from "@prisma/client";
 import { prisma } from "@/lib/db/prisma";
 import { publishInvoicePaidEvent, publishInvoiceUpdatedEvent } from "@/lib/ably/publisher";
 import { writeAuditLogSafe } from "@/server/services/auditLogService";
+import { syncConversationCrmStageFromInvoice } from "@/server/services/crmPipelineService";
 import { requireInvoiceAccess, requireInvoiceMembershipRole } from "@/server/services/invoice/access";
 import {
   assertMarkPaidProofRule,
@@ -62,6 +63,30 @@ export async function markInvoicePaid(input: MarkInvoicePaidInput): Promise<Mark
     invoiceId: invoice.id,
     nextStatus
   });
+
+  try {
+    if (updated.status === InvoiceStatus.PAID) {
+      await syncConversationCrmStageFromInvoice({
+        orgId,
+        conversationId: invoice.conversationId ?? "",
+        target: "INVOICE_PAID"
+      });
+    } else if (updated.status === InvoiceStatus.SENT || updated.status === InvoiceStatus.PARTIALLY_PAID) {
+      await syncConversationCrmStageFromInvoice({
+        orgId,
+        conversationId: invoice.conversationId ?? "",
+        target: "INVOICE_SENT"
+      });
+    }
+  } catch (error) {
+    console.warn("[invoice.payment] failed to sync CRM stage after payment update", {
+      orgId,
+      conversationId: invoice.conversationId,
+      invoiceId: updated.id,
+      status: updated.status,
+      error
+    });
+  }
 
   await writeAuditLogSafe({
     orgId,

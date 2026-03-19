@@ -1,9 +1,9 @@
 import { type NextRequest, NextResponse } from "next/server";
 
 import { requireApiSession } from "@/lib/auth/middleware";
-import { normalizeWhatsAppDestination } from "@/lib/whatsapp/e164";
 import { prisma } from "@/lib/db/prisma";
 import { canAccessInbox } from "@/lib/permissions/orgPermissions";
+import { normalizeAndValidatePhoneE164 } from "@/lib/validation/formValidation";
 import { resolvePrimaryOrganizationIdForUser } from "@/server/services/organizationService";
 import { ServiceError } from "@/server/services/serviceError";
 
@@ -36,6 +36,15 @@ function parseNumber(value: string | null, fallback: number): number {
   }
 
   return parsed;
+}
+
+function parseBooleanFlag(value: string | null): boolean {
+  if (!value) {
+    return false;
+  }
+
+  const normalized = value.trim().toLowerCase();
+  return normalized === "1" || normalized === "true" || normalized === "yes";
 }
 
 async function requireCustomerDirectoryAccess(userId: string, orgId: string) {
@@ -74,7 +83,9 @@ export async function GET(request: NextRequest) {
     await requireCustomerDirectoryAccess(auth.session.userId, orgId);
 
     const page = parseNumber(request.nextUrl.searchParams.get("page"), 1);
-    const limit = Math.min(50, parseNumber(request.nextUrl.searchParams.get("limit"), 20));
+    const lightweight = parseBooleanFlag(request.nextUrl.searchParams.get("light"));
+    const maxLimit = lightweight ? 200 : 50;
+    const limit = Math.min(maxLimit, parseNumber(request.nextUrl.searchParams.get("limit"), 20));
     const query = request.nextUrl.searchParams.get("q")?.trim() ?? "";
     const tagId = request.nextUrl.searchParams.get("tagId")?.trim() ?? "";
 
@@ -98,6 +109,55 @@ export async function GET(request: NextRequest) {
           }
         : {})
     };
+
+    if (lightweight) {
+      const [total, customers] = await prisma.$transaction([
+        prisma.customer.count({ where }),
+        prisma.customer.findMany({
+          where,
+          orderBy: [{ updatedAt: "desc" }, { createdAt: "desc" }],
+          skip: (page - 1) * limit,
+          take: limit,
+          select: {
+            id: true,
+            displayName: true,
+            phoneE164: true,
+            waProfilePicUrl: true,
+            createdAt: true,
+            updatedAt: true,
+            conversations: {
+              orderBy: [{ updatedAt: "desc" }, { createdAt: "desc" }],
+              take: 1,
+              select: {
+                id: true
+              }
+            }
+          }
+        })
+      ]);
+
+      return NextResponse.json({
+        data: {
+          customers: customers.map((customer) => ({
+            id: customer.id,
+            displayName: customer.displayName,
+            phoneE164: customer.phoneE164,
+            avatarUrl: customer.waProfilePicUrl,
+            createdAt: customer.createdAt,
+            updatedAt: customer.updatedAt,
+            conversationCount: 0,
+            latestConversationId: customer.conversations[0]?.id ?? null,
+            tags: []
+          })),
+          tags: []
+        },
+        meta: {
+          page,
+          limit,
+          total
+        }
+      });
+    }
 
     const [total, customers, tags] = await prisma.$transaction([
       prisma.customer.count({ where }),
@@ -128,6 +188,13 @@ export async function GET(request: NextRequest) {
                 }
               }
             }
+          },
+          conversations: {
+            orderBy: [{ updatedAt: "desc" }, { createdAt: "desc" }],
+            take: 1,
+            select: {
+              id: true
+            }
           }
         }
       }),
@@ -157,6 +224,7 @@ export async function GET(request: NextRequest) {
           createdAt: customer.createdAt,
           updatedAt: customer.updatedAt,
           conversationCount: customer._count.conversations,
+          latestConversationId: customer.conversations[0]?.id ?? null,
           tags: customer.tagLinks.map((link) => link.tag)
         })),
         tags: tags.map((tag) => ({
@@ -201,12 +269,8 @@ export async function POST(request: NextRequest) {
     );
     await requireCustomerDirectoryAccess(auth.session.userId, orgId);
 
-    const phoneE164 = normalizeWhatsAppDestination(typeof body.phoneE164 === "string" ? body.phoneE164 : "") ?? "";
+    const phoneE164 = normalizeAndValidatePhoneE164(typeof body.phoneE164 === "string" ? body.phoneE164 : "");
     const name = typeof body.name === "string" ? body.name.trim() : "";
-
-    if (!phoneE164) {
-      return errorResponse(400, "MISSING_PHONE_NUMBER", "phoneE164 is required.");
-    }
 
     const customer = await prisma.customer.upsert({
       where: {

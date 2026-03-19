@@ -7,10 +7,12 @@ import {
   canManageOrganizationMember,
   canViewOrganizationMembers
 } from "@/lib/permissions/orgPermissions";
+import { normalizeAndValidateEmail } from "@/lib/validation/formValidation";
 import { ServiceError } from "@/server/services/serviceError";
 
 const MIN_ORG_NAME_LENGTH = 2;
 const MAX_ORG_NAME_LENGTH = 80;
+const MAX_NON_OWNER_MEMBERS = 4;
 
 type CreateOrganizationInput = {
   userId: string;
@@ -52,10 +54,6 @@ type OrganizationMemberSummary = {
   createdAt: Date;
 };
 
-function normalizeEmail(value: string): string {
-  return value.trim().toLowerCase();
-}
-
 function normalizeOrgName(value: string): string {
   return value.trim();
 }
@@ -63,6 +61,15 @@ function normalizeOrgName(value: string): string {
 function normalizeOptionalText(value: string | null | undefined): string | null {
   const normalized = value?.trim() ?? "";
   return normalized ? normalized : null;
+}
+
+function normalizeOptionalEmail(value: string | null | undefined): string | null {
+  const normalized = value?.trim() ?? "";
+  if (!normalized) {
+    return null;
+  }
+
+  return normalizeAndValidateEmail(normalized);
 }
 
 function validateOrgName(name: string): string {
@@ -77,6 +84,20 @@ function validateOrgName(name: string): string {
   }
 
   return normalizedName;
+}
+
+export function assertNonOwnerMemberLimit(role: Role, nonOwnerCount: number): void {
+  if (role === Role.OWNER) {
+    return;
+  }
+
+  if (nonOwnerCount >= MAX_NON_OWNER_MEMBERS) {
+    throw new ServiceError(
+      400,
+      "ORG_MEMBER_LIMIT_EXCEEDED",
+      `MVP saat ini membatasi maksimal ${MAX_NON_OWNER_MEMBERS} anggota per business (di luar owner).`
+    );
+  }
 }
 
 async function requireMembership(userId: string, orgId: string) {
@@ -185,8 +206,34 @@ export async function listOrganizationsForUser(userId: string): Promise<Organiza
 }
 
 export async function getPrimaryOrganizationForUser(userId: string): Promise<OrganizationSummary | null> {
-  const organizations = await listOrganizationsForUser(userId);
-  return organizations[0] ?? null;
+  const membership = await prisma.orgMember.findFirst({
+    where: {
+      userId
+    },
+    include: {
+      org: {
+        select: {
+          id: true,
+          name: true,
+          createdAt: true
+        }
+      }
+    },
+    orderBy: {
+      createdAt: "asc"
+    }
+  });
+
+  if (!membership) {
+    return null;
+  }
+
+  return {
+    id: membership.org.id,
+    name: membership.org.name,
+    role: membership.role,
+    createdAt: membership.org.createdAt
+  };
 }
 
 export async function resolvePrimaryOrganizationIdForUser(userId: string, candidateOrgId: string): Promise<string> {
@@ -261,7 +308,7 @@ export async function updateOrganizationBusinessProfile(input: {
       legalName: normalizeOptionalText(input.legalName),
       responsibleName: normalizeOptionalText(input.responsibleName),
       businessPhone: normalizeOptionalText(input.businessPhone),
-      businessEmail: normalizeOptionalText(input.businessEmail),
+      businessEmail: normalizeOptionalEmail(input.businessEmail),
       businessAddress: normalizeOptionalText(input.businessAddress),
       logoUrl: normalizeOptionalText(input.logoUrl),
       invoiceSignatureUrl: normalizeOptionalText(input.invoiceSignatureUrl)
@@ -327,10 +374,7 @@ export async function addOrganizationMemberByEmail(
     throw new ServiceError(403, "FORBIDDEN_ROLE_ASSIGNMENT", "Your role cannot assign this member role.");
   }
 
-  const normalizedEmail = normalizeEmail(input.email);
-  if (!normalizedEmail) {
-    throw new ServiceError(400, "INVALID_EMAIL", "Email is required.");
-  }
+  const normalizedEmail = normalizeAndValidateEmail(input.email);
 
   const user = await prisma.user.findUnique({
     where: {
@@ -378,6 +422,19 @@ export async function addOrganizationMemberByEmail(
         "Organization must have at least one owner."
       );
     }
+  }
+
+  if (!existingMembership && input.role !== Role.OWNER) {
+    const nonOwnerCount = await prisma.orgMember.count({
+      where: {
+        orgId: input.orgId,
+        role: {
+          not: Role.OWNER
+        }
+      }
+    });
+
+    assertNonOwnerMemberLimit(input.role, nonOwnerCount);
   }
 
   const membership = await prisma.orgMember.upsert({

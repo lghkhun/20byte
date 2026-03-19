@@ -1,0 +1,45 @@
+{
+  "report": [
+    {
+      "route": "/dashboard",
+      "h1": "Dashboard",
+      "menuSnippet": null
+    },
+    {
+      "route": "/inbox",
+      "h1": "Inbox Workspace",
+      "menuSnippet": "+6+628662776277+628662776277OPENInisiasi ChatUnread: 0Last Activity: Mar 16, 05:33 AMAssigned Member: UnassignedCreate InvoiceAssign toPipeline & Peluang-- Pilih Pipeline --Pipellead default-- Pilih Stage --Inisiasi ChatInvoiceFollow UpSudah BayarSimpan PipelineKanban (Open)Pipellead defaultInisiasi Chat5+628662776277+628662776277Stage AktifInvoice0Belum ada kartu pada stage ini.Pindah ke siniFollow Up0Belum ada kartu pada stage ini.Pindah ke siniSudah Bayar0Belum ada kartu pada stage ini.Pindah ke siniCatatan InternalSimpan CatatanBelum ada catatan internal.LabelsAddemeraldamberskyvioletroseslateHot LeadRepeatVIPMedia, Dokumen & TautanMedia & DokumenTidak ada riwayat mediaTautanhttp://localhost:3000/i/HZefaapyh3uPw-3Gngw4T5gCdXxmELkPAttach Payment ProofSelected message: None (use \"Use as payment proof\" in chat bubble)No milestoneFULLDPFINALAttach proofInvoicesInvoicesINV-2026-0014DRAFT27,500 IDRProofs: 0Mar 16, 05:33 AMSendMark PaidINV-2026-0013SENT27,500 IDRProofs: 0Mar 16, 05:27 AMSendMark PaidINV-2026-0012DRAFT27,500 IDRProofs: 0Mar 16, 05:27 AMSendMark PaidINV-2026-0011DRAFT27,500 IDRProofs: 0Mar 16, 05:25 AMSendMark PaidINV-2026-0010DRAFT27,500 IDRProofs: 0Mar 16, 05:23 AMSendMark PaidINV-2026-0009DRAFT27,500 IDRProofs: 0Mar 16, 05:23 AMSendMark PaidTimelineActivity TimelineInvoice INV-2026-0013 sent to customerMar 16, 05:34 AMConversation unassignedMar 16, 05:33 AMLatest message activityMar 16, 05:33 AMInvoice INV-2026-0014 createdMar 16, 05:33 AMInvoice INV-2026-0013 createdMar 16, 05:27 AMInvoice INV-2026-0012 createdMar 16, 05:27 AMInvoice INV-2026-0011 createdMar 16, 05:25 AMInvoice INV-2026-0010 createdMar 16, 05:23 AMInvoice INV-2026-0009 createdMar 16, 05:23 AMInvoice INV-2026-0008 createdMar 16, 05:09 AM"
+    },
+    {
+      "route": "/crm/pipelines",
+      "h1": "CRM Pipeline Kanban",
+      "menuSnippet": null
+    },
+    {
+      "route": "/customers",
+      "h1": "Database Kontak",
+      "menuSnippet": "DatabaseAll ContactsLabel Management"
+    },
+    {
+      "route": "/invoices",
+      "h1": "Invoice System",
+      "menuSnippet": null
+    },
+    {
+      "route": "/settings",
+      "h1": "Settings",
+      "menuSnippet": null
+    }
+  ],
+  "logs": [
+    "[console:info] %cDownload the React DevTools for a better development experience: https://reactjs.org/link/react-devtools font-weight:bold",
+    "[console:info] %cDownload the React DevTools for a better development experience: https://reactjs.org/link/react-devtools font-weight:bold",
+    "[console:info] %cDownload the React DevTools for a better development experience: https://reactjs.org/link/react-devtools font-weight:bold",
+    "[console:warning] 06:23:31.722 Ably: Auth.requestToken(): Expected token request callback to call back with a token string, token request object, or token details object",
+    "[console:error] [realtime] inbox subscription failed: Connection closed",
+    "[console:info] %cDownload the React DevTools for a better development experience: https://reactjs.org/link/react-devtools font-weight:bold",
+    "[console:info] %cDownload the React DevTools for a better development experience: https://reactjs.org/link/react-devtools font-weight:bold",
+    "[console:info] %cDownload the React DevTools for a better development experience: https://reactjs.org/link/react-devtools font-weight:bold",
+    "[console:info] %cDownload the React DevTools for a better development experience: https://reactjs.org/link/react-devtools font-weight:bold"
+  ]
+}

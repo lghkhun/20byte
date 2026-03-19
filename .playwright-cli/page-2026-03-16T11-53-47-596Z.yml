@@ -1,0 +1,113 @@
+- generic [active] [ref=e1]:
+  - generic [ref=e2]:
+    - main [ref=e94]:
+      - main [ref=e95]:
+        - generic [ref=e96]:
+          - button "Toggle Sidebar" [ref=e222] [cursor=pointer]:
+            - img
+            - generic [ref=e223]: Toggle Sidebar
+          - generic [ref=e100]:
+            - generic [ref=e102]:
+              - generic [ref=e103]:
+                - heading "Inbox Workspace" [level=1] [ref=e104]
+                - paragraph [ref=e105]: Kelola percakapan customer, assignment CS, CRM context, dan invoice dalam satu panel.
+              - generic [ref=e106]:
+                - generic [ref=e107]: "Open: 6"
+                - generic [ref=e108]: "Unread: 3"
+            - generic [ref=e224]:
+              - button "Conversations" [ref=e225] [cursor=pointer]
+              - button "Chat" [ref=e226] [cursor=pointer]
+            - generic [ref=e144]:
+              - generic [ref=e227]:
+                - button "Back to conversations" [ref=e228] [cursor=pointer]
+                - button "CRM" [ref=e229] [cursor=pointer]:
+                  - img
+                  - text: CRM
+              - generic [ref=e145]:
+                - generic [ref=e146]:
+                  - generic [ref=e147]:
+                    - generic [ref=e148]: +
+                    - generic [ref=e231]:
+                      - heading "+628662776277" [level=2] [ref=e232]
+                      - generic [ref=e233]:
+                        - generic [ref=e234]: Open
+                        - generic [ref=e235]: "+628662776277"
+                        - generic [ref=e236]:
+                          - img [ref=e237]
+                          - text: Unassigned
+                  - generic [ref=e149]:
+                    - button "Search in messages" [ref=e240] [cursor=pointer]:
+                      - img
+                    - button "Transfer chat" [ref=e241] [cursor=pointer]:
+                      - img
+                    - button "Resolve conversation" [ref=e242] [cursor=pointer]:
+                      - img
+                    - button "Hide CRM panel" [ref=e243] [cursor=pointer]:
+                      - img
+                - generic [ref=e150]:
+                  - generic:
+                    - generic: Mar 14, 2026
+                  - generic [ref=e244]:
+                    - generic [ref=e245]:
+                      - generic [ref=e247]: Mar 14, 2026
+                      - article [ref=e249]:
+                        - generic [ref=e251]: SENT • attempt 1
+                        - paragraph [ref=e252]: cek
+                        - generic [ref=e253]:
+                          - generic [ref=e254]: 02:33 PM
+                          - generic [ref=e255]: ✓✓
+                    - generic [ref=e256]:
+                      - generic [ref=e258]: Today
+                      - article [ref=e260]:
+                        - generic [ref=e262]: SENT • attempt 1
+                        - paragraph [ref=e263]:
+                          - text: "Here is your invoice:"
+                          - link "http://127.0.0.1:3100/i/HZefaapyh3uPw-3Gngw4T5gCdXxmELkP" [ref=e264] [cursor=pointer]:
+                            - /url: http://127.0.0.1:3100/i/HZefaapyh3uPw-3Gngw4T5gCdXxmELkP
+                          - text: "[Automated]"
+                        - generic [ref=e265]:
+                          - generic [ref=e266]: 05:33 AM
+                          - generic [ref=e267]: ✓✓
+                    - article [ref=e270]:
+                      - generic [ref=e272]: SENT • attempt 1
+                      - paragraph [ref=e273]: audit smoke message
+                      - generic [ref=e274]:
+                        - generic [ref=e275]: 06:27 PM
+                        - generic [ref=e276]: ✓✓
+                - generic [ref=e202]:
+                  - generic [ref=e203]:
+                    - textbox "Enter message..." [ref=e204]
+                    - generic [ref=e205]:
+                      - button "Insert emoji" [ref=e206] [cursor=pointer]:
+                        - img
+                      - img [ref=e208] [cursor=pointer]
+                    - button "Send" [ref=e277] [cursor=pointer]
+                  - paragraph [ref=e211]: "Tip: use / for quick reply, I for invoice drawer, and attach file with the paperclip icon."
+    - navigation "Mobile navigation" [ref=e278]:
+      - list [ref=e279]:
+        - listitem [ref=e280]:
+          - link "Dashboard" [ref=e281] [cursor=pointer]:
+            - /url: /dashboard
+            - img [ref=e282]
+        - listitem [ref=e287]:
+          - link "Inbox" [ref=e288] [cursor=pointer]:
+            - /url: /inbox
+            - img [ref=e289]
+        - listitem [ref=e291]:
+          - link "Customers" [ref=e292] [cursor=pointer]:
+            - /url: /customers
+            - img [ref=e293]
+        - listitem [ref=e298]:
+          - link "Invoices" [ref=e299] [cursor=pointer]:
+            - /url: /invoices
+            - img [ref=e300]
+        - listitem [ref=e303]:
+          - link "Pipeline" [ref=e304] [cursor=pointer]:
+            - /url: /crm/pipelines
+            - img [ref=e305]
+        - listitem [ref=e309]:
+          - link "Settings" [ref=e310] [cursor=pointer]:
+            - /url: /settings
+            - img [ref=e311]
+  - region "Notifications alt+T"
+  - alert [ref=e220]

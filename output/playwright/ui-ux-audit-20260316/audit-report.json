@@ -1,0 +1,113 @@
+{
+  "report": [
+    {
+      "route": "/dashboard",
+      "title": "20byte",
+      "h1": null,
+      "navItems": [],
+      "buttons": 2
+    },
+    {
+      "route": "/inbox",
+      "title": "20byte",
+      "h1": null,
+      "navItems": [
+        "http://localhost:3000/i/HZefaapyh3uPw-3Gngw4T5gCdXxmELkP"
+      ],
+      "buttons": 59
+    },
+    {
+      "route": "/crm/pipelines",
+      "title": "20byte",
+      "h1": "CRM Pipeline Kanban",
+      "navItems": [],
+      "buttons": 10
+    },
+    {
+      "route": "/customers",
+      "title": "20byte",
+      "h1": "Database Kontak",
+      "navItems": [],
+      "buttons": 8
+    },
+    {
+      "route": "/invoices",
+      "title": "20byte",
+      "h1": "Invoice System",
+      "navItems": [],
+      "buttons": 32
+    },
+    {
+      "route": "/settings",
+      "title": "20byte",
+      "h1": "Settings",
+      "navItems": [],
+      "buttons": 14
+    },
+    {
+      "route": "/settings/profile",
+      "title": "20byte",
+      "h1": "Settings",
+      "navItems": [],
+      "buttons": 8
+    },
+    {
+      "route": "/settings/business",
+      "title": "20byte",
+      "h1": "Settings",
+      "navItems": [],
+      "buttons": 14
+    },
+    {
+      "route": "/settings/shortlinks",
+      "title": "20byte",
+      "h1": "Settings",
+      "navItems": [],
+      "buttons": 10
+    },
+    {
+      "route": "/settings/whatsapp",
+      "title": "20byte",
+      "h1": "Settings",
+      "navItems": [],
+      "buttons": 13
+    }
+  ],
+  "logs": [
+    "[console:info] %cDownload the React DevTools for a better development experience: https://reactjs.org/link/react-devtools font-weight:bold",
+    "[console:log] [Fast Refresh] rebuilding",
+    "[console:log] [Fast Refresh] done in 2328ms",
+    "[console:log] [Fast Refresh] rebuilding",
+    "[console:log] [Fast Refresh] done in 710ms",
+    "[console:info] %cDownload the React DevTools for a better development experience: https://reactjs.org/link/react-devtools font-weight:bold",
+    "[console:info] %cDownload the React DevTools for a better development experience: https://reactjs.org/link/react-devtools font-weight:bold",
+    "[console:warning] 06:19:42.899 Ably: Auth.requestToken(): Expected token request callback to call back with a token string, token request object, or token details object",
+    "[console:warning] 06:19:56.238 Ably: Auth.requestToken(): Expected token request callback to call back with a token string, token request object, or token details object",
+    "[console:warning] 06:20:12.859 Ably: Auth.requestToken(): Expected token request callback to call back with a token string, token request object, or token details object",
+    "[console:error] [realtime] inbox subscription failed: Connection closed",
+    "[console:log] [Fast Refresh] rebuilding",
+    "[console:log] [Fast Refresh] done in 959ms",
+    "[console:info] %cDownload the React DevTools for a better development experience: https://reactjs.org/link/react-devtools font-weight:bold",
+    "[console:log] [Fast Refresh] rebuilding",
+    "[console:log] [Fast Refresh] done in 596ms",
+    "[console:info] %cDownload the React DevTools for a better development experience: https://reactjs.org/link/react-devtools font-weight:bold",
+    "[console:log] [Fast Refresh] rebuilding",
+    "[console:log] [Fast Refresh] done in 480ms",
+    "[console:info] %cDownload the React DevTools for a better development experience: https://reactjs.org/link/react-devtools font-weight:bold",
+    "[console:log] [Fast Refresh] rebuilding",
+    "[console:log] [Fast Refresh] done in 864ms",
+    "[console:info] %cDownload the React DevTools for a better development experience: https://reactjs.org/link/react-devtools font-weight:bold",
+    "[console:log] [Fast Refresh] rebuilding",
+    "[console:log] [Fast Refresh] done in 517ms",
+    "[console:info] %cDownload the React DevTools for a better development experience: https://reactjs.org/link/react-devtools font-weight:bold",
+    "[console:log] [Fast Refresh] rebuilding",
+    "[console:log] [Fast Refresh] done in 394ms",
+    "[console:info] %cDownload the React DevTools for a better development experience: https://reactjs.org/link/react-devtools font-weight:bold",
+    "[console:log] [Fast Refresh] rebuilding",
+    "[console:log] [Fast Refresh] done in 397ms",
+    "[console:info] %cDownload the React DevTools for a better development experience: https://reactjs.org/link/react-devtools font-weight:bold",
+    "[console:log] [Fast Refresh] rebuilding",
+    "[console:log] [Fast Refresh] done in 536ms",
+    "[console:info] %cDownload the React DevTools for a better development experience: https://reactjs.org/link/react-devtools font-weight:bold"
+  ]
+}

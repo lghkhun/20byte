@@ -81,12 +81,14 @@ export function toConversationListItem(row: {
   crmStage?: {
     name: string;
   } | null;
-  messages: Array<{
+  messages?: Array<{
     text: string | null;
     type: string;
     fileName: string | null;
   }>;
 }): ConversationListItem {
+  const firstMessage = row.messages?.[0] ?? null;
+
   return {
     id: row.id,
     orgId: row.orgId,
@@ -98,11 +100,11 @@ export function toConversationListItem(row: {
     crmPipelineName: row.crmPipeline?.name ?? null,
     crmStageId: row.crmStageId,
     crmStageName: row.crmStage?.name ?? null,
-    lastMessagePreview: row.messages[0]
+    lastMessagePreview: firstMessage
       ? resolveLastMessagePreview({
-          text: row.messages[0].text,
-          type: row.messages[0].type,
-          fileName: row.messages[0].fileName
+          text: firstMessage.text,
+          type: firstMessage.type,
+          fileName: firstMessage.fileName
         })
       : null,
     source: row.customer.source,

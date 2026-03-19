@@ -1,6 +1,14 @@
-import { ServiceError } from "@/server/services/serviceError";
+import { normalizeAndValidatePhoneE164 } from "@/lib/validation/formValidation";
 
-const PHONE_E164_REGEX = /^\+[1-9]\d{7,14}$/;
+const LEGACY_LOCAL_INVOICE_URL_REGEX = /https?:\/\/(?:localhost|127\.0\.0\.1):3000(\/i\/[A-Za-z0-9_-]+)/gi;
+
+export function normalizeLegacyLocalInvoiceLinks(text: string): string {
+  if (!text) {
+    return text;
+  }
+
+  return text.replace(LEGACY_LOCAL_INVOICE_URL_REGEX, "$1");
+}
 
 export function normalizeValue(value: string): string {
   return value.trim();
@@ -11,7 +19,7 @@ export function resolveLastMessagePreview(input: {
   type: string;
   fileName: string | null;
 }): string | null {
-  const text = input.text?.trim() ?? "";
+  const text = normalizeLegacyLocalInvoiceLinks(input.text?.trim() ?? "");
   if (text) {
     return text.length > 80 ? `${text.slice(0, 77)}...` : text;
   }
@@ -44,12 +52,7 @@ export function resolveLastMessagePreview(input: {
 }
 
 export function validatePhoneE164(phoneE164: string): string {
-  const normalizedPhone = normalizeValue(phoneE164);
-  if (!PHONE_E164_REGEX.test(normalizedPhone)) {
-    throw new ServiceError(400, "INVALID_PHONE_E164", "phoneE164 must be in E.164 format (example: +628123456789).");
-  }
-
-  return normalizedPhone;
+  return normalizeAndValidatePhoneE164(phoneE164);
 }
 
 export function normalizeOptionalName(value: string | undefined): string | undefined {

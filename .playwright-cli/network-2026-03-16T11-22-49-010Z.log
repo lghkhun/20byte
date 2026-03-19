@@ -1,0 +1,15 @@
+[GET] http://127.0.0.1:3100/api/orgs => [200] OK
+[GET] http://127.0.0.1:3100/api/invoices?page=1&limit=200 => [200] OK
+[GET] http://127.0.0.1:3100/api/invoices?page=1&limit=200 => [200] OK
+[GET] http://127.0.0.1:3100/inbox?_rsc=3xtoo => [200] OK
+[GET] http://127.0.0.1:3100/dashboard?_rsc=3xtoo => [200] OK
+[GET] http://127.0.0.1:3100/customers?_rsc=3xtoo => [200] OK
+[GET] http://127.0.0.1:3100/crm/pipelines?_rsc=3xtoo => [200] OK
+[GET] http://127.0.0.1:3100/settings?_rsc=3xtoo => [200] OK
+[GET] http://127.0.0.1:3100/ui-kit?_rsc=3xtoo => [200] OK
+[GET] http://127.0.0.1:3100/inbox?_rsc=3xtoo => [200] OK
+[GET] http://127.0.0.1:3100/crm/pipelines?_rsc=3xtoo => [200] OK
+[GET] http://127.0.0.1:3100/dashboard?_rsc=3xtoo => [200] OK
+[GET] http://127.0.0.1:3100/customers?_rsc=3xtoo => [200] OK
+[GET] http://127.0.0.1:3100/settings?_rsc=3xtoo => [200] OK
+[GET] http://127.0.0.1:3100/api/invoices/cmmsbsfzz000ci03zhozk7e15/timeline => [200] OK

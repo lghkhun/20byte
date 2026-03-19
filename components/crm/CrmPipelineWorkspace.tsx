@@ -1,10 +1,19 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { Plus, Workflow } from "lucide-react";
+import Link from "next/link";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { MoreHorizontal } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuTrigger
+} from "@/components/ui/dropdown-menu";
+import { OperationFeedback } from "@/components/ui/operation-feedback";
+import { cn } from "@/lib/utils";
 
 type StageItem = {
   id: string;
@@ -20,149 +29,377 @@ type PipelineItem = {
   stages: StageItem[];
 };
 
-export function CrmPipelineWorkspace() {
-  const [pipelines, setPipelines] = useState<PipelineItem[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [newPipelineName, setNewPipelineName] = useState("");
-  const [newStageNameByPipeline, setNewStageNameByPipeline] = useState<Record<string, string>>({});
+type KanbanCard = {
+  id: string;
+  customerName: string;
+  customerPhoneE164: string;
+  status: "OPEN" | "CLOSED";
+  assignedToMemberId: string | null;
+  unreadCount: number;
+  lastMessageAt: string | null;
+  lastMessagePreview: string | null;
+  invoiceCount: number;
+  unpaidInvoiceCount: number;
+};
 
-  async function loadPipelines() {
-    setIsLoading(true);
+type KanbanColumn = {
+  stageId: string;
+  stageName: string;
+  stageColor: string;
+  position: number;
+  cardCount: number;
+  cards: KanbanCard[];
+};
+
+type KanbanBoard = {
+  pipeline: PipelineItem | null;
+  columns: KanbanColumn[];
+  assignees: Array<{
+    orgMemberId: string;
+    userId: string;
+    name: string | null;
+    email: string;
+    role: string;
+  }>;
+  unassigned: {
+    cardCount: number;
+    cards: KanbanCard[];
+  };
+};
+
+const STAGE_COLOR_CLASS: Record<string, string> = {
+  emerald: "border-emerald-500/30 bg-emerald-500/10 text-emerald-700",
+  amber: "border-amber-500/30 bg-amber-500/10 text-amber-700",
+  sky: "border-sky-500/30 bg-sky-500/10 text-sky-700",
+  violet: "border-violet-500/30 bg-violet-500/10 text-violet-700",
+  rose: "border-rose-500/30 bg-rose-500/10 text-rose-700",
+  slate: "border-slate-500/30 bg-slate-500/10 text-slate-700"
+};
+
+function formatLastActivity(value: string | null): string {
+  if (!value) {
+    return "Belum ada aktivitas";
+  }
+
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    return "Belum ada aktivitas";
+  }
+
+  return new Intl.DateTimeFormat("id-ID", {
+    day: "2-digit",
+    month: "short",
+    hour: "2-digit",
+    minute: "2-digit"
+  }).format(date);
+}
+
+function getStageColorClass(color: string): string {
+  return STAGE_COLOR_CLASS[color] ?? "border-border bg-muted/40 text-foreground";
+}
+
+export function CrmPipelineWorkspace() {
+  const [board, setBoard] = useState<KanbanBoard | null>(null);
+  const [isLoadingBoard, setIsLoadingBoard] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [isSavingMove, setIsSavingMove] = useState(false);
+  const [draggedConversationId, setDraggedConversationId] = useState<string | null>(null);
+  const [dragOverStageId, setDragOverStageId] = useState<string | null>(null);
+
+  const loadBoard = useCallback(async (pipelineId: string) => {
+    setIsLoadingBoard(true);
     setError(null);
     try {
-      const response = await fetch("/api/crm/pipelines", { cache: "no-store" });
-      const payload = (await response.json().catch(() => null)) as { data?: { pipelines?: PipelineItem[] }; error?: { message?: string } } | null;
+      const query = pipelineId ? `?pipelineId=${encodeURIComponent(pipelineId)}&status=OPEN` : "?status=OPEN";
+      const response = await fetch(`/api/crm/pipelines/board${query}`, {
+        cache: "no-store"
+      });
+      const payload = (await response.json().catch(() => null)) as { data?: { board?: KanbanBoard }; error?: { message?: string } } | null;
       if (!response.ok) {
-        setError(payload?.error?.message ?? "Failed to load CRM pipelines.");
+        setError(payload?.error?.message ?? "Failed to load CRM board.");
         return;
       }
 
-      setPipelines(payload?.data?.pipelines ?? []);
+      const nextBoard = payload?.data?.board ?? null;
+      setBoard(nextBoard);
     } catch {
-      setError("Network error while loading CRM pipelines.");
+      setError("Network error while loading CRM board.");
     } finally {
-      setIsLoading(false);
+      setIsLoadingBoard(false);
     }
-  }
-
-  useEffect(() => {
-    void loadPipelines();
   }, []);
 
+  const moveConversation = useCallback(async (conversationId: string, stageId: string) => {
+    if (!board || isSavingMove) {
+      return;
+    }
+
+    const previousBoard = board;
+    const targetExists = previousBoard.columns.some((column) => column.stageId === stageId);
+    if (!targetExists) {
+      return;
+    }
+
+    const isAlreadyInTarget = previousBoard.columns.some(
+      (column) => column.stageId === stageId && column.cards.some((card) => card.id === conversationId)
+    );
+    if (isAlreadyInTarget) {
+      return;
+    }
+
+    let movedCard: KanbanCard | null = null;
+    setBoard((current) => {
+      if (!current) {
+        return current;
+      }
+
+      let nextUnassignedCards = current.unassigned.cards;
+      if (nextUnassignedCards.some((card) => card.id === conversationId)) {
+        movedCard = nextUnassignedCards.find((card) => card.id === conversationId) ?? null;
+        nextUnassignedCards = nextUnassignedCards.filter((card) => card.id !== conversationId);
+      }
+
+      const nextColumns = current.columns.map((column) => {
+        const foundInColumn = column.cards.find((card) => card.id === conversationId);
+        if (foundInColumn) {
+          movedCard = foundInColumn;
+        }
+
+        if (column.stageId === stageId) {
+          return column;
+        }
+
+        return {
+          ...column,
+          cards: column.cards.filter((card) => card.id !== conversationId)
+        };
+      });
+
+      if (!movedCard) {
+        return current;
+      }
+
+      const finalColumns = nextColumns.map((column) =>
+        column.stageId === stageId
+          ? {
+              ...column,
+              cards: [movedCard as KanbanCard, ...column.cards]
+            }
+          : column
+      );
+
+      return {
+        ...current,
+        unassigned: {
+          ...current.unassigned,
+          cards: nextUnassignedCards,
+          cardCount: nextUnassignedCards.length
+        },
+        columns: finalColumns.map((column) => ({
+          ...column,
+          cardCount: column.cards.length
+        }))
+      };
+    });
+
+    if (!movedCard) {
+      return;
+    }
+
+    setIsSavingMove(true);
+    setError(null);
+    try {
+      const response = await fetch(`/api/conversations/${encodeURIComponent(conversationId)}/pipeline`, {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          pipelineId: board.pipeline?.id,
+          stageId
+        })
+      });
+      const payload = (await response.json().catch(() => null)) as { error?: { message?: string } } | null;
+      if (!response.ok) {
+        setBoard(previousBoard);
+        setError(payload?.error?.message ?? "Failed to move conversation.");
+        return;
+      }
+    } catch {
+      setBoard(previousBoard);
+      setError("Network error while moving conversation.");
+    } finally {
+      setIsSavingMove(false);
+    }
+  }, [board, isSavingMove]);
+
+  useEffect(() => {
+    void loadBoard("");
+  }, [loadBoard]);
+
+  const activePipeline = useMemo(() => board?.pipeline ?? null, [board]);
+
+  const isCompact = true;
+  const totalBoardColumns = (board?.columns.length ?? 0) + 1;
+
   return (
-    <section className="space-y-5 p-5">
-      <div className="rounded-[24px] border border-border/70 bg-card/95 p-6 shadow-sm">
-        <div className="flex flex-wrap items-start justify-between gap-4">
-          <div>
-            <div className="flex items-center gap-3">
-              <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-primary/10 text-primary">
-                <Workflow className="h-5 w-5" />
-              </div>
-              <div>
-                <h1 className="text-2xl font-semibold tracking-tight text-foreground">CRM Pipeline</h1>
-                <p className="text-sm text-muted-foreground">Kelola pipeline dan stage yang dipakai di panel kanan inbox.</p>
-              </div>
-            </div>
-          </div>
-          <div className="flex gap-2">
-            <Input value={newPipelineName} onChange={(event) => setNewPipelineName(event.target.value)} placeholder="Nama pipeline baru" className="h-11 w-56 rounded-xl" />
-            <Button
-              type="button"
-              className="h-11 gap-2 rounded-xl"
-              onClick={async () => {
-                if (!newPipelineName.trim()) {
-                  return;
-                }
+    <section className="flex h-full min-h-0 flex-1 flex-col overflow-hidden">
+      {error ? <OperationFeedback tone="error" message={error} /> : null}
 
-                const response = await fetch("/api/crm/pipelines", {
-                  method: "POST",
-                  headers: {
-                    "Content-Type": "application/json"
-                  },
-                  body: JSON.stringify({ name: newPipelineName.trim() })
-                });
-                const payload = (await response.json().catch(() => null)) as { error?: { message?: string } } | null;
-                if (!response.ok) {
-                  setError(payload?.error?.message ?? "Failed to create pipeline.");
-                  return;
-                }
-                setNewPipelineName("");
-                await loadPipelines();
-              }}
-            >
-              <Plus className="h-4 w-4" />
-              Tambah Pipeline
-            </Button>
-          </div>
-        </div>
-      </div>
+      <section className="flex min-h-0 flex-1 flex-col overflow-hidden">
+        {isLoadingBoard ? <p className="px-3 py-3 text-sm text-muted-foreground md:px-4">Loading board...</p> : null}
 
-      {error ? <p className="text-sm text-destructive">{error}</p> : null}
-      {isLoading ? <p className="text-sm text-muted-foreground">Loading pipelines...</p> : null}
-
-      <div className="grid gap-4 xl:grid-cols-2">
-        {pipelines.map((pipeline) => (
-          <article key={pipeline.id} className="rounded-[24px] border border-border/70 bg-card/95 p-5 shadow-sm">
-            <div className="flex items-center justify-between gap-3">
-              <div>
-                <h2 className="text-lg font-semibold text-foreground">{pipeline.name}</h2>
-                <p className="text-xs text-muted-foreground">{pipeline.isDefault ? "Default pipeline" : "Custom pipeline"}</p>
-              </div>
-              {pipeline.isDefault ? <span className="rounded-full border border-primary/30 bg-primary/10 px-3 py-1 text-xs font-semibold text-primary">Default</span> : null}
-            </div>
-
-            <div className="mt-4 space-y-2">
-              {pipeline.stages.map((stage) => (
-                <div key={stage.id} className="flex items-center justify-between rounded-2xl border border-border/70 bg-background/70 px-3 py-3">
-                  <div>
-                    <p className="text-sm font-medium text-foreground">{stage.name}</p>
-                    <p className="text-xs text-muted-foreground">Posisi {stage.position + 1}</p>
-                  </div>
-                  <span className="rounded-full border border-border/70 px-2 py-1 text-[11px] text-muted-foreground">{stage.color}</span>
-                </div>
-              ))}
-            </div>
-
-            <div className="mt-4 flex gap-2">
-              <Input
-                value={newStageNameByPipeline[pipeline.id] ?? ""}
-                onChange={(event) => setNewStageNameByPipeline((current) => ({ ...current, [pipeline.id]: event.target.value }))}
-                placeholder="Nama stage baru"
-                className="h-10 rounded-xl"
-              />
-              <Button
-                type="button"
-                variant="secondary"
-                className="h-10 rounded-xl border border-border/80 bg-background"
-                onClick={async () => {
-                  const stageName = newStageNameByPipeline[pipeline.id]?.trim();
-                  if (!stageName) {
-                    return;
-                  }
-
-                  const response = await fetch(`/api/crm/pipelines/${encodeURIComponent(pipeline.id)}/stages`, {
-                    method: "POST",
-                    headers: {
-                      "Content-Type": "application/json"
-                    },
-                    body: JSON.stringify({ name: stageName, color: "emerald" })
-                  });
-                  const payload = (await response.json().catch(() => null)) as { error?: { message?: string } } | null;
-                  if (!response.ok) {
-                    setError(payload?.error?.message ?? "Failed to create stage.");
-                    return;
-                  }
-                  setNewStageNameByPipeline((current) => ({ ...current, [pipeline.id]: "" }));
-                  await loadPipelines();
-                }}
+        {!isLoadingBoard && board ? (
+          <>
+            <div className="inbox-scroll min-h-0 flex-1 overflow-x-auto overflow-y-hidden px-3 py-3 md:px-4 md:py-4">
+              <div
+                className={cn("grid h-full min-h-0 min-w-full items-stretch", isCompact ? "gap-3" : "gap-4")}
+                style={{ gridTemplateColumns: `repeat(${totalBoardColumns}, minmax(320px, 1fr))` }}
               >
-                Tambah Stage
-              </Button>
+              <article className={cn("flex h-full min-h-0 flex-col rounded-[22px] border border-dashed border-border/80 bg-background/45", isCompact ? "p-3" : "p-4")}>
+                <div className="mb-3 flex items-center justify-between">
+                  <h3 className="text-[13px] font-semibold uppercase tracking-[0.16em] text-foreground">Belum Masuk Stage</h3>
+                  <span className="rounded-full border border-border bg-background px-2.5 py-1 text-[11px] text-muted-foreground">{board.unassigned.cardCount}</span>
+                </div>
+                <div className={cn("inbox-scroll flex-1 overflow-y-auto pr-1", isCompact ? "space-y-3" : "space-y-4")}>
+                  {board.unassigned.cards.map((card) => (
+                    <div
+                      key={card.id}
+                      draggable
+                      onDragStart={() => setDraggedConversationId(card.id)}
+                      onDragEnd={() => setDraggedConversationId(null)}
+                      className={cn("cursor-grab rounded-[18px] border border-border/80 bg-card shadow-sm active:cursor-grabbing", isCompact ? "p-3.5" : "p-4")}
+                    >
+                      <p className="truncate text-[15px] font-semibold text-foreground">{card.customerName}</p>
+                      <p className="truncate pt-1 text-[12px] text-muted-foreground">{card.customerPhoneE164}</p>
+                      <p className="mt-2 line-clamp-3 text-[12px] leading-6 text-muted-foreground">{card.lastMessagePreview ?? "Belum ada pesan"}</p>
+                    </div>
+                  ))}
+                  {board.unassigned.cards.length === 0 ? <p className="text-xs text-muted-foreground">Tidak ada kartu.</p> : null}
+                </div>
+              </article>
+
+              {board.columns.map((column) => (
+                <article
+                  key={column.stageId}
+                  onDragOver={(event) => {
+                    event.preventDefault();
+                    setDragOverStageId(column.stageId);
+                  }}
+                  onDragLeave={() => setDragOverStageId((current) => (current === column.stageId ? null : current))}
+                  onDrop={async () => {
+                    if (!draggedConversationId) {
+                      return;
+                    }
+                    await moveConversation(draggedConversationId, column.stageId);
+                    setDraggedConversationId(null);
+                    setDragOverStageId(null);
+                  }}
+                  className={cn(
+                    "flex h-full min-h-0 flex-col rounded-[22px] border",
+                    isCompact ? "p-3" : "p-4",
+                    dragOverStageId === column.stageId ? "border-primary bg-primary/5" : "border-border/80 bg-background/60"
+                  )}
+                >
+                  <div className="mb-2.5 flex items-center justify-between gap-2">
+                    <div className="min-w-0">
+                      <h3 className="truncate text-[13px] font-semibold uppercase tracking-[0.16em] text-foreground">{column.stageName}</h3>
+                      <p className="pt-0.5 text-[11px] text-muted-foreground">Tahap {column.position + 1}</p>
+                    </div>
+                    <span className={`rounded-full border px-2.5 py-1 text-[11px] ${getStageColorClass(column.stageColor)}`}>
+                      {column.cardCount}
+                    </span>
+                  </div>
+
+                  <div className={cn("inbox-scroll flex-1 overflow-y-auto pr-1", isCompact ? "space-y-3" : "space-y-4")}>
+                    {column.cards.map((card) => (
+                    <div
+                      key={card.id}
+                      draggable
+                      onDragStart={() => setDraggedConversationId(card.id)}
+                      onDragEnd={() => setDraggedConversationId(null)}
+                        className={cn("cursor-grab rounded-[18px] border border-border/80 bg-card shadow-sm active:cursor-grabbing", isCompact ? "p-2.5" : "p-3")}
+                      >
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="min-w-0">
+                          <p className="truncate text-[15px] font-semibold text-foreground">{card.customerName}</p>
+                          <p className="truncate pt-px text-[12px] leading-4.5 text-muted-foreground">{card.customerPhoneE164}</p>
+                        </div>
+                        {card.unreadCount > 0 ? (
+                          <span className="rounded-full border border-primary/30 bg-primary/10 px-2.5 py-1 text-[11px] text-primary">{card.unreadCount} unread</span>
+                        ) : null}
+                      </div>
+                        <p className="mt-1 line-clamp-3 text-[12px] leading-5 text-muted-foreground">{card.lastMessagePreview ?? "Belum ada pesan"}</p>
+                        <div className="mt-1.5 flex items-center gap-3 text-[11px] leading-4.5 text-muted-foreground">
+                          <span>Invoice: {card.invoiceCount}</span>
+                          <span>Belum lunas: {card.unpaidInvoiceCount}</span>
+                        </div>
+                        <div className="mt-2 flex items-center justify-between gap-2">
+                          <p className="text-[11px] leading-4.5 text-muted-foreground">Aktivitas: {formatLastActivity(card.lastMessageAt)}</p>
+                          <div className="flex items-center gap-1">
+                            <DropdownMenu>
+                              <DropdownMenuTrigger asChild>
+                                <Button type="button" size="sm" variant="ghost" className="h-6 w-6 p-0">
+                                  <span className="sr-only">Move card</span>
+                                  <MoreHorizontal className="h-3.5 w-3.5" />
+                                </Button>
+                              </DropdownMenuTrigger>
+                              <DropdownMenuContent align="end">
+                                <DropdownMenuLabel>Pindah stage</DropdownMenuLabel>
+                                {board.columns.map((targetColumn) => (
+                                  <DropdownMenuItem
+                                    key={targetColumn.stageId}
+                                    disabled={targetColumn.stageId === column.stageId || isSavingMove}
+                                    onClick={() => {
+                                      void moveConversation(card.id, targetColumn.stageId);
+                                    }}
+                                  >
+                                    {targetColumn.stageName}
+                                  </DropdownMenuItem>
+                                ))}
+                              </DropdownMenuContent>
+                            </DropdownMenu>
+                            <Link
+                              href={`/inbox?conversationId=${encodeURIComponent(card.id)}`}
+                              prefetch={false}
+                              className="text-[11px] font-medium text-primary underline-offset-2 hover:underline"
+                            >
+                              Buka Inbox
+                            </Link>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                    {column.cards.length === 0 ? <p className="text-xs text-muted-foreground">Belum ada kartu di stage ini.</p> : null}
+                  </div>
+
+                  {board.unassigned.cards.length > 0 ? (
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="secondary"
+                      className="mt-3 h-9 w-full rounded-xl border border-border/80 bg-background text-[11px]"
+                      disabled={isSavingMove}
+                      onClick={async () => {
+                        const topUnassigned = board.unassigned.cards[0];
+                        if (!topUnassigned) {
+                          return;
+                        }
+                        await moveConversation(topUnassigned.id, column.stageId);
+                      }}
+                    >
+                      Masukkan 1 lead dari unassigned
+                    </Button>
+                  ) : null}
+                </article>
+              ))}
+              </div>
             </div>
-          </article>
-        ))}
-      </div>
+
+            {activePipeline?.stages.length === 0 ? <p className="px-1 text-sm text-muted-foreground">Pipeline default belum punya stage.</p> : null}
+          </>
+        ) : null}
+      </section>
     </section>
   );
 }

@@ -1,6 +1,7 @@
 import { Role } from "@prisma/client";
 
 import { prisma } from "@/lib/db/prisma";
+import { normalizeAndValidateBankAccount } from "@/lib/validation/formValidation";
 import { ServiceError } from "@/server/services/serviceError";
 
 type BankAccountItem = {
@@ -34,10 +35,6 @@ const MAX_BANK_ACCOUNTS = 5;
 
 function normalize(value: string): string {
   return value.trim();
-}
-
-function normalizeAccountNumber(value: string): string {
-  return value.replace(/\s+/g, "").trim();
 }
 
 async function requireSettingsRole(actorUserId: string, orgId: string): Promise<Role> {
@@ -91,16 +88,14 @@ export async function listOrgBankAccounts(input: ListInput): Promise<BankAccount
 
 export async function createOrgBankAccount(input: CreateInput): Promise<BankAccountItem> {
   const orgId = normalize(input.orgId);
-  const bankName = normalize(input.bankName);
-  const accountNumber = normalizeAccountNumber(input.accountNumber);
-  const accountHolder = normalize(input.accountHolder);
+  const { bankName, accountNumber, accountHolder } = normalizeAndValidateBankAccount({
+    bankName: input.bankName,
+    accountNumber: input.accountNumber,
+    accountHolder: input.accountHolder
+  });
 
   if (!orgId) {
     throw new ServiceError(400, "MISSING_ORG_ID", "orgId is required.");
-  }
-
-  if (!bankName || !accountNumber || !accountHolder) {
-    throw new ServiceError(400, "INVALID_BANK_ACCOUNT", "bankName, accountNumber, and accountHolder are required.");
   }
 
   await requireSettingsRole(input.actorUserId, orgId);

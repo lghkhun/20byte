@@ -12,6 +12,7 @@ export async function loadInvoiceForMarkPaid(orgId: string, invoiceId: string) {
     },
     select: {
       id: true,
+      conversationId: true,
       invoiceNo: true,
       status: true,
       kind: true,

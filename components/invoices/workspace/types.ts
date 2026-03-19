@@ -7,6 +7,8 @@ export type OrgItem = {
 
 export type InvoiceItem = {
   id: string;
+  customerId: string;
+  publicToken: string;
   invoiceNo: string;
   status: InvoiceStatus;
   kind: "FULL" | "DP_AND_FINAL";

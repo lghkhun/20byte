@@ -21,5 +21,20 @@ export function resolveFocusTrapTarget(params: FocusTrapParams): number | null {
 }
 
 export function getFocusableElements(root: ParentNode): HTMLElement[] {
-  return Array.from(root.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR));
+  return Array.from(root.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR)).filter((element) => {
+    if (element.getAttribute("aria-hidden") === "true") {
+      return false;
+    }
+
+    if ((element as HTMLInputElement).type === "hidden") {
+      return false;
+    }
+
+    if (element.tabIndex < 0) {
+      return false;
+    }
+
+    const style = window.getComputedStyle(element);
+    return style.visibility !== "hidden" && style.display !== "none";
+  });
 }

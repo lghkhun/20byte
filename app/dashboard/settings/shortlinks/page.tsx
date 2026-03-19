@@ -1,11 +1,5 @@
-import { BankAccountManager } from "@/components/settings/BankAccountManager";
-import { ShortlinkManager } from "@/components/settings/ShortlinkManager";
+import { redirect } from "next/navigation";
 
 export default function ShortlinksSettingsPage() {
-  return (
-    <div className="space-y-6">
-      <ShortlinkManager />
-      <BankAccountManager />
-    </div>
-  );
+  redirect("/settings?tab=shortlinks");
 }

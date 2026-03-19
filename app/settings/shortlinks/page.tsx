@@ -1,5 +1,5 @@
 import { redirect } from "next/navigation";
 
 export default function SettingsShortlinksAliasPage() {
-  redirect("/dashboard/settings/shortlinks");
+  redirect("/settings?tab=shortlinks");
 }

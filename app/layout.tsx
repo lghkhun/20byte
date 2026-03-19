@@ -5,8 +5,10 @@ import { Space_Grotesk } from "next/font/google";
 import "@/styles/globals.css";
 import { AppShell } from "@/components/layout/AppShell";
 import { ThemeProvider } from "@/components/providers/ThemeProvider";
+import { Toaster } from "@/components/ui/sonner";
 import { SESSION_COOKIE_NAME, verifySessionToken } from "@/lib/auth/session";
 import { cn } from "@/lib/utils";
+import { getProfile } from "@/server/services/authService";
 
 const spaceGrotesk = Space_Grotesk({ subsets: ["latin"], weight: ["400", "500", "700"] });
 
@@ -15,13 +17,14 @@ export const metadata: Metadata = {
   description: "20byte SaaS foundation shell"
 };
 
-export default function RootLayout({
+export default async function RootLayout({
   children
 }: Readonly<{
   children: React.ReactNode;
 }>) {
   const token = cookies().get(SESSION_COOKIE_NAME)?.value;
   const session = token ? verifySessionToken(token) : null;
+  const profile = session ? await getProfile(session.userId).catch(() => null) : null;
 
   return (
     <html lang="en" suppressHydrationWarning className="h-full overflow-hidden">
@@ -32,7 +35,20 @@ export default function RootLayout({
         )}
       >
         <ThemeProvider attribute="class" defaultTheme="system" enableSystem disableTransitionOnChange>
-          <AppShell user={session ? { email: session.email, name: session.name } : null}>{children}</AppShell>
+          <AppShell
+            user={
+              session
+                ? {
+                    email: session.email,
+                    name: session.name,
+                    avatarUrl: profile?.avatarUrl ?? null
+                  }
+                : null
+            }
+          >
+            {children}
+          </AppShell>
+          <Toaster />
         </ThemeProvider>
       </body>
     </html>

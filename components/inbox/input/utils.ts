@@ -5,8 +5,24 @@ export const TEMPLATE_COST: Record<"MARKETING" | "UTILITY" | "AUTHENTICATION" | 
   SERVICE: "Rp 0"
 };
 
+const ALLOWED_ATTACHMENT_MIME_PREFIXES = ["image/", "video/", "audio/"] as const;
+const ALLOWED_ATTACHMENT_EXACT_MIME = new Set(["application/pdf"]);
+
 export function isAllowedAttachmentType(mimeType: string): boolean {
-  return typeof mimeType === "string";
+  if (typeof mimeType !== "string") {
+    return false;
+  }
+
+  const normalized = mimeType.trim().toLowerCase();
+  if (!normalized) {
+    return false;
+  }
+
+  if (ALLOWED_ATTACHMENT_EXACT_MIME.has(normalized)) {
+    return true;
+  }
+
+  return ALLOWED_ATTACHMENT_MIME_PREFIXES.some((prefix) => normalized.startsWith(prefix));
 }
 
 export function formatFileSize(bytes: number): string {

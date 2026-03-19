@@ -1,4 +1,4 @@
-export { createDraftInvoice, editInvoiceItems, getInvoiceTimeline, markInvoicePaid } from "@/server/services/invoice/inbound";
+export { createDraftInvoice, deleteDraftInvoice, editInvoiceItems, getInvoiceTimeline, markInvoicePaid } from "@/server/services/invoice/inbound";
 export { sendInvoiceToCustomer } from "@/server/services/invoice/outbound";
 export { listInvoices } from "@/server/services/invoice/listing";
 

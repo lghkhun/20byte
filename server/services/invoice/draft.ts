@@ -236,3 +236,91 @@ export async function editInvoiceItems(input: EditInvoiceItemsInput): Promise<In
 
   return updated;
 }
+
+export async function deleteDraftInvoice(input: {
+  actorUserId: string;
+  orgId: string;
+  invoiceId: string;
+}): Promise<{ id: string }> {
+  const orgId = normalize(input.orgId);
+  const invoiceId = normalize(input.invoiceId);
+  if (!orgId) {
+    throw new ServiceError(400, "MISSING_ORG_ID", "orgId is required.");
+  }
+
+  if (!invoiceId) {
+    throw new ServiceError(400, "MISSING_INVOICE_ID", "invoiceId is required.");
+  }
+
+  await requireInvoiceAccess(input.actorUserId, orgId);
+
+  const invoice = await prisma.invoice.findFirst({
+    where: {
+      id: invoiceId,
+      orgId
+    },
+    select: {
+      id: true,
+      status: true,
+      invoiceNo: true
+    }
+  });
+
+  if (!invoice) {
+    throw new ServiceError(404, "INVOICE_NOT_FOUND", "Invoice does not exist.");
+  }
+
+  if (invoice.status !== InvoiceStatus.DRAFT && invoice.status !== InvoiceStatus.VOID) {
+    throw new ServiceError(400, "INVOICE_NOT_DELETABLE", "Only draft or void invoices can be deleted.");
+  }
+
+  await prisma.$transaction(async (tx) => {
+    await tx.paymentProof.deleteMany({
+      where: {
+        orgId,
+        invoiceId: invoice.id
+      }
+    });
+
+    await tx.paymentMilestone.deleteMany({
+      where: {
+        orgId,
+        invoiceId: invoice.id
+      }
+    });
+
+    await tx.invoiceItem.deleteMany({
+      where: {
+        orgId,
+        invoiceId: invoice.id
+      }
+    });
+
+    await tx.invoice.delete({
+      where: {
+        id: invoice.id
+      }
+    });
+  });
+
+  await writeAuditLogSafe({
+    orgId,
+    actorUserId: input.actorUserId,
+    action: "invoice.deleted",
+    entityType: "invoice",
+    entityId: invoice.id,
+    meta: {
+      invoiceNo: invoice.invoiceNo
+    }
+  });
+
+  void publishInvoiceUpdatedEvent({
+    orgId,
+    invoiceId: invoice.id,
+    status: InvoiceStatus.VOID
+  });
+
+  return {
+    id: invoice.id
+  };
+}

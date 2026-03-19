@@ -1,0 +1,3 @@
+[GET] http://127.0.0.1:3100/api/crm/pipelines => [200] OK
+[GET] http://127.0.0.1:3100/api/crm/pipelines => [200] OK
+[GET] http://127.0.0.1:3100/api/crm/pipelines/board?pipelineId=cmmpxizv10001i0gmcsza8d72&status=OPEN&assigneeUserId=ALL&activityFrom=&activityTo= => [200] OK

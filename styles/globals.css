@@ -70,7 +70,7 @@
 }
 
 body {
-  @apply bg-background text-foreground transition-colors duration-200;
+  @apply bg-background text-[13.5px] leading-[1.45] text-foreground transition-colors duration-200 md:text-sm;
 }
 
 /* Inbox-specific UI polish */
@@ -194,23 +194,76 @@ body {
 
 @layer base {
   :root {
-    --sidebar-background: 0 0% 100%;
-    --sidebar-foreground: 222 47% 11%;
-    --sidebar-primary: 160 84% 35%;
-    --sidebar-primary-foreground: 0 0% 100%;
-    --sidebar-accent: 210 30% 95%;
-    --sidebar-accent-foreground: 222 47% 12%;
-    --sidebar-border: 214 30% 88%;
-    --sidebar-ring: 160 84% 35%;
+    --sidebar-background: 0 0% 98%;
+    --sidebar-foreground: 240 5.3% 26.1%;
+    --sidebar-primary: 240 5.9% 10%;
+    --sidebar-primary-foreground: 0 0% 98%;
+    --sidebar-accent: 240 4.8% 95.9%;
+    --sidebar-accent-foreground: 240 5.9% 10%;
+    --sidebar-border: 220 13% 91%;
+    --sidebar-ring: 217.2 91.2% 59.8%;
   }
   .dark {
-    --sidebar-background: 220 39% 12%;
-    --sidebar-foreground: 210 40% 98%;
-    --sidebar-primary: 160 84% 39%;
+    --sidebar-background: 240 5.9% 10%;
+    --sidebar-foreground: 240 4.8% 95.9%;
+    --sidebar-primary: 224.3 76.3% 48%;
     --sidebar-primary-foreground: 0 0% 100%;
-    --sidebar-accent: 217 33% 17%;
-    --sidebar-accent-foreground: 210 40% 98%;
-    --sidebar-border: 217 33% 17%;
-    --sidebar-ring: 160 84% 39%;
+    --sidebar-accent: 240 3.7% 15.9%;
+    --sidebar-accent-foreground: 240 4.8% 95.9%;
+    --sidebar-border: 240 3.7% 15.9%;
+    --sidebar-ring: 217.2 91.2% 59.8%;
+  }
+}
+
+/* Public invoice document layout */
+.public-invoice-root {
+  print-color-adjust: exact;
+  -webkit-print-color-adjust: exact;
+}
+
+.public-invoice-root * {
+  max-width: 100%;
+}
+
+.public-invoice-root td,
+.public-invoice-root th,
+.public-invoice-root p {
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+@media print {
+  @page {
+    size: A4;
+    margin: 12mm;
+  }
+
+  body {
+    background: #fff !important;
+  }
+
+  .print-hidden {
+    display: none !important;
+  }
+
+  .public-invoice-root {
+    max-width: none !important;
+    min-height: auto !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    gap: 10px !important;
+  }
+
+  .public-invoice-sheet,
+  .public-invoice-section {
+    border-color: #dbe3ed !important;
+    box-shadow: none !important;
+    break-inside: auto;
+    page-break-inside: auto;
+  }
+
+  .public-invoice-payment {
+    break-before: page;
+    page-break-before: always;
   }
 }

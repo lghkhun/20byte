@@ -1,13 +1,22 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import Image from "next/image";
 import { FileText, PlayCircle, X } from "lucide-react";
 
 import type { MessageItem } from "@/components/inbox/types";
 import { Button } from "@/components/ui/button";
+import { useModalAccessibility } from "@/lib/a11y/useModalAccessibility";
 
 function ImagePreview({ message }: { message: MessageItem }) {
   const [failed, setFailed] = useState(false);
   const [isOpen, setIsOpen] = useState(false);
+  const containerRef = useRef<HTMLDivElement | null>(null);
+  const closeButtonRef = useRef<HTMLButtonElement | null>(null);
+  useModalAccessibility({
+    open: isOpen,
+    onClose: () => setIsOpen(false),
+    containerRef,
+    initialFocusRef: closeButtonRef
+  });
   if (!message.mediaUrl || failed) {
     return (
       <div className="mb-2 rounded-lg border border-border bg-background/40 px-3 py-2 text-xs text-muted-foreground">
@@ -30,11 +39,13 @@ function ImagePreview({ message }: { message: MessageItem }) {
         />
       </button>
       {isOpen ? (
-        <div className="fixed inset-0 z-[80] flex items-center justify-center bg-black/80 p-4 backdrop-blur-sm">
-          <button type="button" className="absolute right-4 top-4 rounded-full bg-black/40 p-2 text-white" onClick={() => setIsOpen(false)}>
+        <div className="fixed inset-0 z-[80] flex items-center justify-center bg-black/80 p-4 backdrop-blur-sm" role="dialog" aria-modal="true" aria-label="Image preview">
+          <div ref={containerRef}>
+          <button ref={closeButtonRef} type="button" className="absolute right-4 top-4 rounded-full bg-black/40 p-2 text-white" onClick={() => setIsOpen(false)}>
             <X className="h-5 w-5" />
           </button>
           <Image src={message.mediaUrl} alt={message.fileName ?? "Image attachment"} width={1200} height={900} unoptimized className="max-h-[88vh] w-auto max-w-full rounded-2xl object-contain" />
+          </div>
         </div>
       ) : null}
     </>
@@ -44,6 +55,14 @@ function ImagePreview({ message }: { message: MessageItem }) {
 function VideoPreview({ message }: { message: MessageItem }) {
   const [failed, setFailed] = useState(false);
   const [isOpen, setIsOpen] = useState(false);
+  const containerRef = useRef<HTMLDivElement | null>(null);
+  const closeButtonRef = useRef<HTMLButtonElement | null>(null);
+  useModalAccessibility({
+    open: isOpen,
+    onClose: () => setIsOpen(false),
+    containerRef,
+    initialFocusRef: closeButtonRef
+  });
   if (!message.mediaUrl || failed) {
     return (
       <div className="mb-2 rounded-lg border border-border bg-background/40 px-3 py-2 text-xs text-muted-foreground">
@@ -64,14 +83,16 @@ function VideoPreview({ message }: { message: MessageItem }) {
         </video>
       </button>
       {isOpen ? (
-        <div className="fixed inset-0 z-[80] flex items-center justify-center bg-black/80 p-4 backdrop-blur-sm">
-          <button type="button" className="absolute right-4 top-4 rounded-full bg-black/40 p-2 text-white" onClick={() => setIsOpen(false)}>
+        <div className="fixed inset-0 z-[80] flex items-center justify-center bg-black/80 p-4 backdrop-blur-sm" role="dialog" aria-modal="true" aria-label="Video preview">
+          <div ref={containerRef}>
+          <button ref={closeButtonRef} type="button" className="absolute right-4 top-4 rounded-full bg-black/40 p-2 text-white" onClick={() => setIsOpen(false)}>
             <X className="h-5 w-5" />
           </button>
           <video controls autoPlay preload="metadata" className="max-h-[88vh] max-w-full rounded-2xl bg-black">
             <source src={message.mediaUrl} type={message.mimeType ?? undefined} />
             Your browser does not support video playback.
           </video>
+          </div>
         </div>
       ) : null}
     </>
@@ -137,6 +158,14 @@ function DocumentDownload({ message }: { message: MessageItem }) {
 
 function VideoPlaceholder({ message }: { message: MessageItem }) {
   const [isOpen, setIsOpen] = useState(false);
+  const containerRef = useRef<HTMLDivElement | null>(null);
+  const closeButtonRef = useRef<HTMLButtonElement | null>(null);
+  useModalAccessibility({
+    open: isOpen,
+    onClose: () => setIsOpen(false),
+    containerRef,
+    initialFocusRef: closeButtonRef
+  });
 
   return (
     <>
@@ -151,14 +180,16 @@ function VideoPlaceholder({ message }: { message: MessageItem }) {
       <div className="absolute right-2 top-2 rounded-md bg-black/55 px-1.5 py-0.5 text-[11px] font-medium text-white">VIDEO</div>
       </button>
       {isOpen && message.mediaUrl ? (
-        <div className="fixed inset-0 z-[80] flex items-center justify-center bg-black/80 p-4 backdrop-blur-sm">
-          <button type="button" className="absolute right-4 top-4 rounded-full bg-black/40 p-2 text-white" onClick={() => setIsOpen(false)}>
+        <div className="fixed inset-0 z-[80] flex items-center justify-center bg-black/80 p-4 backdrop-blur-sm" role="dialog" aria-modal="true" aria-label="Video preview">
+          <div ref={containerRef}>
+          <button ref={closeButtonRef} type="button" className="absolute right-4 top-4 rounded-full bg-black/40 p-2 text-white" onClick={() => setIsOpen(false)}>
             <X className="h-5 w-5" />
           </button>
           <video controls autoPlay preload="metadata" className="max-h-[88vh] max-w-full rounded-2xl bg-black">
             <source src={message.mediaUrl} type={message.mimeType ?? undefined} />
             Your browser does not support video playback.
           </video>
+          </div>
         </div>
       ) : null}
     </>

@@ -1,12 +1,15 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Image from "next/image";
 import QRCode from "qrcode";
 import { AlertCircle, CheckCircle2, Link2, Menu, MessageCircle, RefreshCw, ShieldCheck, Smartphone, X } from "lucide-react";
 
+import { useModalAccessibility } from "@/lib/a11y/useModalAccessibility";
+import { fetchOrganizationsCached } from "@/lib/client/orgsCache";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { useSettingsHeaderAction } from "@/components/settings/settings-header-actions";
 import type {
   BusinessesResponse,
   BusinessSummary,
@@ -103,26 +106,50 @@ export function WhatsAppConnectionSettings() {
   const [isReportOpen, setIsReportOpen] = useState(false);
   const [isLoadingReport, setIsLoadingReport] = useState(false);
   const [reportData, setReportData] = useState<WhatsAppReportData | null>(null);
+  const connectModalContainerRef = useRef<HTMLDivElement | null>(null);
+  const connectModalCloseButtonRef = useRef<HTMLButtonElement | null>(null);
+  const reportModalContainerRef = useRef<HTMLDivElement | null>(null);
+  const reportModalCloseButtonRef = useRef<HTMLButtonElement | null>(null);
+  const silentRefreshInFlightRef = useRef(false);
+  const connectionContextRef = useRef<WhatsAppConnectionContext | null>(null);
+
+  useModalAccessibility({
+    open: isModalOpen,
+    onClose: () => setIsModalOpen(false),
+    containerRef: connectModalContainerRef,
+    initialFocusRef: connectModalCloseButtonRef
+  });
+
+  useModalAccessibility({
+    open: isReportOpen,
+    onClose: () => setIsReportOpen(false),
+    containerRef: reportModalContainerRef,
+    initialFocusRef: reportModalCloseButtonRef
+  });
 
   const showActionPopup = useCallback((title: string, description: string, tone: ActionPopupTone) => {
     setActionPopup({ title, description, tone });
   }, []);
 
-  const loadBusiness = useCallback(async () => {
-    const response = await fetch("/api/orgs", { cache: "no-store" });
-    const payload = (await response.json().catch(() => null)) as BusinessesResponse | null;
-    if (!response.ok) {
-      throw new Error(toErrorMessage(payload, "Failed to load business."));
-    }
+  useEffect(() => {
+    connectionContextRef.current = connectionContext;
+  }, [connectionContext]);
 
-    const organizations = payload?.data?.organizations ?? [];
+  const loadBusiness = useCallback(async () => {
+    const organizations = ((await fetchOrganizationsCached()) as NonNullable<BusinessesResponse["data"]>["organizations"] | undefined) ?? [];
     const business = organizations[0] ?? null;
     setActiveBusiness(business);
     return business;
   }, []);
 
   const loadConnectionContext = useCallback(async (options?: { refresh?: boolean; silent?: boolean }) => {
-    if (!options?.silent) {
+    if (options?.silent && silentRefreshInFlightRef.current) {
+      return connectionContextRef.current;
+    }
+
+    if (options?.silent) {
+      silentRefreshInFlightRef.current = true;
+    } else {
       setIsLoadingConnection(true);
     }
     try {
@@ -143,7 +170,9 @@ export function WhatsAppConnectionSettings() {
       setConnectionContext(context);
       return context;
     } finally {
-      if (!options?.silent) {
+      if (options?.silent) {
+        silentRefreshInFlightRef.current = false;
+      } else {
         setIsLoadingConnection(false);
       }
     }
@@ -156,13 +185,13 @@ export function WhatsAppConnectionSettings() {
       try {
         setIsLoading(true);
         setError(null);
-        const business = await loadBusiness();
+        const [business] = await Promise.all([loadBusiness(), loadConnectionContext()]);
         if (!mounted) {
           return;
         }
 
-        if (business) {
-          await loadConnectionContext();
+        if (!business) {
+          setConnectionContext(null);
         }
       } catch (loadError) {
         if (mounted) {
@@ -189,7 +218,7 @@ export function WhatsAppConnectionSettings() {
   }, [connectionContext?.connectedAccount?.displayPhone, testPhoneE164]);
 
   useEffect(() => {
-    if (!isModalOpen || !activeBusiness) {
+    if (!isModalOpen) {
       return;
     }
 
@@ -202,7 +231,7 @@ export function WhatsAppConnectionSettings() {
     return () => {
       window.clearInterval(timer);
     };
-  }, [activeBusiness, isModalOpen, loadConnectionContext]);
+  }, [isModalOpen, loadConnectionContext]);
 
   useEffect(() => {
     let cancelled = false;
@@ -308,28 +337,7 @@ export function WhatsAppConnectionSettings() {
 
   const qrIsExpired = connectMode === "qr" && Boolean(connectionContext?.qrCode) && qrCountdownSeconds === 0;
 
-  async function handleOpenModal() {
-    if (!activeBusiness) {
-      setError("No business is available for this account.");
-      return;
-    }
-
-    setError(null);
-    setInfo(null);
-    setShowConnectedSplash(false);
-    setIsModalOpen(true);
-    setConnectMode("qr");
-
-    try {
-      await requestQrCode();
-    } catch (requestError) {
-      const message = requestError instanceof Error ? requestError.message : "Failed to start QR connection.";
-      setError(message);
-      showActionPopup("QR Failed", message, "error");
-    }
-  }
-
-  async function requestQrCode() {
+  const requestQrCode = useCallback(async () => {
     setIsRequestingConnect(true);
     setError(null);
     setInfo(null);
@@ -361,7 +369,6 @@ export function WhatsAppConnectionSettings() {
         }));
       }
 
-      await loadConnectionContext();
       const message = qrPayload?.qrCode === "ALREADY_CONNECTED" ? "WhatsApp is already connected." : "QR code generated.";
       setInfo(message);
       showActionPopup("QR Updated", message, "success");
@@ -373,7 +380,28 @@ export function WhatsAppConnectionSettings() {
     } finally {
       setIsRequestingConnect(false);
     }
-  }
+  }, [activeBusiness?.id, showActionPopup]);
+
+  const handleOpenModal = useCallback(async () => {
+    if (!activeBusiness) {
+      setError("No business is available for this account.");
+      return;
+    }
+
+    setError(null);
+    setInfo(null);
+    setShowConnectedSplash(false);
+    setIsModalOpen(true);
+    setConnectMode("qr");
+
+    try {
+      await requestQrCode();
+    } catch (requestError) {
+      const message = requestError instanceof Error ? requestError.message : "Failed to start QR connection.";
+      setError(message);
+      showActionPopup("QR Failed", message, "error");
+    }
+  }, [activeBusiness, requestQrCode, showActionPopup]);
 
   async function handleGeneratePairingCode() {
     if (!activeBusiness) {
@@ -416,7 +444,6 @@ export function WhatsAppConnectionSettings() {
         }));
       }
 
-      await loadConnectionContext();
       const pairingCode = pairingPayload?.pairingCode ?? "";
       const message = pairingCode === "ALREADY_CONNECTED" ? "WhatsApp is already connected." : `Pairing code generated: ${pairingCode}`;
       setInfo(message);
@@ -448,7 +475,17 @@ export function WhatsAppConnectionSettings() {
         throw new Error(toErrorMessage(payload, "Failed to disconnect WhatsApp."));
       }
 
-      await loadConnectionContext();
+      setConnectionContext((current) => ({
+        orgId: current?.orgId ?? activeBusiness.id,
+        provider: "BAILEYS",
+        connectionStatus: "DISCONNECTED",
+        lastError: null,
+        qrCode: null,
+        qrCodeExpiresAt: null,
+        pairingCode: null,
+        pairingCodeExpiresAt: null,
+        connectedAccount: null
+      }));
       setInfo("WhatsApp session disconnected.");
       showActionPopup("WhatsApp Disconnected", "Sesi berhasil diputus dari perangkat ini.", "info");
       setQrDataUrl(null);
@@ -462,7 +499,7 @@ export function WhatsAppConnectionSettings() {
     }
   }
 
-  async function handleRefreshStatus() {
+  const handleRefreshStatus = useCallback(async () => {
     setError(null);
     setInfo(null);
 
@@ -481,7 +518,28 @@ export function WhatsAppConnectionSettings() {
       setError(message);
       showActionPopup("Refresh Failed", message, "error");
     }
-  }
+  }, [loadConnectionContext, showActionPopup]);
+
+  const refreshAction = useMemo(
+    () => (
+      <Button variant="secondary" onClick={() => void handleRefreshStatus()} disabled={isLoadingConnection} className="h-10 rounded-xl">
+        <RefreshCw className={`mr-2 h-4 w-4 ${isLoadingConnection ? "animate-spin" : ""}`} />
+        Refresh Status
+      </Button>
+    ),
+    [handleRefreshStatus, isLoadingConnection]
+  );
+  const connectAction = useMemo(
+    () => (
+      <Button onClick={() => void handleOpenModal()} disabled={!activeBusiness} className="h-10 rounded-xl">
+        {primaryConnectLabel}
+      </Button>
+    ),
+    [activeBusiness, handleOpenModal, primaryConnectLabel]
+  );
+
+  useSettingsHeaderAction("10-whatsapp-refresh", refreshAction);
+  useSettingsHeaderAction("20-whatsapp-connect", connectAction);
 
   async function handleSendTestMessage() {
     if (!activeBusiness || !testPhoneE164.trim()) {
@@ -508,7 +566,6 @@ export function WhatsAppConnectionSettings() {
         throw new Error(toErrorMessage(payload, "Failed to send test message."));
       }
 
-      await loadConnectionContext({ refresh: true });
       const message = payload?.data?.verification?.waMessageId
         ? `Test message sent: ${payload.data.verification.waMessageId}`
         : "Test message sent.";
@@ -551,25 +608,7 @@ export function WhatsAppConnectionSettings() {
   }
 
   return (
-    <section className="mx-auto max-w-6xl space-y-5">
-      <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
-        <div>
-          <h1 className="text-xl font-semibold text-foreground">WhatsApp Connection</h1>
-          <p className="text-sm text-muted-foreground">
-            Hubungkan perangkat WhatsApp bisnis Anda ke 20byte memakai Baileys sebagai transport MVP.
-          </p>
-        </div>
-        <div className="flex flex-wrap items-center gap-2">
-          <Button variant="secondary" onClick={() => void handleRefreshStatus()} disabled={isLoadingConnection}>
-            <RefreshCw className={`mr-2 h-4 w-4 ${isLoadingConnection ? "animate-spin" : ""}`} />
-            Refresh Status
-          </Button>
-          <Button onClick={() => void handleOpenModal()} disabled={!activeBusiness}>
-            {primaryConnectLabel}
-          </Button>
-        </div>
-      </div>
-
+    <section className="space-y-5">
       <div className="grid gap-4 xl:grid-cols-[minmax(0,1.1fr)_minmax(320px,0.9fr)]">
         <div className="rounded-[28px] border border-border/70 bg-[linear-gradient(180deg,hsl(var(--card)),hsl(var(--card))/0.96),radial-gradient(circle_at_top_left,hsl(var(--primary)/0.08),transparent_38%)] p-5 shadow-sm">
           <div className="flex items-center justify-between gap-3">
@@ -702,8 +741,11 @@ export function WhatsAppConnectionSettings() {
       </div>
 
       {isModalOpen ? (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/72 px-4 py-8">
-          <div className="relative grid w-full max-w-5xl overflow-hidden rounded-[32px] border border-border/80 bg-background shadow-2xl shadow-black/35 lg:grid-cols-[400px_minmax(0,1fr)]">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/72 px-4 py-8" role="dialog" aria-modal="true" aria-label="Tautkan perangkat WhatsApp">
+          <div
+            ref={connectModalContainerRef}
+            className="relative grid w-full max-w-5xl overflow-hidden rounded-[32px] border border-border/80 bg-background shadow-2xl shadow-black/35 lg:grid-cols-[400px_minmax(0,1fr)]"
+          >
             <div className="bg-background p-8 lg:border-r lg:border-border/70">
               <div className="absolute inset-x-0 top-0 h-1 bg-[linear-gradient(90deg,hsl(var(--primary)),hsl(var(--primary))/0.3)]" />
               <div className="flex h-14 w-14 items-center justify-center rounded-2xl border border-primary/20 bg-primary/10 text-primary shadow-sm">
@@ -755,6 +797,7 @@ export function WhatsAppConnectionSettings() {
               ) : null}
 
               <button
+                ref={connectModalCloseButtonRef}
                 type="button"
                 onClick={() => setIsModalOpen(false)}
                 className="absolute right-5 top-5 inline-flex h-10 w-10 items-center justify-center rounded-full border border-border/80 bg-background/80 text-muted-foreground transition hover:bg-accent hover:text-foreground"
@@ -863,9 +906,10 @@ export function WhatsAppConnectionSettings() {
       ) : null}
 
       {isReportOpen ? (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/72 px-4 py-8">
-          <div className="relative w-full max-w-5xl overflow-hidden rounded-[32px] border border-border/80 bg-background shadow-2xl shadow-black/35">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/72 px-4 py-8" role="dialog" aria-modal="true" aria-label="WhatsApp report">
+          <div ref={reportModalContainerRef} className="relative w-full max-w-5xl overflow-hidden rounded-[32px] border border-border/80 bg-background shadow-2xl shadow-black/35">
             <button
+              ref={reportModalCloseButtonRef}
               type="button"
               onClick={() => setIsReportOpen(false)}
               className="absolute right-5 top-5 inline-flex h-10 w-10 items-center justify-center rounded-full border border-border/80 bg-background/80 text-muted-foreground transition hover:bg-accent hover:text-foreground"

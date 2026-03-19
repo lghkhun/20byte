@@ -116,8 +116,8 @@ export function ConversationListPanel({
   ];
 
   return (
-    <section data-panel="conversation-list" className="relative flex h-full min-h-0 max-h-full flex-col overflow-hidden bg-card/95 backdrop-blur-sm">
-      <div className="space-y-4 border-b border-border/70 bg-card/95 px-4 py-4 sm:px-5">
+    <section data-panel="conversation-list" className="inbox-scroll relative flex h-full min-h-0 max-h-full flex-col overflow-y-auto overscroll-contain bg-card/95 backdrop-blur-sm">
+      <div className="shrink-0 space-y-4 border-b border-border/70 bg-card/95 px-4 py-4 sm:px-5">
         <div className="flex items-center justify-between gap-3">
           <div className="space-y-1">
             <h2 className="text-lg font-semibold tracking-tight text-foreground">Inbox</h2>

@@ -3,6 +3,7 @@ import { InvoiceStatus } from "@prisma/client";
 import { prisma } from "@/lib/db/prisma";
 import { publishInvoiceUpdatedEvent } from "@/lib/ably/publisher";
 import { writeAuditLogSafe } from "@/server/services/auditLogService";
+import { syncConversationCrmStageFromInvoice } from "@/server/services/crmPipelineService";
 import { requireInvoiceAccess } from "@/server/services/invoice/access";
 import type { SendInvoiceInput, SendInvoiceResult } from "@/server/services/invoice/invoiceTypes";
 import { assertInvoiceSendable, buildAutomatedInvoiceText } from "@/server/services/invoice/sendPolicy";
@@ -87,6 +88,21 @@ export async function sendInvoiceToCustomer(input: SendInvoiceInput): Promise<Se
 
   if (!updated) {
     throw new ServiceError(404, "INVOICE_NOT_FOUND", "Invoice does not exist.");
+  }
+
+  try {
+    await syncConversationCrmStageFromInvoice({
+      orgId,
+      conversationId: invoice.conversationId,
+      target: "INVOICE_SENT"
+    });
+  } catch (error) {
+    console.warn("[invoice.outbound] failed to sync CRM stage after send", {
+      orgId,
+      conversationId: invoice.conversationId,
+      invoiceId: updated.id,
+      error
+    });
   }
 
   await writeAuditLogSafe({

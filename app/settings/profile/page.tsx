@@ -1,5 +1,5 @@
-import { redirect } from "next/navigation";
+import { ProfileWorkspace } from "@/components/settings/ProfileWorkspace";
 
-export default function SettingsProfileAliasPage() {
-  redirect("/dashboard/settings/profile");
+export default function SettingsProfilePage() {
+  return <ProfileWorkspace />;
 }

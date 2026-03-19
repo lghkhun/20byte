@@ -1,0 +1,37 @@
+[     236ms] Error: Minified React error #418; visit https://react.dev/errors/418 for the full message or use the non-minified dev environment for full errors and additional helpful warnings.
+    at t5 (http://localhost:3100/_next/static/chunks/fd9d1056-9abfb49807193c16.js:1:24670)
+    at iZ (http://localhost:3100/_next/static/chunks/fd9d1056-9abfb49807193c16.js:1:120535)
+    at ia (http://localhost:3100/_next/static/chunks/fd9d1056-9abfb49807193c16.js:1:95162)
+    at http://localhost:3100/_next/static/chunks/fd9d1056-9abfb49807193c16.js:1:91088
+    at http://localhost:3100/_next/static/chunks/fd9d1056-9abfb49807193c16.js:1:91095
+    at oZ (http://localhost:3100/_next/static/chunks/fd9d1056-9abfb49807193c16.js:1:91200)
+    at MessagePort.T (http://localhost:3100/_next/static/chunks/117-a06661dd5ab18210.js:1:83990)
+[     239ms] Error: Minified React error #418; visit https://react.dev/errors/418 for the full message or use the non-minified dev environment for full errors and additional helpful warnings.
+    at t5 (http://localhost:3100/_next/static/chunks/fd9d1056-9abfb49807193c16.js:1:24670)
+    at iZ (http://localhost:3100/_next/static/chunks/fd9d1056-9abfb49807193c16.js:1:120535)
+    at ia (http://localhost:3100/_next/static/chunks/fd9d1056-9abfb49807193c16.js:1:95162)
+    at http://localhost:3100/_next/static/chunks/fd9d1056-9abfb49807193c16.js:1:91088
+    at http://localhost:3100/_next/static/chunks/fd9d1056-9abfb49807193c16.js:1:91095
+    at oZ (http://localhost:3100/_next/static/chunks/fd9d1056-9abfb49807193c16.js:1:91200)
+    at MessagePort.T (http://localhost:3100/_next/static/chunks/117-a06661dd5ab18210.js:1:83990)
+[     240ms] Error: Minified React error #418; visit https://react.dev/errors/418 for the full message or use the non-minified dev environment for full errors and additional helpful warnings.
+    at t5 (http://localhost:3100/_next/static/chunks/fd9d1056-9abfb49807193c16.js:1:24670)
+    at iZ (http://localhost:3100/_next/static/chunks/fd9d1056-9abfb49807193c16.js:1:120535)
+    at ia (http://localhost:3100/_next/static/chunks/fd9d1056-9abfb49807193c16.js:1:95162)
+    at http://localhost:3100/_next/static/chunks/fd9d1056-9abfb49807193c16.js:1:91088
+    at http://localhost:3100/_next/static/chunks/fd9d1056-9abfb49807193c16.js:1:91095
+    at oZ (http://localhost:3100/_next/static/chunks/fd9d1056-9abfb49807193c16.js:1:91200)
+    at MessagePort.T (http://localhost:3100/_next/static/chunks/117-a06661dd5ab18210.js:1:83990)
+[     242ms] Error: Minified React error #423; visit https://react.dev/errors/423 for the full message or use the non-minified dev environment for full errors and additional helpful warnings.
+    at iZ (http://localhost:3100/_next/static/chunks/fd9d1056-9abfb49807193c16.js:1:118349)
+    at ia (http://localhost:3100/_next/static/chunks/fd9d1056-9abfb49807193c16.js:1:95162)
+    at http://localhost:3100/_next/static/chunks/fd9d1056-9abfb49807193c16.js:1:94984
+    at il (http://localhost:3100/_next/static/chunks/fd9d1056-9abfb49807193c16.js:1:94991)
+    at oJ (http://localhost:3100/_next/static/chunks/fd9d1056-9abfb49807193c16.js:1:92347)
+    at oZ (http://localhost:3100/_next/static/chunks/fd9d1056-9abfb49807193c16.js:1:91766)
+    at MessagePort.T (http://localhost:3100/_next/static/chunks/117-a06661dd5ab18210.js:1:83990)
+[  185163ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://localhost:3100/api/conversations?filter=UNASSIGNED&status=OPEN&page=1&limit=20:0
+[  200156ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://localhost:3100/api/conversations?filter=UNASSIGNED&status=OPEN&page=1&limit=20:0
+[  215154ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://localhost:3100/api/conversations?filter=UNASSIGNED&status=OPEN&page=1&limit=20:0
+[  230156ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://localhost:3100/api/conversations?filter=UNASSIGNED&status=OPEN&page=1&limit=20:0
+[  245155ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://localhost:3100/api/conversations?filter=UNASSIGNED&status=OPEN&page=1&limit=20:0

@@ -1,6 +1,7 @@
 import type { NextRequest } from "next/server";
+import { NextResponse } from "next/server";
 
-import { errorResponse, successResponse } from "@/lib/api/http";
+import { errorResponse } from "@/lib/api/http";
 import { requireApiSession } from "@/lib/auth/middleware";
 import { createInboxRealtimeTokenRequest } from "@/server/services/realtimeService";
 import { ServiceError } from "@/server/services/serviceError";
@@ -17,12 +18,12 @@ export async function GET(request: NextRequest) {
 
   try {
     const tokenRequest = await createInboxRealtimeTokenRequest(auth.session.userId, orgId);
-    return successResponse(
-      {
-        tokenRequest
-      },
-      200
-    );
+    return NextResponse.json(tokenRequest, {
+      status: 200,
+      headers: {
+        "Cache-Control": "no-store"
+      }
+    });
   } catch (error) {
     if (error instanceof ServiceError) {
       return errorResponse(error.status, error.code, error.message);

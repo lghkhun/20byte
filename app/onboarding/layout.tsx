@@ -11,5 +11,5 @@ export default async function OnboardingLayout() {
     redirect("/login");
   }
 
-  redirect("/dashboard/settings/whatsapp");
+  redirect("/settings?tab=whatsapp");
 }

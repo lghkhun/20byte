@@ -1,0 +1,69 @@
+- generic [active] [ref=e1]:
+  - generic [ref=e2]:
+    - generic [ref=e5]:
+      - list [ref=e7]:
+        - listitem [ref=e8]:
+          - link "20 20byte Chat-first CRM" [ref=e9] [cursor=pointer]:
+            - /url: /inbox
+            - generic [ref=e11]: "20"
+            - generic [ref=e12]:
+              - generic [ref=e13]: 20byte
+              - generic [ref=e14]: Chat-first CRM
+      - generic [ref=e15]:
+        - generic [ref=e16]:
+          - generic [ref=e17]: Platform
+          - list [ref=e18]:
+            - listitem [ref=e19]:
+              - link "Dashboard" [ref=e20] [cursor=pointer]:
+                - /url: /dashboard
+                - img [ref=e21]
+                - generic [ref=e26]: Dashboard
+            - listitem [ref=e27]:
+              - link "Inbox" [ref=e28] [cursor=pointer]:
+                - /url: /inbox
+                - img [ref=e29]
+                - generic [ref=e31]: Inbox
+            - listitem [ref=e32]:
+              - link "Customers" [ref=e33] [cursor=pointer]:
+                - /url: /customers
+                - img [ref=e34]
+                - generic [ref=e39]: Customers
+            - listitem [ref=e40]:
+              - link "Invoices" [ref=e41] [cursor=pointer]:
+                - /url: /invoices
+                - img [ref=e42]
+                - generic [ref=e45]: Invoices
+            - listitem [ref=e46]:
+              - link "CRM Pipeline" [ref=e47] [cursor=pointer]:
+                - /url: /crm/pipelines
+                - img [ref=e48]
+                - generic [ref=e52]: CRM Pipeline
+            - listitem [ref=e53]:
+              - link "Settings" [ref=e54] [cursor=pointer]:
+                - /url: /settings
+                - img [ref=e55]
+                - generic [ref=e58]: Settings
+              - button "Toggle" [ref=e59] [cursor=pointer]:
+                - img [ref=e60]
+                - generic [ref=e62]: Toggle
+        - generic [ref=e63]:
+          - generic [ref=e64]: Business Tools
+          - list [ref=e66]:
+            - listitem [ref=e67]:
+              - link "Settings" [ref=e68] [cursor=pointer]:
+                - /url: /settings
+                - img [ref=e69]
+                - generic [ref=e72]: Settings
+      - list [ref=e74]:
+        - listitem [ref=e75]:
+          - link "Login" [ref=e76] [cursor=pointer]:
+            - /url: /login
+            - img [ref=e77]
+            - generic [ref=e81]: Login
+    - main [ref=e82]:
+      - main [ref=e83]:
+        - generic [ref=e88]:
+          - img [ref=e90]
+          - paragraph [ref=e93]: No Business Found
+          - paragraph [ref=e94]: No business is linked to this account yet.
+  - alert [ref=e95]

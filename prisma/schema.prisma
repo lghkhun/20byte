@@ -102,6 +102,7 @@ model Org {
   waAccounts         WaAccount[]
   shortlinks         Shortlink[]
   shortlinkClicks    ShortlinkClick[]
+  metaIntegrations   MetaIntegration[]
   auditLogs          AuditLog[]
   plan               OrgPlan?
   bankAccounts       OrgBankAccount[]
@@ -143,6 +144,7 @@ model User {
   email        String   @unique
   passwordHash String
   name         String?
+  avatarUrl    String?
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
@@ -547,6 +549,22 @@ model ShortlinkClick {
 
   @@index([shortlinkId, clickedAt])
   @@index([orgId, clickedAt])
+}
+
+model MetaIntegration {
+  id             String   @id @default(cuid())
+  orgId          String
+  pixelId        String
+  accessTokenEnc String   @db.Text
+  testEventCode  String?
+  isEnabled      Boolean  @default(false)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  org            Org      @relation(fields: [orgId], references: [id])
+
+  @@unique([orgId])
+  @@index([orgId])
 }
 
 model AuditLog {

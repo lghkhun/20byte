@@ -1,0 +1,4 @@
+[  150297ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://localhost:3100/api/conversations?filter=UNASSIGNED&status=OPEN&page=1&limit=20:0
+[  165289ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://localhost:3100/api/conversations?filter=UNASSIGNED&status=OPEN&page=1&limit=20:0
+[  180296ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://localhost:3100/api/conversations?filter=UNASSIGNED&status=OPEN&page=1&limit=20:0
+[  195289ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://localhost:3100/api/conversations?filter=UNASSIGNED&status=OPEN&page=1&limit=20:0

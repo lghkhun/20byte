@@ -1,0 +1,158 @@
+[     431ms] Error: Minified React error #418; visit https://react.dev/errors/418 for the full message or use the non-minified dev environment for full errors and additional helpful warnings.
+    at t5 (http://localhost:3100/_next/static/chunks/fd9d1056-9abfb49807193c16.js:1:24670)
+    at iZ (http://localhost:3100/_next/static/chunks/fd9d1056-9abfb49807193c16.js:1:120535)
+    at ia (http://localhost:3100/_next/static/chunks/fd9d1056-9abfb49807193c16.js:1:95162)
+    at http://localhost:3100/_next/static/chunks/fd9d1056-9abfb49807193c16.js:1:91088
+    at http://localhost:3100/_next/static/chunks/fd9d1056-9abfb49807193c16.js:1:91095
+    at oZ (http://localhost:3100/_next/static/chunks/fd9d1056-9abfb49807193c16.js:1:91200)
+    at MessagePort.T (http://localhost:3100/_next/static/chunks/117-a06661dd5ab18210.js:1:83990)
+[     433ms] Error: Minified React error #418; visit https://react.dev/errors/418 for the full message or use the non-minified dev environment for full errors and additional helpful warnings.
+    at t5 (http://localhost:3100/_next/static/chunks/fd9d1056-9abfb49807193c16.js:1:24670)
+    at iZ (http://localhost:3100/_next/static/chunks/fd9d1056-9abfb49807193c16.js:1:120535)
+    at ia (http://localhost:3100/_next/static/chunks/fd9d1056-9abfb49807193c16.js:1:95162)
+    at http://localhost:3100/_next/static/chunks/fd9d1056-9abfb49807193c16.js:1:91088
+    at http://localhost:3100/_next/static/chunks/fd9d1056-9abfb49807193c16.js:1:91095
+    at oZ (http://localhost:3100/_next/static/chunks/fd9d1056-9abfb49807193c16.js:1:91200)
+    at MessagePort.T (http://localhost:3100/_next/static/chunks/117-a06661dd5ab18210.js:1:83990)
+[     434ms] Error: Minified React error #418; visit https://react.dev/errors/418 for the full message or use the non-minified dev environment for full errors and additional helpful warnings.
+    at t5 (http://localhost:3100/_next/static/chunks/fd9d1056-9abfb49807193c16.js:1:24670)
+    at iZ (http://localhost:3100/_next/static/chunks/fd9d1056-9abfb49807193c16.js:1:120535)
+    at ia (http://localhost:3100/_next/static/chunks/fd9d1056-9abfb49807193c16.js:1:95162)
+    at http://localhost:3100/_next/static/chunks/fd9d1056-9abfb49807193c16.js:1:91088
+    at http://localhost:3100/_next/static/chunks/fd9d1056-9abfb49807193c16.js:1:91095
+    at oZ (http://localhost:3100/_next/static/chunks/fd9d1056-9abfb49807193c16.js:1:91200)
+    at MessagePort.T (http://localhost:3100/_next/static/chunks/117-a06661dd5ab18210.js:1:83990)
+[     435ms] Error: Minified React error #423; visit https://react.dev/errors/423 for the full message or use the non-minified dev environment for full errors and additional helpful warnings.
+    at iZ (http://localhost:3100/_next/static/chunks/fd9d1056-9abfb49807193c16.js:1:118349)
+    at ia (http://localhost:3100/_next/static/chunks/fd9d1056-9abfb49807193c16.js:1:95162)
+    at http://localhost:3100/_next/static/chunks/fd9d1056-9abfb49807193c16.js:1:94984
+    at il (http://localhost:3100/_next/static/chunks/fd9d1056-9abfb49807193c16.js:1:94991)
+    at oJ (http://localhost:3100/_next/static/chunks/fd9d1056-9abfb49807193c16.js:1:92347)
+    at oZ (http://localhost:3100/_next/static/chunks/fd9d1056-9abfb49807193c16.js:1:91766)
+    at MessagePort.T (http://localhost:3100/_next/static/chunks/117-a06661dd5ab18210.js:1:83990)
+[     486ms] [ERROR] Failed to load resource: the server responded with a status of 404 (Not Found) @ http://localhost:3100/favicon.ico:0
+[   34339ms] Error: Minified React error #418; visit https://react.dev/errors/418 for the full message or use the non-minified dev environment for full errors and additional helpful warnings.
+    at t5 (http://localhost:3100/_next/static/chunks/fd9d1056-9abfb49807193c16.js:1:24670)
+    at iZ (http://localhost:3100/_next/static/chunks/fd9d1056-9abfb49807193c16.js:1:120535)
+    at ia (http://localhost:3100/_next/static/chunks/fd9d1056-9abfb49807193c16.js:1:95162)
+    at http://localhost:3100/_next/static/chunks/fd9d1056-9abfb49807193c16.js:1:91088
+    at http://localhost:3100/_next/static/chunks/fd9d1056-9abfb49807193c16.js:1:91095
+    at oZ (http://localhost:3100/_next/static/chunks/fd9d1056-9abfb49807193c16.js:1:91200)
+    at MessagePort.T (http://localhost:3100/_next/static/chunks/117-a06661dd5ab18210.js:1:83990)
+[   34340ms] Error: Minified React error #418; visit https://react.dev/errors/418 for the full message or use the non-minified dev environment for full errors and additional helpful warnings.
+    at t5 (http://localhost:3100/_next/static/chunks/fd9d1056-9abfb49807193c16.js:1:24670)
+    at iZ (http://localhost:3100/_next/static/chunks/fd9d1056-9abfb49807193c16.js:1:120535)
+    at ia (http://localhost:3100/_next/static/chunks/fd9d1056-9abfb49807193c16.js:1:95162)
+    at http://localhost:3100/_next/static/chunks/fd9d1056-9abfb49807193c16.js:1:91088
+    at http://localhost:3100/_next/static/chunks/fd9d1056-9abfb49807193c16.js:1:91095
+    at oZ (http://localhost:3100/_next/static/chunks/fd9d1056-9abfb49807193c16.js:1:91200)
+    at MessagePort.T (http://localhost:3100/_next/static/chunks/117-a06661dd5ab18210.js:1:83990)
+[   34341ms] Error: Minified React error #418; visit https://react.dev/errors/418 for the full message or use the non-minified dev environment for full errors and additional helpful warnings.
+    at t5 (http://localhost:3100/_next/static/chunks/fd9d1056-9abfb49807193c16.js:1:24670)
+    at iZ (http://localhost:3100/_next/static/chunks/fd9d1056-9abfb49807193c16.js:1:120535)
+    at ia (http://localhost:3100/_next/static/chunks/fd9d1056-9abfb49807193c16.js:1:95162)
+    at http://localhost:3100/_next/static/chunks/fd9d1056-9abfb49807193c16.js:1:91088
+    at http://localhost:3100/_next/static/chunks/fd9d1056-9abfb49807193c16.js:1:91095
+    at oZ (http://localhost:3100/_next/static/chunks/fd9d1056-9abfb49807193c16.js:1:91200)
+    at MessagePort.T (http://localhost:3100/_next/static/chunks/117-a06661dd5ab18210.js:1:83990)
+[   34342ms] Error: Minified React error #423; visit https://react.dev/errors/423 for the full message or use the non-minified dev environment for full errors and additional helpful warnings.
+    at iZ (http://localhost:3100/_next/static/chunks/fd9d1056-9abfb49807193c16.js:1:118349)
+    at ia (http://localhost:3100/_next/static/chunks/fd9d1056-9abfb49807193c16.js:1:95162)
+    at http://localhost:3100/_next/static/chunks/fd9d1056-9abfb49807193c16.js:1:94984
+    at il (http://localhost:3100/_next/static/chunks/fd9d1056-9abfb49807193c16.js:1:94991)
+    at oJ (http://localhost:3100/_next/static/chunks/fd9d1056-9abfb49807193c16.js:1:92347)
+    at oZ (http://localhost:3100/_next/static/chunks/fd9d1056-9abfb49807193c16.js:1:91766)
+    at MessagePort.T (http://localhost:3100/_next/static/chunks/117-a06661dd5ab18210.js:1:83990)
+[   35676ms] [ERROR] Failed to fetch RSC payload for http://localhost:3100/settings. Falling back to browser navigation. TypeError: Failed to fetch
+    at s (http://localhost:3100/_next/static/chunks/117-a06661dd5ab18210.js:1:45417)
+    at http://localhost:3100/_next/static/chunks/117-a06661dd5ab18210.js:1:58943
+    at Object.u [as task] (http://localhost:3100/_next/static/chunks/117-a06661dd5ab18210.js:1:31834)
+    at c.s (http://localhost:3100/_next/static/chunks/117-a06661dd5ab18210.js:1:32539)
+    at Object.u [as task] (http://localhost:3100/_next/static/chunks/117-a06661dd5ab18210.js:1:31896) @ http://localhost:3100/_next/static/chunks/117-a06661dd5ab18210.js:0
+[   37407ms] [ERROR] Failed to fetch RSC payload for http://localhost:3100/dashboard. Falling back to browser navigation. TypeError: Failed to fetch
+    at s (http://localhost:3100/_next/static/chunks/117-a06661dd5ab18210.js:1:45417)
+    at http://localhost:3100/_next/static/chunks/117-a06661dd5ab18210.js:1:58943
+    at Object.u [as task] (http://localhost:3100/_next/static/chunks/117-a06661dd5ab18210.js:1:31834)
+    at c.s (http://localhost:3100/_next/static/chunks/117-a06661dd5ab18210.js:1:32539)
+    at c.enqueue (http://localhost:3100/_next/static/chunks/117-a06661dd5ab18210.js:1:31964)
+    at s (http://localhost:3100/_next/static/chunks/117-a06661dd5ab18210.js:1:58906)
+    at i (http://localhost:3100/_next/static/chunks/117-a06661dd5ab18210.js:1:58446)
+    at a (http://localhost:3100/_next/static/chunks/117-a06661dd5ab18210.js:1:65235)
+    at f (http://localhost:3100/_next/static/chunks/117-a06661dd5ab18210.js:1:75079)
+    at Object.action (http://localhost:3100/_next/static/chunks/117-a06661dd5ab18210.js:2:7082) @ http://localhost:3100/_next/static/chunks/117-a06661dd5ab18210.js:0
+[   37407ms] [ERROR] Failed to fetch RSC payload for http://localhost:3100/inbox. Falling back to browser navigation. TypeError: Failed to fetch
+    at s (http://localhost:3100/_next/static/chunks/117-a06661dd5ab18210.js:1:45417)
+    at http://localhost:3100/_next/static/chunks/117-a06661dd5ab18210.js:1:58943
+    at Object.u [as task] (http://localhost:3100/_next/static/chunks/117-a06661dd5ab18210.js:1:31834)
+    at c.s (http://localhost:3100/_next/static/chunks/117-a06661dd5ab18210.js:1:32539)
+    at c.enqueue (http://localhost:3100/_next/static/chunks/117-a06661dd5ab18210.js:1:31964)
+    at s (http://localhost:3100/_next/static/chunks/117-a06661dd5ab18210.js:1:58906)
+    at i (http://localhost:3100/_next/static/chunks/117-a06661dd5ab18210.js:1:58446)
+    at a (http://localhost:3100/_next/static/chunks/117-a06661dd5ab18210.js:1:65235)
+    at f (http://localhost:3100/_next/static/chunks/117-a06661dd5ab18210.js:1:75079)
+    at Object.action (http://localhost:3100/_next/static/chunks/117-a06661dd5ab18210.js:2:7082) @ http://localhost:3100/_next/static/chunks/117-a06661dd5ab18210.js:0
+[   37407ms] [ERROR] Failed to fetch RSC payload for http://localhost:3100/settings. Falling back to browser navigation. TypeError: Failed to fetch
+    at s (http://localhost:3100/_next/static/chunks/117-a06661dd5ab18210.js:1:45417)
+    at http://localhost:3100/_next/static/chunks/117-a06661dd5ab18210.js:1:58943
+    at Object.u [as task] (http://localhost:3100/_next/static/chunks/117-a06661dd5ab18210.js:1:31834)
+    at c.s (http://localhost:3100/_next/static/chunks/117-a06661dd5ab18210.js:1:32539)
+    at c.enqueue (http://localhost:3100/_next/static/chunks/117-a06661dd5ab18210.js:1:31964)
+    at s (http://localhost:3100/_next/static/chunks/117-a06661dd5ab18210.js:1:58906)
+    at i (http://localhost:3100/_next/static/chunks/117-a06661dd5ab18210.js:1:58446)
+    at a (http://localhost:3100/_next/static/chunks/117-a06661dd5ab18210.js:1:65235)
+    at f (http://localhost:3100/_next/static/chunks/117-a06661dd5ab18210.js:1:75079)
+    at Object.action (http://localhost:3100/_next/static/chunks/117-a06661dd5ab18210.js:2:7082) @ http://localhost:3100/_next/static/chunks/117-a06661dd5ab18210.js:0
+[   37407ms] [ERROR] Failed to fetch RSC payload for http://localhost:3100/customers. Falling back to browser navigation. TypeError: Failed to fetch
+    at s (http://localhost:3100/_next/static/chunks/117-a06661dd5ab18210.js:1:45417)
+    at http://localhost:3100/_next/static/chunks/117-a06661dd5ab18210.js:1:58943
+    at Object.u [as task] (http://localhost:3100/_next/static/chunks/117-a06661dd5ab18210.js:1:31834)
+    at c.s (http://localhost:3100/_next/static/chunks/117-a06661dd5ab18210.js:1:32539)
+    at c.enqueue (http://localhost:3100/_next/static/chunks/117-a06661dd5ab18210.js:1:31964)
+    at s (http://localhost:3100/_next/static/chunks/117-a06661dd5ab18210.js:1:58906)
+    at i (http://localhost:3100/_next/static/chunks/117-a06661dd5ab18210.js:1:58446)
+    at a (http://localhost:3100/_next/static/chunks/117-a06661dd5ab18210.js:1:65235)
+    at f (http://localhost:3100/_next/static/chunks/117-a06661dd5ab18210.js:1:75079)
+    at Object.action (http://localhost:3100/_next/static/chunks/117-a06661dd5ab18210.js:2:7082) @ http://localhost:3100/_next/static/chunks/117-a06661dd5ab18210.js:0
+[   37407ms] [ERROR] Failed to fetch RSC payload for http://localhost:3100/invoices. Falling back to browser navigation. TypeError: Failed to fetch
+    at s (http://localhost:3100/_next/static/chunks/117-a06661dd5ab18210.js:1:45417)
+    at http://localhost:3100/_next/static/chunks/117-a06661dd5ab18210.js:1:58943
+    at Object.u [as task] (http://localhost:3100/_next/static/chunks/117-a06661dd5ab18210.js:1:31834)
+    at c.s (http://localhost:3100/_next/static/chunks/117-a06661dd5ab18210.js:1:32539)
+    at c.enqueue (http://localhost:3100/_next/static/chunks/117-a06661dd5ab18210.js:1:31964)
+    at s (http://localhost:3100/_next/static/chunks/117-a06661dd5ab18210.js:1:58906)
+    at i (http://localhost:3100/_next/static/chunks/117-a06661dd5ab18210.js:1:58446)
+    at a (http://localhost:3100/_next/static/chunks/117-a06661dd5ab18210.js:1:65235)
+    at f (http://localhost:3100/_next/static/chunks/117-a06661dd5ab18210.js:1:75079)
+    at Object.action (http://localhost:3100/_next/static/chunks/117-a06661dd5ab18210.js:2:7082) @ http://localhost:3100/_next/static/chunks/117-a06661dd5ab18210.js:0
+[  958143ms] Error: Minified React error #418; visit https://react.dev/errors/418 for the full message or use the non-minified dev environment for full errors and additional helpful warnings.
+    at t5 (http://localhost:3100/_next/static/chunks/fd9d1056-9abfb49807193c16.js:1:24670)
+    at iZ (http://localhost:3100/_next/static/chunks/fd9d1056-9abfb49807193c16.js:1:120535)
+    at ia (http://localhost:3100/_next/static/chunks/fd9d1056-9abfb49807193c16.js:1:95162)
+    at http://localhost:3100/_next/static/chunks/fd9d1056-9abfb49807193c16.js:1:91088
+    at http://localhost:3100/_next/static/chunks/fd9d1056-9abfb49807193c16.js:1:91095
+    at oZ (http://localhost:3100/_next/static/chunks/fd9d1056-9abfb49807193c16.js:1:91200)
+    at MessagePort.T (http://localhost:3100/_next/static/chunks/117-a06661dd5ab18210.js:1:83990)
+[  958144ms] Error: Minified React error #418; visit https://react.dev/errors/418 for the full message or use the non-minified dev environment for full errors and additional helpful warnings.
+    at t5 (http://localhost:3100/_next/static/chunks/fd9d1056-9abfb49807193c16.js:1:24670)
+    at iZ (http://localhost:3100/_next/static/chunks/fd9d1056-9abfb49807193c16.js:1:120535)
+    at ia (http://localhost:3100/_next/static/chunks/fd9d1056-9abfb49807193c16.js:1:95162)
+    at http://localhost:3100/_next/static/chunks/fd9d1056-9abfb49807193c16.js:1:91088
+    at http://localhost:3100/_next/static/chunks/fd9d1056-9abfb49807193c16.js:1:91095
+    at oZ (http://localhost:3100/_next/static/chunks/fd9d1056-9abfb49807193c16.js:1:91200)
+    at MessagePort.T (http://localhost:3100/_next/static/chunks/117-a06661dd5ab18210.js:1:83990)
+[  958145ms] Error: Minified React error #418; visit https://react.dev/errors/418 for the full message or use the non-minified dev environment for full errors and additional helpful warnings.
+    at t5 (http://localhost:3100/_next/static/chunks/fd9d1056-9abfb49807193c16.js:1:24670)
+    at iZ (http://localhost:3100/_next/static/chunks/fd9d1056-9abfb49807193c16.js:1:120535)
+    at ia (http://localhost:3100/_next/static/chunks/fd9d1056-9abfb49807193c16.js:1:95162)
+    at http://localhost:3100/_next/static/chunks/fd9d1056-9abfb49807193c16.js:1:91088
+    at http://localhost:3100/_next/static/chunks/fd9d1056-9abfb49807193c16.js:1:91095
+    at oZ (http://localhost:3100/_next/static/chunks/fd9d1056-9abfb49807193c16.js:1:91200)
+    at MessagePort.T (http://localhost:3100/_next/static/chunks/117-a06661dd5ab18210.js:1:83990)
+[  958145ms] Error: Minified React error #423; visit https://react.dev/errors/423 for the full message or use the non-minified dev environment for full errors and additional helpful warnings.
+    at iZ (http://localhost:3100/_next/static/chunks/fd9d1056-9abfb49807193c16.js:1:118349)
+    at ia (http://localhost:3100/_next/static/chunks/fd9d1056-9abfb49807193c16.js:1:95162)
+    at http://localhost:3100/_next/static/chunks/fd9d1056-9abfb49807193c16.js:1:94984
+    at il (http://localhost:3100/_next/static/chunks/fd9d1056-9abfb49807193c16.js:1:94991)
+    at oJ (http://localhost:3100/_next/static/chunks/fd9d1056-9abfb49807193c16.js:1:92347)
+    at oZ (http://localhost:3100/_next/static/chunks/fd9d1056-9abfb49807193c16.js:1:91766)
+    at MessagePort.T (http://localhost:3100/_next/static/chunks/117-a06661dd5ab18210.js:1:83990)

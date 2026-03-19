@@ -8,9 +8,9 @@ import type {
   CustomerNotesResponse,
   CustomerTagsResponse,
   ListConversationsResponse,
-  ListMessagesResponse,
-  OrganizationsResponse
+  ListMessagesResponse
 } from "@/components/inbox/workspace/types";
+import { fetchOrganizationsCached } from "@/lib/client/orgsCache";
 import { subscribeToOrgMessageEvents } from "@/lib/ably/client";
 
 import type { InboxWorkspaceState } from "./useInboxWorkspaceState";
@@ -56,6 +56,7 @@ export function useInboxWorkspaceLoaders(state: InboxWorkspaceState) {
   const conversationsRef = useRef(conversations);
   const selectedConversationIdRef = useRef(selectedConversationId);
   const messagesLengthRef = useRef(messages.length);
+  const isLoadingConversationsRef = useRef(false);
 
   useEffect(() => {
     conversationsRef.current = conversations;
@@ -260,16 +261,21 @@ export function useInboxWorkspaceLoaders(state: InboxWorkspaceState) {
 
         const conversation = payload?.data?.conversation ?? null;
         setSelectedConversation(conversation);
-        if (conversation?.customerId) {
-          await Promise.all([loadCustomerCrmContext(conversation.customerId), loadConversationCrmContext(conversation.id)]);
-        } else {
-          setTags([]);
-          setNotes([]);
-          setCrmInvoices([]);
-          setCrmActivity([]);
-        }
+        const shouldHydrateCrmContext = !options?.background;
+        const crmHydrationPromise =
+          shouldHydrateCrmContext && conversation?.customerId
+            ? Promise.all([loadCustomerCrmContext(conversation.customerId), loadConversationCrmContext(conversation.id)])
+            : shouldHydrateCrmContext
+              ? Promise.resolve().then(() => {
+                  setTags([]);
+                  setNotes([]);
+                  setCrmInvoices([]);
+                  setCrmActivity([]);
+                })
+              : Promise.resolve();
 
         await loadMessages(conversationId, options);
+        void crmHydrationPromise;
       } catch {
         if (!options?.background) {
           setError("Network error while fetching conversation.");
@@ -299,6 +305,11 @@ export function useInboxWorkspaceLoaders(state: InboxWorkspaceState) {
     if (!orgId) {
       return;
     }
+    if (isLoadingConversationsRef.current && options?.background) {
+      return;
+    }
+
+    isLoadingConversationsRef.current = true;
 
     if (!options?.background) {
       setIsLoadingList(true);
@@ -365,14 +376,15 @@ export function useInboxWorkspaceLoaders(state: InboxWorkspaceState) {
       }
 
       setSelectedConversationId(nextConversationId);
-      if (!options?.background || snapshotChanged || currentSelectedConversationId !== nextConversationId || selectedConversationChanged) {
-        await loadConversation(nextConversationId, options);
+      if (!options?.background || currentSelectedConversationId !== nextConversationId || selectedConversationChanged) {
+        void loadConversation(nextConversationId, options);
       }
     } catch {
       if (!options?.background) {
         setError("Network error while loading conversations.");
       }
     } finally {
+      isLoadingConversationsRef.current = false;
       if (!options?.background) {
         setIsLoadingList(false);
       }
@@ -402,16 +414,7 @@ export function useInboxWorkspaceLoaders(state: InboxWorkspaceState) {
 
     const loadOrganizations = async () => {
       try {
-        const response = await fetch("/api/orgs");
-        const payload = (await response.json().catch(() => null)) as OrganizationsResponse | null;
-        if (!response.ok) {
-          if (active) {
-            setError(payload?.error?.message ?? "Failed to load business.");
-          }
-          return;
-        }
-
-        const orgs = payload?.data?.organizations ?? [];
+        const orgs = await fetchOrganizationsCached();
         if (active) {
           setOrganizations(orgs);
           setOrgId(orgs[0]?.id ?? null);
