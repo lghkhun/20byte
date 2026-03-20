@@ -2,6 +2,7 @@ import { InvoiceStatus } from "@prisma/client";
 
 import { prisma } from "@/lib/db/prisma";
 import { publishInvoicePaidEvent, publishInvoiceUpdatedEvent } from "@/lib/ably/publisher";
+import { enqueueMetaEventJob } from "@/server/queues/metaEventQueue";
 import { writeAuditLogSafe } from "@/server/services/auditLogService";
 import { syncConversationCrmStageFromInvoice } from "@/server/services/crmPipelineService";
 import { requireInvoiceAccess, requireInvoiceMembershipRole } from "@/server/services/invoice/access";
@@ -109,6 +110,15 @@ export async function markInvoicePaid(input: MarkInvoicePaidInput): Promise<Mark
       invoiceId: updated.id,
       status: "PAID"
     });
+    void enqueueMetaEventJob({
+      orgId,
+      kind: "INVOICE_PAID",
+      invoiceId: updated.id,
+      customerPhoneE164: invoice.customer.phoneE164,
+      trackingId: invoice.conversation?.trackingId ?? undefined,
+      currency: invoice.currency,
+      value: invoice.totalCents / 100
+    }).catch(() => undefined);
   } else {
     void publishInvoiceUpdatedEvent({
       orgId,

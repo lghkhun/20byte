@@ -1,3 +1,6 @@
+import { extractInvisibleAttributionMarker } from "@/lib/attribution/invisibleMarker";
+import { extractTrackingRef } from "@/lib/attribution/trackingRef";
+import { enqueueMetaEventJob } from "@/server/queues/metaEventQueue";
 import type { Prisma } from "@prisma/client";
 
 import type { InboundStoreResult, ResolvedAttribution, StoreInboundMessageInput } from "@/server/services/message/messageTypes";
@@ -23,14 +26,21 @@ function buildInboundContext(input: StoreInboundMessageInput) {
   const customerPhoneE164 = normalize(input.customerPhoneE164);
   const waMessageId = normalize(input.waMessageId);
 
+  const rawText = normalizeOptional(input.text);
+  const trackingExtract = extractTrackingRef(rawText);
+  const invisibleExtract = extractInvisibleAttributionMarker(trackingExtract.cleanText);
+  const resolvedShortlinkCode =
+    normalizeOptional(input.shortlinkCode) ?? trackingExtract.shortlinkCodeFromRef ?? invisibleExtract.shortlinkCode;
+
   return {
     orgId,
     customerPhoneE164,
     waMessageId,
     customerDisplayName: normalizeOptional(input.customerDisplayName),
     customerAvatarUrl: normalizeOptional(input.customerAvatarUrl),
-    shortlinkCode: normalizeOptional(input.shortlinkCode),
-    text: normalizeOptional(input.text),
+    shortlinkCode: resolvedShortlinkCode,
+    trackingId: normalizeOptional(input.trackingId) ?? trackingExtract.trackingId,
+    text: normalizeOptional(invisibleExtract.cleanText),
     mediaId: normalizeOptional(input.mediaId),
     mediaUrl: normalizeOptional(input.mediaUrl),
     mimeType: normalizeOptional(input.mimeType),
@@ -77,8 +87,19 @@ export async function storeInboundMessage(input: StoreInboundMessageInput): Prom
 
   const createdMessage = await storeInboundMessageInTransaction({
     context,
-    resolveAttribution: async (tx: Prisma.TransactionClient) =>
-      resolveInboundAttribution(tx, context.orgId, context.shortlinkCode),
+    resolveAttribution: async (tx: Prisma.TransactionClient) => {
+      const resolved = await resolveInboundAttribution(tx, context.orgId, context.shortlinkCode, context.trackingId);
+      return {
+        source: resolved?.source ?? "organic",
+        campaign: resolved?.campaign,
+        adset: resolved?.adset,
+        ad: resolved?.ad,
+        platform: resolved?.platform,
+        medium: resolved?.medium,
+        shortlinkId: resolved?.shortlinkId,
+        trackingId: context.trackingId
+      };
+    },
     getOrCreateCustomer: async (tx: Prisma.TransactionClient, attribution) =>
       getOrCreateCustomer(
         tx,
@@ -104,6 +125,16 @@ export async function storeInboundMessage(input: StoreInboundMessageInput): Prom
     assignedToMemberId: createdMessage.assignedToMemberId,
     status: createdMessage.conversationStatus
   });
+
+  if (createdMessage.conversationCreated && context.trackingId) {
+    void enqueueMetaEventJob({
+      orgId: context.orgId,
+      kind: "CHAT_STARTED",
+      conversationId: createdMessage.conversationId,
+      trackingId: context.trackingId,
+      customerPhoneE164: context.customerPhoneE164
+    }).catch(() => undefined);
+  }
 
   return {
     stored: true,

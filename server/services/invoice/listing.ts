@@ -15,7 +15,7 @@ export async function listInvoices(input: ListInvoicesInput): Promise<InvoiceLis
   await requireInvoiceAccess(input.actorUserId, orgId);
   const page = normalizePage(input.page);
   const limit = normalizeLimit(input.limit);
-  const query = normalize(input.q);
+  const query = normalize(input.q ?? "");
 
   const where: Prisma.InvoiceWhereInput = {
     orgId,

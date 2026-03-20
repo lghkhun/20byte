@@ -2,6 +2,7 @@ import { InvoiceStatus } from "@prisma/client";
 
 import { prisma } from "@/lib/db/prisma";
 import { publishInvoiceCreatedEvent, publishInvoiceUpdatedEvent } from "@/lib/ably/publisher";
+import { enqueueMetaEventJob } from "@/server/queues/metaEventQueue";
 import { writeAuditLogSafe } from "@/server/services/auditLogService";
 import { requireInvoiceAccess } from "@/server/services/invoice/access";
 import {
@@ -42,6 +43,18 @@ export async function createDraftInvoice(input: CreateDraftInvoiceInput): Promis
     customerId,
     conversationId: conversationId ?? undefined
   });
+  const conversationTracking =
+    conversationId
+      ? await prisma.conversation.findFirst({
+          where: {
+            id: conversationId,
+            orgId
+          },
+          select: {
+            trackingId: true
+          }
+        })
+      : null;
   const { normalizedItems, subtotalCents, totalCents, normalizedMilestones } = computeDraftInputDerived(input);
   const bankAccounts = await listOrgBankAccounts(orgId);
 
@@ -89,6 +102,15 @@ export async function createDraftInvoice(input: CreateDraftInvoiceInput): Promis
     invoiceId: created.id,
     status: created.status
   });
+  void enqueueMetaEventJob({
+    orgId,
+    kind: "INVOICE_CREATED",
+    invoiceId: created.id,
+    customerPhoneE164: customer.phoneE164,
+    trackingId: conversationTracking?.trackingId ?? undefined,
+    currency,
+    value: created.totalCents / 100
+  }).catch(() => undefined);
 
   return created;
 }

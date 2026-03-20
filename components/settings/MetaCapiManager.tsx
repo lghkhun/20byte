@@ -9,6 +9,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { OperationFeedback } from "@/components/ui/operation-feedback";
 import { Switch } from "@/components/ui/switch";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 type OrgItem = {
   id: string;
@@ -31,6 +32,15 @@ type ApiError = {
   };
 };
 
+type MetaStatusView = {
+  queueDepth: number | null;
+  sent24h: number;
+  failed24h: number;
+  lastSentAt: string | null;
+  lastFailedAt: string | null;
+  lastFailedReason: string | null;
+};
+
 function toErrorMessage(error: unknown, fallback: string): string {
   if (error instanceof Error && error.message) {
     return error.message;
@@ -38,15 +48,38 @@ function toErrorMessage(error: unknown, fallback: string): string {
   return fallback;
 }
 
+function formatTimestamp(value: string | null): string {
+  if (!value) {
+    return "-";
+  }
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    return "-";
+  }
+  return new Intl.DateTimeFormat("id-ID", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit"
+  }).format(date);
+}
+
 export function MetaCapiManager() {
   const [orgs, setOrgs] = useState<OrgItem[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
+  const [isSendingTest, setIsSendingTest] = useState(false);
+  const [isLoadingStatus, setIsLoadingStatus] = useState(false);
   const [pixelId, setPixelId] = useState("");
   const [testEventCode, setTestEventCode] = useState("");
   const [accessTokenInput, setAccessTokenInput] = useState("");
   const [enabled, setEnabled] = useState(false);
   const [hasAccessToken, setHasAccessToken] = useState(false);
+  const [testPhoneNumber, setTestPhoneNumber] = useState("");
+  const [connectedPhone, setConnectedPhone] = useState("");
+  const [eventStatus, setEventStatus] = useState<MetaStatusView | null>(null);
+  const [activeTab, setActiveTab] = useState("configuration");
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
 
@@ -73,6 +106,46 @@ export function MetaCapiManager() {
     setAccessTokenInput("");
   }, []);
 
+  const loadMetaStatus = useCallback(async () => {
+    try {
+      setIsLoadingStatus(true);
+      const response = await fetch("/api/meta/integration/status", { cache: "no-store" });
+      const payload = (await response.json()) as { data?: { status?: MetaStatusView } } & ApiError;
+      if (!response.ok) {
+        throw new Error(payload.error?.message ?? "Failed to load Meta status.");
+      }
+      setEventStatus(payload.data?.status ?? null);
+    } finally {
+      setIsLoadingStatus(false);
+    }
+  }, []);
+
+  const loadConnectedPhone = useCallback(async () => {
+    if (!activeBusiness) {
+      return;
+    }
+    const response = await fetch(`/api/whatsapp/baileys?orgId=${encodeURIComponent(activeBusiness.id)}`, { cache: "no-store" });
+    const payload = (await response.json()) as {
+      data?: {
+        connection?: {
+          connectedAccount?: {
+            displayPhone?: string | null;
+          } | null;
+        } | null;
+      };
+      error?: {
+        code?: string;
+        message?: string;
+      };
+    };
+    if (!response.ok) {
+      return;
+    }
+    const phone = payload.data?.connection?.connectedAccount?.displayPhone?.trim() ?? "";
+    setConnectedPhone(phone);
+    setTestPhoneNumber((current) => current || phone);
+  }, [activeBusiness]);
+
   useEffect(() => {
     let mounted = true;
 
@@ -84,6 +157,8 @@ export function MetaCapiManager() {
         await loadOrganizations();
         if (mounted) {
           await loadIntegration();
+          await loadMetaStatus();
+          await loadConnectedPhone();
         }
       } catch (err) {
         if (mounted) {
@@ -100,7 +175,7 @@ export function MetaCapiManager() {
     return () => {
       mounted = false;
     };
-  }, [loadIntegration, loadOrganizations]);
+  }, [loadConnectedPhone, loadIntegration, loadMetaStatus, loadOrganizations]);
 
   async function handleSave() {
     try {
@@ -129,11 +204,42 @@ export function MetaCapiManager() {
       const integration = payload.data?.integration;
       setHasAccessToken(Boolean(integration?.hasAccessToken));
       setAccessTokenInput("");
+      await loadMetaStatus();
       setSuccess("Konfigurasi Meta Pixel & CAPI tersimpan.");
     } catch (err) {
       setError(toErrorMessage(err, "Gagal menyimpan konfigurasi Meta Pixel & CAPI."));
     } finally {
       setIsSaving(false);
+    }
+  }
+
+  async function handleSendTestEvent() {
+    try {
+      setIsSendingTest(true);
+      setError(null);
+      setSuccess(null);
+
+      const response = await fetch("/api/meta/integration/test-event", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          phoneNumber: testPhoneNumber.trim() || undefined
+        })
+      });
+
+      const payload = (await response.json()) as { data?: { eventId?: string; phone?: string } } & ApiError;
+      if (!response.ok) {
+        throw new Error(payload.error?.message ?? "Failed to send Meta test event.");
+      }
+
+      await loadMetaStatus();
+      setSuccess(`Test event terkirim (${payload.data?.eventId ?? "-"}) ke nomor ${payload.data?.phone ?? "-"}.`);
+    } catch (err) {
+      setError(toErrorMessage(err, "Gagal mengirim test event ke Meta."));
+    } finally {
+      setIsSendingTest(false);
     }
   }
 
@@ -156,69 +262,135 @@ export function MetaCapiManager() {
       {error ? <OperationFeedback tone="error" message={error} /> : null}
       {!error && success ? <OperationFeedback tone="success" message={success} /> : null}
 
-      <div className="grid gap-4 xl:grid-cols-2">
-        <div className="space-y-3 rounded-2xl border border-border/70 bg-background/60 p-4">
-          <div className="flex items-center gap-2">
-            <ShieldCheck className="h-4 w-4 text-emerald-600" />
-            <p className="text-sm font-semibold text-foreground">Meta Pixel</p>
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="pixel-id">Pixel ID</Label>
-            <Input
-              id="pixel-id"
-              value={pixelId}
-              onChange={(event) => setPixelId(event.currentTarget.value)}
-              placeholder="Contoh: 123456789012345"
-              autoComplete="off"
-              disabled={isLoading || isSaving}
-            />
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="test-event-code">Test Event Code (Opsional)</Label>
-            <Input
-              id="test-event-code"
-              value={testEventCode}
-              onChange={(event) => setTestEventCode(event.currentTarget.value)}
-              placeholder="Contoh: TEST12345"
-              autoComplete="off"
-              disabled={isLoading || isSaving}
-            />
-          </div>
-        </div>
+      <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
+        <TabsList className="h-10 rounded-xl">
+          <TabsTrigger value="configuration">Configuration</TabsTrigger>
+          <TabsTrigger value="test-event">Test Event</TabsTrigger>
+          <TabsTrigger value="queue-status">Queue Status</TabsTrigger>
+        </TabsList>
 
-        <div className="space-y-3 rounded-2xl border border-border/70 bg-background/60 p-4">
-          <div className="flex items-center gap-2">
-            <KeyRound className="h-4 w-4 text-sky-600" />
-            <p className="text-sm font-semibold text-foreground">Conversions API</p>
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="capi-token">CAPI Access Token</Label>
-            <Input
-              id="capi-token"
-              type="password"
-              value={accessTokenInput}
-              onChange={(event) => setAccessTokenInput(event.currentTarget.value)}
-              placeholder={hasAccessToken ? "Token tersimpan. Isi jika ingin mengganti." : "Masukkan token Conversions API"}
-              autoComplete="off"
-              disabled={isLoading || isSaving}
-            />
-            <p className="text-xs text-muted-foreground">{hasAccessToken ? "Token sudah tersimpan aman di server." : "Token belum disimpan."}</p>
-          </div>
-          <div className="flex items-center justify-between rounded-xl border border-border/70 bg-card px-3 py-2.5">
-            <div>
-              <p className="text-sm font-medium text-foreground">Aktifkan integrasi</p>
-              <p className="text-xs text-muted-foreground">Kirim event conversion via CAPI.</p>
+        <TabsContent value="configuration" className="space-y-4">
+          <div className="grid gap-4 xl:grid-cols-2">
+            <div className="space-y-3 rounded-2xl border border-border/70 bg-background/60 p-4">
+              <div className="flex items-center gap-2">
+                <ShieldCheck className="h-4 w-4 text-emerald-600" />
+                <p className="text-sm font-semibold text-foreground">Meta Pixel</p>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="pixel-id">Pixel ID</Label>
+                <Input
+                  id="pixel-id"
+                  value={pixelId}
+                  onChange={(event) => setPixelId(event.currentTarget.value)}
+                  placeholder="Contoh: 123456789012345"
+                  autoComplete="off"
+                  disabled={isLoading || isSaving}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="test-event-code">Test Event Code (Opsional)</Label>
+                <Input
+                  id="test-event-code"
+                  value={testEventCode}
+                  onChange={(event) => setTestEventCode(event.currentTarget.value)}
+                  placeholder="Contoh: TEST12345"
+                  autoComplete="off"
+                  disabled={isLoading || isSaving}
+                />
+              </div>
             </div>
-            <Switch checked={enabled} onCheckedChange={setEnabled} disabled={isLoading || isSaving} />
-          </div>
-        </div>
-      </div>
 
-      <div className="flex flex-wrap items-center justify-end gap-2">
-        <Button type="button" className="rounded-xl" onClick={() => void handleSave()} disabled={isLoading || isSaving || !activeBusiness}>
-          {isSaving ? "Menyimpan..." : "Simpan Konfigurasi"}
-        </Button>
-      </div>
+            <div className="space-y-3 rounded-2xl border border-border/70 bg-background/60 p-4">
+              <div className="flex items-center gap-2">
+                <KeyRound className="h-4 w-4 text-sky-600" />
+                <p className="text-sm font-semibold text-foreground">Conversions API</p>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="capi-token">CAPI Access Token</Label>
+                <Input
+                  id="capi-token"
+                  type="password"
+                  value={accessTokenInput}
+                  onChange={(event) => setAccessTokenInput(event.currentTarget.value)}
+                  placeholder={hasAccessToken ? "Token tersimpan. Isi jika ingin mengganti." : "Masukkan token Conversions API"}
+                  autoComplete="off"
+                  disabled={isLoading || isSaving}
+                />
+                <p className="text-xs text-muted-foreground">{hasAccessToken ? "Token sudah tersimpan aman di server." : "Token belum disimpan."}</p>
+              </div>
+              <div className="flex items-center justify-between rounded-xl border border-border/70 bg-card px-3 py-2.5">
+                <div>
+                  <p className="text-sm font-medium text-foreground">Aktifkan integrasi</p>
+                  <p className="text-xs text-muted-foreground">Kirim event conversion via CAPI.</p>
+                </div>
+                <Switch checked={enabled} onCheckedChange={setEnabled} disabled={isLoading || isSaving} />
+              </div>
+            </div>
+          </div>
+
+          <div className="flex flex-wrap items-center justify-end gap-2">
+            <Button type="button" className="rounded-xl" onClick={() => void handleSave()} disabled={isLoading || isSaving || !activeBusiness}>
+              {isSaving ? "Menyimpan..." : "Simpan Konfigurasi"}
+            </Button>
+          </div>
+        </TabsContent>
+
+        <TabsContent value="test-event" className="space-y-4">
+          <div className="space-y-3 rounded-2xl border border-border/70 bg-background/60 p-4">
+            <p className="text-sm font-semibold text-foreground">Kirim Test Event ke Meta</p>
+            <p className="text-xs text-muted-foreground">Gunakan nomor WhatsApp customer atau nomor connected device untuk validasi event di Test Events Manager.</p>
+            <div className="space-y-2">
+              <Label htmlFor="test-phone">Phone Number</Label>
+              <Input
+                id="test-phone"
+                value={testPhoneNumber}
+                onChange={(event) => setTestPhoneNumber(event.currentTarget.value)}
+                placeholder={connectedPhone ? `Contoh: ${connectedPhone}` : "Contoh: 628123456789"}
+                autoComplete="off"
+                disabled={isLoading || isSendingTest}
+              />
+            </div>
+            <div className="flex justify-end">
+              <Button
+                type="button"
+                className="rounded-xl"
+                onClick={() => void handleSendTestEvent()}
+                disabled={isLoading || isSendingTest || !pixelId.trim() || !hasAccessToken}
+              >
+                {isSendingTest ? "Sending..." : "Send Test Event"}
+              </Button>
+            </div>
+          </div>
+        </TabsContent>
+
+        <TabsContent value="queue-status" className="space-y-4">
+          <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+            <div className="rounded-2xl border border-border/70 bg-background/60 p-4">
+              <p className="text-xs text-muted-foreground">Queue Depth</p>
+              <p className="mt-2 text-2xl font-semibold text-foreground">{eventStatus?.queueDepth ?? "-"}</p>
+            </div>
+            <div className="rounded-2xl border border-border/70 bg-background/60 p-4">
+              <p className="text-xs text-muted-foreground">Sent (24h)</p>
+              <p className="mt-2 text-2xl font-semibold text-foreground">{eventStatus?.sent24h ?? 0}</p>
+            </div>
+            <div className="rounded-2xl border border-border/70 bg-background/60 p-4">
+              <p className="text-xs text-muted-foreground">Failed (24h)</p>
+              <p className="mt-2 text-2xl font-semibold text-foreground">{eventStatus?.failed24h ?? 0}</p>
+            </div>
+          </div>
+          <div className="space-y-3 rounded-2xl border border-border/70 bg-background/60 p-4">
+            <div className="flex items-center justify-between gap-2">
+              <p className="text-sm font-semibold text-foreground">Last Delivery Logs</p>
+              <Button type="button" variant="outline" className="h-8 rounded-xl" disabled={isLoadingStatus} onClick={() => void loadMetaStatus()}>
+                {isLoadingStatus ? "Refreshing..." : "Refresh"}
+              </Button>
+            </div>
+            <p className="text-sm text-muted-foreground">Last success: {formatTimestamp(eventStatus?.lastSentAt ?? null)}</p>
+            <p className="text-sm text-muted-foreground">Last failure: {formatTimestamp(eventStatus?.lastFailedAt ?? null)}</p>
+            <p className="text-sm text-muted-foreground">Failure reason: {eventStatus?.lastFailedReason ?? "-"}</p>
+          </div>
+        </TabsContent>
+      </Tabs>
     </section>
   );
 }

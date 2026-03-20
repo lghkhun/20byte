@@ -6,31 +6,64 @@ import { normalizeOptional } from "@/server/services/message/messageUtils";
 export async function resolveInboundAttribution(
   tx: Prisma.TransactionClient,
   orgId: string,
-  shortlinkCode?: string
+  shortlinkCode?: string,
+  trackingId?: string
 ): Promise<ResolvedAttribution | undefined> {
   const normalizedCode = normalizeOptional(shortlinkCode)?.toLowerCase();
-  if (!normalizedCode) {
-    return {
-      source: "organic"
-    };
+  const normalizedTrackingId = normalizeOptional(trackingId)?.toLowerCase();
+  let shortlink:
+    | {
+        id: string;
+        source: string;
+        campaign: string | null;
+        adset: string | null;
+        adName: string | null;
+        platform: string | null;
+        medium: string | null;
+      }
+    | null = null;
+
+  if (normalizedTrackingId) {
+    const click = await tx.shortlinkClick.findFirst({
+      where: {
+        orgId,
+        trackingId: normalizedTrackingId
+      },
+      select: {
+        shortlink: {
+          select: {
+            id: true,
+            source: true,
+            campaign: true,
+            adset: true,
+            adName: true,
+            platform: true,
+            medium: true
+          }
+        }
+      }
+    });
+    shortlink = click?.shortlink ?? null;
   }
 
-  const shortlink = await tx.shortlink.findFirst({
-    where: {
-      orgId,
-      code: normalizedCode,
-      isEnabled: true
-    },
-    select: {
-      id: true,
-      source: true,
-      campaign: true,
-      adset: true,
-      adName: true,
-      platform: true,
-      medium: true
-    }
-  });
+  if (!shortlink && normalizedCode) {
+    shortlink = await tx.shortlink.findFirst({
+      where: {
+        orgId,
+        code: normalizedCode,
+        isEnabled: true
+      },
+      select: {
+        id: true,
+        source: true,
+        campaign: true,
+        adset: true,
+        adName: true,
+        platform: true,
+        medium: true
+      }
+    });
+  }
 
   if (!shortlink) {
     return {

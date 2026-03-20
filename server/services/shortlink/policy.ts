@@ -23,17 +23,23 @@ export function resolveShortlinkAttribution(input: {
   campaign: string | null;
   adset: string | null;
   adName: string | null;
+  platform: string | null;
+  medium: string | null;
 } {
   const source = normalizeShortlinkValue(input.source) || "meta_ads";
   const campaign = normalizeShortlinkValue(input.campaign) || null;
   const adset = normalizeShortlinkValue(input.adset) || normalizeShortlinkValue(input.platform) || null;
   const adName =
     normalizeShortlinkValue(input.ad) || normalizeShortlinkValue(input.adName) || normalizeShortlinkValue(input.medium) || null;
+  const platform = normalizeShortlinkValue(input.platform) || null;
+  const medium = normalizeShortlinkValue(input.medium) || null;
 
   return {
     source,
     campaign,
     adset,
-    adName
+    adName,
+    platform,
+    medium
   };
 }

@@ -6,6 +6,7 @@ export type StoreInboundMessageInput = {
   customerDisplayName?: string;
   customerAvatarUrl?: string;
   shortlinkCode?: string;
+  trackingId?: string;
   waMessageId: string;
   type: MessageType;
   text?: string;
@@ -97,6 +98,7 @@ export type ResolvedAttribution = {
   platform?: string;
   medium?: string;
   shortlinkId?: string;
+  trackingId?: string;
 };
 
 export type RetryOutboundMessageInput = {

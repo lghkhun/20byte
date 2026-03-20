@@ -28,6 +28,14 @@ export type MetaIntegrationView = {
   updatedAt: string | null;
 };
 
+export type MetaIntegrationRuntime = {
+  orgId: string;
+  pixelId: string;
+  accessToken: string;
+  testEventCode: string | null;
+  enabled: boolean;
+};
+
 type UpsertMetaIntegrationInput = {
   actorUserId: string;
   orgId?: string;
@@ -174,4 +182,40 @@ export async function getMetaAccessToken(actorUserId: string, candidateOrgId = "
     return null;
   }
   return decryptSecret(row.accessTokenEnc);
+}
+
+export async function getMetaIntegrationRuntime(orgIdInput: string): Promise<MetaIntegrationRuntime | null> {
+  const orgId = normalizeRequired(orgIdInput, "orgId");
+  const row = await findIntegration(orgId);
+  if (!row || !row.isEnabled || !row.accessTokenEnc) {
+    return null;
+  }
+
+  return {
+    orgId: row.orgId,
+    pixelId: row.pixelId,
+    accessToken: decryptSecret(row.accessTokenEnc),
+    testEventCode: row.testEventCode,
+    enabled: Boolean(row.isEnabled)
+  };
+}
+
+export async function getMetaIntegrationRuntimeForActor(
+  actorUserId: string,
+  candidateOrgId = ""
+): Promise<MetaIntegrationRuntime | null> {
+  const orgId = await resolvePrimaryOrganizationIdForUser(actorUserId, candidateOrgId);
+  await requireOrgSettingsAccess(actorUserId, orgId);
+  const row = await findIntegration(orgId);
+  if (!row || !row.accessTokenEnc) {
+    return null;
+  }
+
+  return {
+    orgId: row.orgId,
+    pixelId: row.pixelId,
+    accessToken: decryptSecret(row.accessTokenEnc),
+    testEventCode: row.testEventCode,
+    enabled: Boolean(row.isEnabled)
+  };
 }

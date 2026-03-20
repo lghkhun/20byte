@@ -1,7 +1,7 @@
 import { createHash } from "crypto";
 import { type NextRequest, NextResponse } from "next/server";
 
-import { appendInvisibleAttributionMarker } from "@/lib/ctwa/invisibleMarker";
+import { appendTrackingRef, generateTrackingId } from "@/lib/attribution/trackingRef";
 import { prisma } from "@/lib/db/prisma";
 import { getCachedJson, setCachedJson } from "@/lib/redis/cache";
 
@@ -19,19 +19,44 @@ function getClientIpHash(request: NextRequest): string | null {
   return createHash("sha256").update(firstIp).digest("hex");
 }
 
-function buildRedirectUrl(destinationUrl: string, shortlinkCode: string): string {
+function buildRedirectUrl(destinationUrl: string, trackingId: string): string {
   try {
     const url = new URL(destinationUrl);
     const currentText = url.searchParams.get("text") ?? "";
-    const textWithMarker = appendInvisibleAttributionMarker(currentText, shortlinkCode);
-    if (textWithMarker) {
-      url.searchParams.set("text", textWithMarker);
+    const withTrackingRef = appendTrackingRef(currentText, trackingId);
+    if (withTrackingRef) {
+      url.searchParams.set("text", withTrackingRef);
     }
 
     return url.toString();
   } catch {
     return destinationUrl;
   }
+}
+
+async function findShortlinkByCode(code: string) {
+  const variants = Array.from(new Set([code, code.toLowerCase(), code.toUpperCase()]));
+
+  for (const candidate of variants) {
+    const shortlink = await prisma.shortlink.findUnique({
+      where: {
+        code: candidate
+      },
+      select: {
+        id: true,
+        orgId: true,
+        code: true,
+        destinationUrl: true,
+        isEnabled: true
+      }
+    });
+
+    if (shortlink) {
+      return shortlink;
+    }
+  }
+
+  return null;
 }
 
 export async function GET(
@@ -42,7 +67,7 @@ export async function GET(
     };
   }
 ) {
-  const code = normalize(context.params.code).toLowerCase();
+  const code = normalize(context.params.code);
   if (!code) {
     return NextResponse.json(
       {
@@ -66,18 +91,7 @@ export async function GET(
 
   const shortlink =
     cached ??
-    (await prisma.shortlink.findUnique({
-      where: {
-        code
-      },
-      select: {
-        id: true,
-        orgId: true,
-        code: true,
-        destinationUrl: true,
-        isEnabled: true
-      }
-    }));
+    (await findShortlinkByCode(code));
 
   if (!shortlink || !shortlink.isEnabled) {
     return NextResponse.json(
@@ -97,17 +111,19 @@ export async function GET(
 
   const ipHash = getClientIpHash(request);
   const userAgent = normalize(request.headers.get("user-agent") ?? undefined) || null;
+  const trackingId = generateTrackingId(shortlink.code);
 
   await prisma.shortlinkClick.create({
     data: {
       orgId: shortlink.orgId,
       shortlinkId: shortlink.id,
+      trackingId,
       ipHash,
       userAgent
     }
   });
 
-  return NextResponse.redirect(buildRedirectUrl(shortlink.destinationUrl, shortlink.code), {
+  return NextResponse.redirect(buildRedirectUrl(shortlink.destinationUrl, trackingId), {
     status: 307
   });
 }

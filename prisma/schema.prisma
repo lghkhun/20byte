@@ -274,6 +274,7 @@ model Conversation {
   sourcePlatform     String?
   sourceMedium       String?
   shortlinkId        String?
+  trackingId         String?
   crmPipelineId      String?
   crmStageId         String?
 
@@ -290,6 +291,7 @@ model Conversation {
   @@index([orgId, status, lastMessageAt])
   @@index([orgId, assignedToMemberId, lastMessageAt])
   @@index([customerId])
+  @@index([trackingId])
   @@index([crmPipelineId])
   @@index([crmStageId])
 }
@@ -538,6 +540,7 @@ model ShortlinkClick {
   id          String    @id @default(cuid())
   orgId       String
   shortlinkId String
+  trackingId  String?
 
   createdAt   DateTime  @default(now())
   clickedAt   DateTime  @default(now())
@@ -549,6 +552,7 @@ model ShortlinkClick {
 
   @@index([shortlinkId, clickedAt])
   @@index([orgId, clickedAt])
+  @@index([trackingId])
 }
 
 model MetaIntegration {

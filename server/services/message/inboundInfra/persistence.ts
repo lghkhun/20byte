@@ -10,6 +10,7 @@ type InboundContext = {
   waMessageId: string;
   customerDisplayName?: string;
   customerAvatarUrl?: string;
+  trackingId?: string;
   text?: string;
   mediaId?: string;
   mediaUrl?: string;
@@ -25,6 +26,7 @@ type CreatedInboundMessage = {
   conversationId: string;
   conversationStatus: "OPEN" | "CLOSED";
   assignedToMemberId: string | null;
+  conversationCreated: boolean;
 };
 
 export async function findExistingInboundByWaMessageId(waMessageId: string): Promise<{ id: string } | null> {
@@ -66,6 +68,7 @@ export async function storeInboundMessageInTransaction(params: {
     id: string;
     status: "OPEN" | "CLOSED";
     assignedToMemberId: string | null;
+    created: boolean;
   }>;
 }): Promise<CreatedInboundMessage> {
   const { context } = params;
@@ -133,7 +136,8 @@ export async function storeInboundMessageInTransaction(params: {
       id: created.id,
       conversationId: created.conversationId,
       conversationStatus: updatedConversation.status,
-      assignedToMemberId: updatedConversation.assignedToMemberId
+      assignedToMemberId: updatedConversation.assignedToMemberId,
+      conversationCreated: conversation.created
     };
   });
 }

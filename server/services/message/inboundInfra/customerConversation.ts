@@ -126,7 +126,8 @@ export async function getOrCreateOpenConversation(
       sourceCampaign: true,
       sourcePlatform: true,
       sourceMedium: true,
-      shortlinkId: true
+      shortlinkId: true,
+      trackingId: true
     }
   });
 
@@ -147,6 +148,9 @@ export async function getOrCreateOpenConversation(
     if (!existingOpenConversation.shortlinkId && attribution?.shortlinkId) {
       updateData.shortlinkId = attribution.shortlinkId;
     }
+    if (!existingOpenConversation.trackingId && attribution?.trackingId) {
+      updateData.trackingId = attribution.trackingId;
+    }
 
     if (Object.keys(updateData).length > 0) {
       const updateResult = await tx.conversation.updateMany({
@@ -162,10 +166,13 @@ export async function getOrCreateOpenConversation(
       }
     }
 
-    return existingOpenConversation;
+    return {
+      ...existingOpenConversation,
+      created: false
+    };
   }
 
-  return tx.conversation.create({
+  const createdConversation = await tx.conversation.create({
     data: {
       orgId,
       customerId,
@@ -173,7 +180,8 @@ export async function getOrCreateOpenConversation(
       sourceCampaign: attribution?.campaign ?? null,
       sourcePlatform: attribution?.platform ?? null,
       sourceMedium: attribution?.medium ?? null,
-      shortlinkId: attribution?.shortlinkId ?? null
+      shortlinkId: attribution?.shortlinkId ?? null,
+      trackingId: attribution?.trackingId ?? null
     },
     select: {
       id: true,
@@ -181,4 +189,9 @@ export async function getOrCreateOpenConversation(
       assignedToMemberId: true
     }
   });
+
+  return {
+    ...createdConversation,
+    created: true
+  };
 }
