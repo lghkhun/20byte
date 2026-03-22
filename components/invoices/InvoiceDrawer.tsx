@@ -154,6 +154,24 @@ function buildCatalogCode(id: string): string {
   return `SRV-${id.slice(-6).toUpperCase()}`;
 }
 
+function buildDefaultInvoiceNotes(profile: BusinessProfile | null): string {
+  if (!profile) {
+    return "Pembayaran dapat dilakukan ke rekening yang tertera pada invoice. Mohon cantumkan nomor invoice sebagai berita transfer.";
+  }
+
+  const contact = profile.businessEmail || profile.businessPhone || "-";
+  return `Pembayaran dapat dilakukan ke rekening yang tertera pada invoice. Mohon cantumkan nomor invoice sebagai berita transfer.\nKontak billing: ${contact}`;
+}
+
+function buildDefaultInvoiceTerms(profile: BusinessProfile | null): string {
+  const companyName = profile?.legalName || profile?.name || "Perusahaan";
+  return [
+    `1. Pembayaran dianggap sah setelah dana diterima oleh ${companyName}.`,
+    "2. Invoice yang sudah dibayar tidak dapat dibatalkan sepihak.",
+    "3. Komplain layanan maksimal 3x24 jam setelah pembayaran."
+  ].join("\n");
+}
+
 function DueDatePickerField({
   value,
   onChange
@@ -258,8 +276,6 @@ export function InvoiceDrawer({
   customerPhoneE164,
   onClose
 }: InvoiceDrawerProps) {
-  const [notes, setNotes] = useState("");
-  const [terms, setTerms] = useState("");
   const [salesMembers, setSalesMembers] = useState<MemberOption[]>([]);
   const [selectedSalesperson, setSelectedSalesperson] = useState("");
   const [currentUserId, setCurrentUserId] = useState("");
@@ -292,6 +308,10 @@ export function InvoiceDrawer({
     setInvoiceDiscountType,
     invoiceDiscountValue,
     setInvoiceDiscountValue,
+    notes,
+    setNotes,
+    terms,
+    setTerms,
     dpPercentage,
     setDpPercentage,
     invoiceDueDate,
@@ -328,9 +348,18 @@ export function InvoiceDrawer({
     setManualCustomerPhone(customerPhoneE164 ?? "");
     setManualCustomerAddress("");
     setManualCustomerEmail("");
-    setNotes("");
-    setTerms("");
-  }, [open, customerDisplayName, customerPhoneE164]);
+    setNotes((current) => current || buildDefaultInvoiceNotes(businessProfile));
+    setTerms((current) => current || buildDefaultInvoiceTerms(businessProfile));
+  }, [open, customerDisplayName, customerPhoneE164, setNotes, setTerms]);
+
+  useEffect(() => {
+    if (!open || !businessProfile) {
+      return;
+    }
+
+    setNotes((current) => (current.trim() ? current : buildDefaultInvoiceNotes(businessProfile)));
+    setTerms((current) => (current.trim() ? current : buildDefaultInvoiceTerms(businessProfile)));
+  }, [open, businessProfile, setNotes, setTerms]);
 
   useEffect(() => {
     if (open) {

@@ -92,6 +92,7 @@ export async function POST(request: NextRequest) {
       responsibleName: profile.responsibleName,
       businessPhone: profile.businessPhone,
       businessEmail: profile.businessEmail,
+      businessNpwp: profile.businessNpwp,
       businessAddress: profile.businessAddress,
       ...profileUpdate
     });

@@ -14,6 +14,7 @@ type UpdateBusinessProfileRequest = {
   responsibleName?: unknown;
   businessPhone?: unknown;
   businessEmail?: unknown;
+  businessNpwp?: unknown;
   businessAddress?: unknown;
   logoUrl?: unknown;
   invoiceSignatureUrl?: unknown;
@@ -90,6 +91,7 @@ export async function PATCH(request: NextRequest) {
       responsibleName: parseOptionalString(body.responsibleName),
       businessPhone: parseOptionalString(body.businessPhone),
       businessEmail: parseOptionalString(body.businessEmail),
+      businessNpwp: parseOptionalString(body.businessNpwp),
       businessAddress: parseOptionalString(body.businessAddress),
       logoUrl: parseOptionalString(body.logoUrl),
       invoiceSignatureUrl: parseOptionalString(body.invoiceSignatureUrl)

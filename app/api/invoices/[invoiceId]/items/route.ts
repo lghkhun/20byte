@@ -12,6 +12,9 @@ type InvoiceItemInput = {
   priceCents?: unknown;
   unit?: unknown;
   description?: unknown;
+  discountType?: unknown;
+  discountValue?: unknown;
+  taxLabel?: unknown;
 };
 
 type MilestoneInput = {
@@ -22,7 +25,11 @@ type MilestoneInput = {
 
 type EditInvoiceItemsRequest = {
   orgId?: unknown;
+  notes?: unknown;
+  terms?: unknown;
   items?: unknown;
+  invoiceDiscountType?: unknown;
+  invoiceDiscountValue?: unknown;
   milestones?: unknown;
 };
 
@@ -40,6 +47,14 @@ function errorResponse(status: number, code: string, message: string) {
 
 function parsePositiveNumber(value: unknown): number | null {
   if (typeof value !== "number" || !Number.isFinite(value) || value <= 0) {
+    return null;
+  }
+
+  return Math.floor(value);
+}
+
+function parseNonNegativeNumber(value: unknown): number | null {
+  if (typeof value !== "number" || !Number.isFinite(value) || value < 0) {
     return null;
   }
 
@@ -76,6 +91,16 @@ function parseMilestoneType(value: unknown): PaymentMilestoneType | null {
   return null;
 }
 
+function parseDiscountType(value: unknown): "%" | "IDR" | undefined {
+  if (value === "%") {
+    return "%";
+  }
+  if (value === "IDR") {
+    return "IDR";
+  }
+  return undefined;
+}
+
 function parseItems(value: unknown): CreateInvoiceItemInput[] | null {
   if (!Array.isArray(value) || value.length === 0) {
     return null;
@@ -86,7 +111,10 @@ function parseItems(value: unknown): CreateInvoiceItemInput[] | null {
     qty: parsePositiveNumber(item.qty) ?? 0,
     priceCents: parsePositiveNumber(item.priceCents) ?? 0,
     unit: typeof item.unit === "string" ? item.unit : undefined,
-    description: typeof item.description === "string" ? item.description : undefined
+    description: typeof item.description === "string" ? item.description : undefined,
+    discountType: parseDiscountType(item.discountType),
+    discountValue: parseNonNegativeNumber(item.discountValue) ?? undefined,
+    taxLabel: typeof item.taxLabel === "string" ? item.taxLabel : undefined
   }));
 
   if (mapped.some((item) => !item.name.trim() || item.qty <= 0 || item.priceCents <= 0)) {
@@ -157,7 +185,13 @@ export async function PATCH(
       actorUserId: auth.session.userId,
       orgId,
       invoiceId: context.params.invoiceId,
+      notes: typeof body.notes === "string" ? body.notes : undefined,
+      terms: typeof body.terms === "string" ? body.terms : undefined,
       items,
+      invoiceDiscount: {
+        type: body.invoiceDiscountType === "IDR" ? "IDR" : "%",
+        value: parseNonNegativeNumber(body.invoiceDiscountValue) ?? 0
+      },
       milestones
     });
 

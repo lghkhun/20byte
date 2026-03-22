@@ -1,5 +1,5 @@
 import { prisma } from "@/lib/db/prisma";
-import { canAccessInbox } from "@/lib/permissions/orgPermissions";
+import { canAccessCustomerDirectory } from "@/lib/permissions/orgPermissions";
 import { publishCustomerUpdatedEvent } from "@/lib/ably/publisher";
 import { ServiceError } from "@/server/services/serviceError";
 
@@ -61,8 +61,8 @@ async function requireCustomerAccess(actorUserId: string, orgId: string, custome
     throw new ServiceError(403, "ORG_ACCESS_DENIED", "You do not have access to this organization.");
   }
 
-  if (!canAccessInbox(membership.role)) {
-    throw new ServiceError(403, "FORBIDDEN_INBOX_ACCESS", "Your role cannot access inbox conversations.");
+  if (!canAccessCustomerDirectory(membership.role)) {
+    throw new ServiceError(403, "FORBIDDEN_CUSTOMER_ACCESS", "Your role cannot access customer database.");
   }
 
   const customer = await prisma.customer.findFirst({
@@ -108,8 +108,8 @@ export async function createTag(actorUserId: string, orgIdInput: string, nameInp
     throw new ServiceError(403, "ORG_ACCESS_DENIED", "You do not have access to this organization.");
   }
 
-  if (!canAccessInbox(membership.role)) {
-    throw new ServiceError(403, "FORBIDDEN_INBOX_ACCESS", "Your role cannot access inbox conversations.");
+  if (!canAccessCustomerDirectory(membership.role)) {
+    throw new ServiceError(403, "FORBIDDEN_CUSTOMER_ACCESS", "Your role cannot access customer database.");
   }
 
   const existing = await prisma.tag.findFirst({

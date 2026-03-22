@@ -4,33 +4,34 @@ import { Download, Printer } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 
-type PublicInvoiceToolbarProps = {
-  token: string;
-  hasStoredPdf: boolean;
-  storedPdfUrl: string | null;
-};
-
-export function PublicInvoiceToolbar({ token, hasStoredPdf, storedPdfUrl }: PublicInvoiceToolbarProps) {
-  const generatedPdfUrl = `/api/public-invoices/${encodeURIComponent(token)}/pdf`;
-
+export function PublicInvoiceToolbar() {
   return (
-    <div className="print-hidden flex flex-wrap items-center gap-2">
-      <Button type="button" variant="secondary" className="h-9" asChild>
-        <a href={hasStoredPdf && storedPdfUrl ? storedPdfUrl : generatedPdfUrl} target="_blank" rel="noreferrer" download>
-          <Download className="mr-2 h-4 w-4" />
-          Download PDF
-        </a>
-      </Button>
+    <div className="print-hidden flex items-center gap-1 rounded-md border border-slate-200 bg-white/70 px-1 py-0.5">
       <Button
         type="button"
         variant="ghost"
-        className="h-9"
+        size="icon"
+        className="h-7 w-7 rounded-md"
+        title="Download A4 PDF"
+        aria-label="Download A4 PDF"
         onClick={() => {
           window.print();
         }}
       >
-        <Printer className="mr-2 h-4 w-4" />
-        Print / Save PDF
+        <Download className="h-4 w-4" />
+      </Button>
+      <Button
+        type="button"
+        variant="ghost"
+        size="icon"
+        className="h-7 w-7 rounded-md"
+        title="Print / Save PDF"
+        aria-label="Print / Save PDF"
+        onClick={() => {
+          window.print();
+        }}
+      >
+        <Printer className="h-4 w-4" />
       </Button>
     </div>
   );

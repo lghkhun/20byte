@@ -2,7 +2,7 @@
 
 import { type FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import Image from "next/image";
-import { ChevronDown, FileText, ImageIcon, Link2, NotebookPen, PanelsTopLeft, Workflow } from "lucide-react";
+import { ChevronDown, FileText, ImageIcon, Link2, NotebookPen, Workflow } from "lucide-react";
 
 import { ActivityTimelineSection } from "@/components/inbox/crm/ActivityTimelineSection";
 import { InvoicesSection } from "@/components/inbox/crm/InvoicesSection";
@@ -10,6 +10,8 @@ import type { CrmActivityItem, CrmInvoiceItem, CrmTimelineItem } from "@/compone
 import { normalizeRuntimeUrl } from "@/components/inbox/bubble/utils";
 import type { ConversationItem, MessageItem } from "@/components/inbox/types";
 import { useModalAccessibility } from "@/lib/a11y/useModalAccessibility";
+import { BUSINESS_CATEGORY_OPTIONS, FOLLOW_UP_OPTIONS, LEAD_STATUS_OPTIONS, formatLeadSettingLabel } from "@/lib/crm/leadSettingsConfig";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 
@@ -27,39 +29,18 @@ type CustomerNoteItem = {
   createdAt: string;
 };
 
-type PipelineStage = {
-  id: string;
-  name: string;
-  color: string;
-  position: number;
+type CustomerLeadSettings = {
+  leadStatus: string;
+  followUpStatus: string | null;
+  businessCategory: string | null;
+  crmStageId: string | null;
 };
 
-type PipelineItem = {
-  id: string;
-  name: string;
-  isDefault: boolean;
-  stages: PipelineStage[];
-};
-
-type PipelineBoardCard = {
-  id: string;
-  customerName: string;
-  customerPhoneE164: string;
-  unreadCount: number;
-  lastMessagePreview: string | null;
-};
-
-type PipelineBoardColumn = {
+type PipelineStageOption = {
   stageId: string;
   stageName: string;
   stageColor: string;
-  cardCount: number;
-  cards: PipelineBoardCard[];
-};
-
-type PipelineBoard = {
-  pipeline: PipelineItem;
-  columns: PipelineBoardColumn[];
+  position: number;
 };
 
 type CrmContextPanelProps = {
@@ -112,16 +93,52 @@ function formatDateTime(value: string | null): string {
   }).format(date);
 }
 
-function stageColorClass(color: string): string {
-  const map: Record<string, string> = {
-    emerald: "border-emerald-500/30 bg-emerald-500/10 text-emerald-700",
-    amber: "border-amber-500/30 bg-amber-500/10 text-amber-700",
-    sky: "border-sky-500/30 bg-sky-500/10 text-sky-700",
-    violet: "border-violet-500/30 bg-violet-500/10 text-violet-700",
-    rose: "border-rose-500/30 bg-rose-500/10 text-rose-700",
-    slate: "border-slate-500/30 bg-slate-500/10 text-slate-700"
-  };
-  return map[color] ?? "border-border bg-muted/40 text-foreground";
+function formatLabel(value: string): string {
+  return formatLeadSettingLabel(value);
+}
+
+function renderLeadToneBadge(value: string, kind: "status" | "followup" | "hotness") {
+  if (kind === "hotness") {
+    const normalized = value.toUpperCase();
+    if (normalized === "HOT") return <Badge className="rounded-full bg-orange-500 text-white hover:bg-orange-500">Hot</Badge>;
+    if (normalized === "WARM") return <Badge className="rounded-full bg-amber-400 text-white hover:bg-amber-400">Warm</Badge>;
+    return <Badge className="rounded-full bg-blue-600 text-white hover:bg-blue-600">Cold</Badge>;
+  }
+
+  if (kind === "followup") {
+    const normalized = value.toUpperCase();
+    if (normalized === "CHAT") return <Badge className="rounded-full bg-amber-400 text-white hover:bg-amber-400">Chat</Badge>;
+    if (normalized === "CALL") return <Badge className="rounded-full bg-violet-500 text-white hover:bg-violet-500">Call</Badge>;
+    if (normalized === "MEETING") return <Badge className="rounded-full bg-orange-500 text-white hover:bg-orange-500">Meeting</Badge>;
+    if (normalized === "PENAWARAN") return <Badge className="rounded-full bg-cyan-500 text-white hover:bg-cyan-500">Penawaran</Badge>;
+    if (normalized === "DEALING") return <Badge className="rounded-full bg-emerald-600 text-white hover:bg-emerald-600">Dealing</Badge>;
+    if (normalized === "BLUEPRINT") return <Badge className="rounded-full bg-pink-500 text-white hover:bg-pink-500">Blueprint</Badge>;
+    return <Badge className="rounded-full bg-blue-500 text-white hover:bg-blue-500">Wait Respon</Badge>;
+  }
+
+  const normalized = value.toUpperCase();
+  if (normalized === "PROSPECT") return <Badge className="rounded-full bg-red-500 text-white hover:bg-red-500">Prospect</Badge>;
+  if (normalized === "ACTIVE_CLIENT") return <Badge className="rounded-full bg-lime-500 text-white hover:bg-lime-500">Active Client</Badge>;
+  if (normalized === "UNQUALIFIED") return <Badge className="rounded-full bg-slate-600 text-white hover:bg-slate-600">Unqualified</Badge>;
+  if (normalized === "REMARKETING") return <Badge className="rounded-full bg-fuchsia-500 text-white hover:bg-fuchsia-500">Remarketing</Badge>;
+  if (normalized === "OLD_CLIENT") return <Badge className="rounded-full bg-amber-700 text-white hover:bg-amber-700">Old Client</Badge>;
+  if (normalized === "PARTNERSHIP") return <Badge className="rounded-full bg-rose-300 text-slate-800 hover:bg-rose-300">Partnership</Badge>;
+  if (normalized === "OTHER") return <Badge className="rounded-full bg-zinc-500 text-white hover:bg-zinc-500">Other</Badge>;
+  return <Badge className="rounded-full bg-blue-400 text-white hover:bg-blue-400">New Lead</Badge>;
+}
+
+const PIPELINE_STAGE_COLOR_CLASS: Record<string, string> = {
+  emerald: "bg-emerald-500 text-white hover:bg-emerald-500",
+  amber: "bg-amber-500 text-white hover:bg-amber-500",
+  sky: "bg-sky-500 text-white hover:bg-sky-500",
+  violet: "bg-violet-500 text-white hover:bg-violet-500",
+  rose: "bg-rose-500 text-white hover:bg-rose-500",
+  slate: "bg-slate-600 text-white hover:bg-slate-600"
+};
+
+function renderPipelineStageBadge(name: string, color: string) {
+  const tone = PIPELINE_STAGE_COLOR_CLASS[color] ?? "bg-slate-500 text-white hover:bg-slate-500";
+  return <Badge className={`rounded-full ${tone}`}>{name}</Badge>;
 }
 
 function AccordionCard({
@@ -204,15 +221,18 @@ export function CrmContextPanel({
   const [editingNote, setEditingNote] = useState<CustomerNoteItem | null>(null);
   const [editingNoteContent, setEditingNoteContent] = useState("");
   const [isSavingEditedNote, setIsSavingEditedNote] = useState(false);
-  const [pipelines, setPipelines] = useState<PipelineItem[]>([]);
-  const [isLoadingPipelines, setIsLoadingPipelines] = useState(false);
-  const [pipelineError, setPipelineError] = useState<string | null>(null);
-  const [selectedPipelineId, setSelectedPipelineId] = useState("");
-  const [selectedStageId, setSelectedStageId] = useState("");
-  const [isSavingPipeline, setIsSavingPipeline] = useState(false);
-  const [pipelineBoard, setPipelineBoard] = useState<PipelineBoard | null>(null);
-  const [isLoadingPipelineBoard, setIsLoadingPipelineBoard] = useState(false);
-  const [movingStageId, setMovingStageId] = useState<string | null>(null);
+  const [leadSettings, setLeadSettings] = useState<CustomerLeadSettings>({
+    leadStatus: "NEW_LEAD",
+    followUpStatus: "WAIT_RESPON",
+    businessCategory: null,
+    crmStageId: null
+  });
+  const [pipelineId, setPipelineId] = useState<string | null>(null);
+  const [pipelineStages, setPipelineStages] = useState<PipelineStageOption[]>([]);
+  const [isLoadingLeadSettings, setIsLoadingLeadSettings] = useState(false);
+  const [leadSettingsError, setLeadSettingsError] = useState<string | null>(null);
+  const [isSavingLeadSettings, setIsSavingLeadSettings] = useState(false);
+  const [isSavingTags, setIsSavingTags] = useState(false);
   const assignModalContainerRef = useRef<HTMLDivElement | null>(null);
   const assignModalCloseButtonRef = useRef<HTMLButtonElement | null>(null);
   const editNoteModalContainerRef = useRef<HTMLDivElement | null>(null);
@@ -233,48 +253,61 @@ export function CrmContextPanel({
   });
   const canOperateInvoice = activeOrgRole === "OWNER" || activeOrgRole === "ADMIN" || activeOrgRole === "CS";
   const labelColorPresets = ["emerald", "amber", "sky", "violet", "rose", "slate"];
+  const leadStatusOptions = LEAD_STATUS_OPTIONS;
+  const followUpOptions = FOLLOW_UP_OPTIONS;
+  const businessCategoryOptions = BUSINESS_CATEGORY_OPTIONS;
 
   useEffect(() => {
     let ignore = false;
 
-    async function loadPipelines() {
+    async function loadLeadSettings() {
       if (!conversation) {
-        setPipelines([]);
         return;
       }
 
-      setIsLoadingPipelines(true);
-      setPipelineError(null);
+      setIsLoadingLeadSettings(true);
+      setLeadSettingsError(null);
       try {
-        const response = await fetch("/api/crm/pipelines", { cache: "no-store" });
-        const payload = (await response.json().catch(() => null)) as { data?: { pipelines?: PipelineItem[] }; error?: { message?: string } } | null;
+        const response = await fetch(`/api/customers/${encodeURIComponent(conversation.customerId)}`, { cache: "no-store" });
+        const payload = (await response.json().catch(() => null)) as {
+          data?: {
+            customer?: {
+              leadStatus?: string;
+              followUpStatus?: string | null;
+              businessCategory?: string | null;
+              crmStageId?: string | null;
+            };
+          };
+          error?: { message?: string };
+        } | null;
         if (!response.ok) {
           if (!ignore) {
-            setPipelineError(payload?.error?.message ?? "Failed to load CRM pipelines.");
+            setLeadSettingsError(payload?.error?.message ?? "Failed to load lead settings.");
           }
           return;
         }
 
-        if (!ignore) {
-          const nextPipelines = payload?.data?.pipelines ?? [];
-          setPipelines(nextPipelines);
-          const activePipelineId = conversation.crmPipelineId ?? nextPipelines.find((item) => item.isDefault)?.id ?? nextPipelines[0]?.id ?? "";
-          const activePipeline = nextPipelines.find((item) => item.id === activePipelineId);
-          setSelectedPipelineId(activePipelineId);
-          setSelectedStageId(conversation.crmStageId ?? activePipeline?.stages[0]?.id ?? "");
+        const customer = payload?.data?.customer;
+        if (!ignore && customer) {
+          setLeadSettings({
+            leadStatus: customer.leadStatus ?? "NEW_LEAD",
+            followUpStatus: customer.followUpStatus ?? "WAIT_RESPON",
+            businessCategory: customer.businessCategory ?? null,
+            crmStageId: customer.crmStageId ?? conversation.crmStageId ?? null
+          });
         }
       } catch {
         if (!ignore) {
-          setPipelineError("Network error while loading CRM pipelines.");
+          setLeadSettingsError("Network error while loading lead settings.");
         }
       } finally {
         if (!ignore) {
-          setIsLoadingPipelines(false);
+          setIsLoadingLeadSettings(false);
         }
       }
     }
 
-    void loadPipelines();
+    void loadLeadSettings();
     return () => {
       ignore = true;
     };
@@ -283,50 +316,62 @@ export function CrmContextPanel({
   useEffect(() => {
     let ignore = false;
 
-    async function loadBoard() {
-      if (!selectedPipelineId) {
-        setPipelineBoard(null);
+    async function loadPipelineStages() {
+      if (!conversation) {
+        setPipelineId(null);
+        setPipelineStages([]);
         return;
       }
 
-      setIsLoadingPipelineBoard(true);
-      setPipelineError(null);
       try {
-        const response = await fetch(`/api/crm/pipelines/board?pipelineId=${encodeURIComponent(selectedPipelineId)}&status=OPEN`, {
-          cache: "no-store"
-        });
-        const payload = (await response.json().catch(() => null)) as { data?: { board?: PipelineBoard }; error?: { message?: string } } | null;
+        const query = conversation.crmPipelineId
+          ? `?pipelineId=${encodeURIComponent(conversation.crmPipelineId)}&status=OPEN`
+          : "?status=OPEN";
+        const response = await fetch(`/api/crm/pipelines/board${query}`, { cache: "no-store" });
+        const payload = (await response.json().catch(() => null)) as
+          | {
+              data?: {
+                board?: {
+                  pipeline?: { id: string } | null;
+                  columns?: Array<{ stageId: string; stageName: string; stageColor: string; position: number }>;
+                };
+              };
+              error?: { message?: string };
+            }
+          | null;
         if (!response.ok) {
           if (!ignore) {
-            setPipelineError(payload?.error?.message ?? "Failed to load pipeline kanban.");
+            setLeadSettingsError(payload?.error?.message ?? "Failed to load pipeline stages.");
           }
           return;
         }
 
+        const board = payload?.data?.board;
         if (!ignore) {
-          setPipelineBoard(payload?.data?.board ?? null);
+          setPipelineId(board?.pipeline?.id ?? conversation.crmPipelineId ?? null);
+          setPipelineStages(
+            (board?.columns ?? [])
+              .map((item) => ({
+                stageId: item.stageId,
+                stageName: item.stageName,
+                stageColor: item.stageColor,
+                position: item.position
+              }))
+              .sort((a, b) => a.position - b.position)
+          );
         }
       } catch {
         if (!ignore) {
-          setPipelineError("Network error while loading pipeline kanban.");
-        }
-      } finally {
-        if (!ignore) {
-          setIsLoadingPipelineBoard(false);
+          setLeadSettingsError("Network error while loading pipeline stages.");
         }
       }
     }
 
-    void loadBoard();
+    void loadPipelineStages();
     return () => {
       ignore = true;
     };
-  }, [selectedPipelineId]);
-
-  const activePipeline = useMemo(
-    () => pipelines.find((pipeline) => pipeline.id === selectedPipelineId) ?? null,
-    [pipelines, selectedPipelineId]
-  );
+  }, [conversation]);
 
   const timelineItems = useMemo(() => {
     if (!conversation) {
@@ -472,54 +517,91 @@ export function CrmContextPanel({
     }
   }
 
-  async function handleSavePipeline() {
-    if (!conversation || !selectedPipelineId || !selectedStageId || isSavingPipeline) {
+  async function handleSaveLeadSettings() {
+    if (!conversation || isSavingLeadSettings) {
       return;
     }
 
-    setIsSavingPipeline(true);
-    setPipelineError(null);
+    setIsSavingLeadSettings(true);
+    setLeadSettingsError(null);
     try {
-      const response = await fetch(`/api/conversations/${encodeURIComponent(conversation.id)}/pipeline`, {
-        method: "PATCH",
+      const response = await fetch(`/api/customers/${encodeURIComponent(conversation.customerId)}`, {
+        method: "PUT",
         headers: {
           "Content-Type": "application/json"
         },
         body: JSON.stringify({
-          pipelineId: selectedPipelineId,
-          stageId: selectedStageId
+          leadStatus: leadSettings.leadStatus,
+          followUpStatus: leadSettings.followUpStatus,
+          businessCategory: leadSettings.businessCategory
         })
       });
       const payload = (await response.json().catch(() => null)) as { error?: { message?: string } } | null;
       if (!response.ok) {
-        setPipelineError(payload?.error?.message ?? "Failed to update pipeline stage.");
+        setLeadSettingsError(payload?.error?.message ?? "Failed to save lead settings.");
+        return;
+      }
+
+      if (leadSettings.crmStageId && pipelineId) {
+        const stageResponse = await fetch(`/api/conversations/${encodeURIComponent(conversation.id)}/pipeline`, {
+          method: "PATCH",
+          headers: {
+            "Content-Type": "application/json"
+          },
+          body: JSON.stringify({
+            pipelineId,
+            stageId: leadSettings.crmStageId
+          })
+        });
+        const stagePayload = (await stageResponse.json().catch(() => null)) as { error?: { message?: string } } | null;
+        if (!stageResponse.ok) {
+          setLeadSettingsError(stagePayload?.error?.message ?? "Failed to update pipeline stage.");
+          return;
+        }
+      }
+
+      await onRefreshConversation();
+    } catch {
+      setLeadSettingsError("Network error while saving lead settings.");
+    } finally {
+      setIsSavingLeadSettings(false);
+    }
+  }
+
+  async function handleToggleTag(tagId: string) {
+    if (!conversation || isSavingTags) {
+      return;
+    }
+
+    setIsSavingTags(true);
+    setLeadSettingsError(null);
+    try {
+      const currentlyAssignedIds = tags.filter((item) => item.isAssigned).map((item) => item.id);
+      const nextTagIds = currentlyAssignedIds.includes(tagId)
+        ? currentlyAssignedIds.filter((id) => id !== tagId)
+        : Array.from(new Set([...currentlyAssignedIds, tagId]));
+
+      const response = await fetch(`/api/customers/${encodeURIComponent(conversation.customerId)}/tags`, {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          tagIds: nextTagIds
+        })
+      });
+      const payload = (await response.json().catch(() => null)) as { error?: { message?: string } } | null;
+      if (!response.ok) {
+        setLeadSettingsError(payload?.error?.message ?? "Failed to update tags.");
         return;
       }
 
       await onRefreshConversation();
-      const boardResponse = await fetch(`/api/crm/pipelines/board?pipelineId=${encodeURIComponent(selectedPipelineId)}&status=OPEN`, {
-        cache: "no-store"
-      });
-      const boardPayload = (await boardResponse.json().catch(() => null)) as { data?: { board?: PipelineBoard } } | null;
-      if (boardResponse.ok) {
-        setPipelineBoard(boardPayload?.data?.board ?? null);
-      }
     } catch {
-      setPipelineError("Network error while saving pipeline.");
+      setLeadSettingsError("Network error while updating tags.");
     } finally {
-      setIsSavingPipeline(false);
+      setIsSavingTags(false);
     }
-  }
-
-  async function moveConversationToStage(stageId: string) {
-    if (!conversation || !selectedPipelineId || !stageId || movingStageId) {
-      return;
-    }
-
-    setMovingStageId(stageId);
-    setSelectedStageId(stageId);
-    await handleSavePipeline();
-    setMovingStageId(null);
   }
 
   if (isLoading) {
@@ -535,7 +617,7 @@ export function CrmContextPanel({
       <aside className="inbox-scroll h-full min-h-0 overflow-y-auto overscroll-contain rounded-[24px] border border-border/80 bg-card/95 p-5 shadow-sm">
         <div className="rounded-[20px] border border-dashed border-border/80 bg-background/60 p-5">
           <h2 className="text-base font-semibold text-foreground">CRM Context</h2>
-          <p className="mt-2 text-sm leading-6 text-muted-foreground">Pilih percakapan untuk melihat profile customer, pipeline, catatan internal, media, dan invoice terkait.</p>
+          <p className="mt-2 text-sm leading-6 text-muted-foreground">Pilih percakapan untuk melihat profile customer, lead settings, catatan internal, media, dan invoice terkait.</p>
         </div>
       </aside>
     );
@@ -585,86 +667,155 @@ export function CrmContextPanel({
         </div>
       </section>
 
-      <AccordionCard id="crm-pipeline" title="Pipeline & Peluang" icon={PanelsTopLeft} defaultOpen>
+      <AccordionCard id="crm-lead-settings" title="Lead Settings" icon={Workflow} defaultOpen>
         <div className="space-y-3">
-          <select
-            value={selectedPipelineId}
-            onChange={(event) => {
-              const nextPipelineId = event.target.value;
-              const nextPipeline = pipelines.find((item) => item.id === nextPipelineId);
-              setSelectedPipelineId(nextPipelineId);
-              setSelectedStageId(nextPipeline?.stages[0]?.id ?? "");
+          <form
+            className="space-y-3"
+            onSubmit={(event) => {
+              event.preventDefault();
+              void handleSaveLeadSettings();
             }}
-            className="h-11 w-full rounded-xl border border-border bg-background px-3 text-sm"
           >
-            <option value="">-- Pilih Pipeline --</option>
-            {pipelines.map((pipeline) => (
-              <option key={pipeline.id} value={pipeline.id}>
-                {pipeline.name}
-              </option>
-            ))}
-          </select>
-          <select value={selectedStageId} onChange={(event) => setSelectedStageId(event.target.value)} className="h-11 w-full rounded-xl border border-border bg-background px-3 text-sm">
-            <option value="">-- Pilih Stage --</option>
-            {(activePipeline?.stages ?? []).map((stage) => (
-              <option key={stage.id} value={stage.id}>
-                {stage.name}
-              </option>
-            ))}
-          </select>
-          <Button type="button" onClick={() => void handleSavePipeline()} disabled={!selectedPipelineId || !selectedStageId || isSavingPipeline} className="h-10 w-full rounded-xl">
-            {isSavingPipeline ? "Saving..." : "Simpan Pipeline"}
-          </Button>
-          <div className="rounded-xl border border-border/70 bg-background/50 p-2">
-            <div className="mb-2 flex items-center justify-between px-1">
-              <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">Kanban (Open)</p>
-              {pipelineBoard ? <p className="text-[11px] text-muted-foreground">{pipelineBoard.pipeline.name}</p> : null}
+            <div>
+              <p className="mb-1 text-xs text-muted-foreground">Status Lead</p>
+              <select
+                value={leadSettings.leadStatus}
+                onChange={(event) => setLeadSettings((current) => ({ ...current, leadStatus: event.target.value }))}
+                className="h-11 w-full rounded-xl border border-border bg-background px-3 text-sm"
+              >
+                {leadStatusOptions.map((option) => (
+                  <option key={option} value={option}>
+                    {formatLabel(option)}
+                  </option>
+                ))}
+              </select>
+              <div className="mt-2">
+                {renderLeadToneBadge(leadSettings.leadStatus, "status")}
+              </div>
             </div>
-            <div className="inbox-scroll flex gap-2 overflow-x-auto pb-1">
-              {(pipelineBoard?.columns ?? activePipeline?.stages.map((stage) => ({
-                stageId: stage.id,
-                stageName: stage.name,
-                stageColor: stage.color,
-                cardCount: 0,
-                cards: []
-              })) ?? []
-              ).map((column) => {
-                const isCurrentStage = selectedStageId === column.stageId;
-                const currentCard = column.cards.find((card) => card.id === conversation.id) ?? null;
-                return (
-                  <article key={column.stageId} className={`w-56 shrink-0 rounded-xl border p-2 ${isCurrentStage ? "border-primary/40 bg-primary/5" : "border-border/70 bg-card/80"}`}>
-                    <div className="mb-2 flex items-center justify-between gap-2">
-                      <p className="truncate text-xs font-semibold text-foreground">{column.stageName}</p>
-                      <span className={`rounded-full border px-2 py-0.5 text-[10px] ${stageColorClass(column.stageColor)}`}>{column.cardCount}</span>
-                    </div>
-                    {currentCard ? (
-                      <div className="rounded-lg border border-primary/30 bg-primary/10 p-2">
-                        <p className="truncate text-xs font-semibold text-foreground">{currentCard.customerName}</p>
-                        <p className="truncate text-[11px] text-muted-foreground">{currentCard.customerPhoneE164}</p>
-                      </div>
-                    ) : (
-                      <p className="line-clamp-2 rounded-lg border border-dashed border-border/70 px-2 py-2 text-[11px] text-muted-foreground">
-                        {column.cards[0]?.customerName ? `${column.cards[0].customerName}: ${column.cards[0].lastMessagePreview ?? "tanpa preview"}` : "Belum ada kartu pada stage ini."}
-                      </p>
-                    )}
-                    <Button
-                      type="button"
-                      size="sm"
-                      variant={isCurrentStage ? "default" : "secondary"}
-                      className="mt-2 h-7 w-full rounded-lg text-[11px]"
-                      disabled={isSavingPipeline || movingStageId === column.stageId}
-                      onClick={() => void moveConversationToStage(column.stageId)}
-                    >
-                      {movingStageId === column.stageId ? "Memindahkan..." : isCurrentStage ? "Stage Aktif" : "Pindah ke sini"}
-                    </Button>
-                  </article>
-                );
-              })}
+            <div>
+              <p className="mb-1 text-xs text-muted-foreground">Follow-up</p>
+              <select
+                value={leadSettings.followUpStatus ?? "WAIT_RESPON"}
+                onChange={(event) => setLeadSettings((current) => ({ ...current, followUpStatus: event.target.value }))}
+                className="h-11 w-full rounded-xl border border-border bg-background px-3 text-sm"
+              >
+                {followUpOptions.map((option) => (
+                  <option key={option} value={option}>
+                    {formatLabel(option)}
+                  </option>
+                ))}
+              </select>
+              <div className="mt-2">
+                {renderLeadToneBadge(leadSettings.followUpStatus ?? "WAIT_RESPON", "followup")}
+              </div>
             </div>
-            {isLoadingPipelineBoard ? <p className="mt-2 text-[11px] text-muted-foreground">Loading kanban...</p> : null}
-          </div>
-          {isLoadingPipelines ? <p className="text-xs text-muted-foreground">Loading pipelines...</p> : null}
-          {pipelineError ? <p className="text-xs text-destructive">{pipelineError}</p> : null}
+            <div>
+              <p className="mb-1 text-xs text-muted-foreground">Pipeline Stage</p>
+              <select
+                value={leadSettings.crmStageId ?? ""}
+                onChange={(event) =>
+                  setLeadSettings((current) => ({
+                    ...current,
+                    crmStageId: event.target.value || null
+                  }))
+                }
+                className="h-11 w-full rounded-xl border border-border bg-background px-3 text-sm"
+              >
+                <option value="">Unassigned</option>
+                {pipelineStages.map((stage) => (
+                  <option key={stage.stageId} value={stage.stageId}>
+                    {stage.stageName}
+                  </option>
+                ))}
+              </select>
+              <div className="mt-2">
+                {leadSettings.crmStageId ? (
+                  (() => {
+                    const selectedStage = pipelineStages.find((stage) => stage.stageId === leadSettings.crmStageId);
+                    if (!selectedStage) {
+                      return <Badge variant="outline">Stage selected</Badge>;
+                    }
+                    return renderPipelineStageBadge(selectedStage.stageName, selectedStage.stageColor);
+                  })()
+                ) : (
+                  <Badge variant="outline" className="rounded-full">
+                    Unassigned
+                  </Badge>
+                )}
+              </div>
+            </div>
+            <div>
+              <p className="mb-1 text-xs text-muted-foreground">Business Category</p>
+              <Input
+                list="crm-business-category-options"
+                value={leadSettings.businessCategory ?? ""}
+                onChange={(event) => setLeadSettings((current) => ({ ...current, businessCategory: event.target.value.trim() || null }))}
+                placeholder="Set category"
+                className="h-11 rounded-xl"
+              />
+              <datalist id="crm-business-category-options">
+                {businessCategoryOptions.map((option) => (
+                  <option key={option} value={option} />
+                ))}
+              </datalist>
+              {leadSettings.businessCategory ? (
+                <div className="mt-2">
+                  <Badge className="max-w-[220px] truncate rounded-full bg-violet-200 text-violet-700 hover:bg-violet-200" title={leadSettings.businessCategory}>
+                    {leadSettings.businessCategory}
+                  </Badge>
+                </div>
+              ) : null}
+            </div>
+            <div>
+              <p className="mb-1 text-xs text-muted-foreground">Tags</p>
+              <div className="flex flex-wrap gap-2">
+                {tags.map((tag) => (
+                  <button
+                    key={tag.id}
+                    type="button"
+                    onClick={() => void handleToggleTag(tag.id)}
+                    disabled={isSavingTags}
+                    className={
+                      tag.isAssigned
+                        ? "rounded-full border border-blue-500 bg-blue-500 px-2.5 py-1 text-[11px] text-white"
+                        : "rounded-full border border-border px-2.5 py-1 text-[11px] text-foreground hover:bg-accent"
+                    }
+                  >
+                    {tag.name}
+                  </button>
+                ))}
+                {!isLoadingCrm && tags.length === 0 ? <p className="text-xs text-muted-foreground">Belum ada tag.</p> : null}
+              </div>
+            </div>
+            <div className="space-y-2">
+              <p className="text-xs text-muted-foreground">Create New Tag</p>
+              <form className="flex gap-2" onSubmit={handleCreateTag}>
+                <Input value={tagName} onChange={(event) => setTagName(event.target.value)} placeholder="New tag" className="h-10 rounded-xl" />
+                <Button type="submit" disabled={isSubmittingTag} size="sm" variant="secondary" className="h-10 rounded-xl border border-border/80 bg-background">
+                  {isSubmittingTag ? "..." : "Add"}
+                </Button>
+              </form>
+              <div className="flex flex-wrap gap-2">
+                {labelColorPresets.map((preset) => (
+                  <button
+                    key={preset}
+                    type="button"
+                    onClick={() => setTagColor(preset)}
+                    className={tagColor === preset ? "rounded-full border border-primary/30 bg-primary/10 px-2.5 py-1 text-[11px] capitalize text-primary" : "rounded-full border border-border px-2.5 py-1 text-[11px] capitalize text-muted-foreground"}
+                  >
+                    {preset}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <Button type="submit" disabled={isSavingLeadSettings || isLoadingLeadSettings} className="h-10 w-full rounded-xl">
+              {isSavingLeadSettings ? "Saving..." : "Save Lead Settings"}
+            </Button>
+          </form>
+          {isLoadingLeadSettings ? <p className="text-xs text-muted-foreground">Loading lead settings...</p> : null}
+          {leadSettingsError ? <p className="text-xs text-destructive">{leadSettingsError}</p> : null}
+          {crmError ? <p className="text-xs text-destructive">{crmError}</p> : null}
         </div>
       </AccordionCard>
 
@@ -719,41 +870,6 @@ export function CrmContextPanel({
         </div>
       </AccordionCard>
 
-      <AccordionCard id="crm-tags" title="Labels" icon={Workflow} defaultOpen={false}>
-        <form className="flex gap-2" onSubmit={handleCreateTag}>
-          <Input value={tagName} onChange={(event) => setTagName(event.target.value)} placeholder="New label" className="h-10 rounded-xl" />
-          <Button type="submit" disabled={isSubmittingTag} size="sm" variant="secondary" className="h-10 rounded-xl border border-border/80 bg-background">
-            {isSubmittingTag ? "..." : "Add"}
-          </Button>
-        </form>
-        <div className="mt-3 flex flex-wrap gap-2">
-          {labelColorPresets.map((preset) => (
-            <button
-              key={preset}
-              type="button"
-              onClick={() => setTagColor(preset)}
-            className={tagColor === preset ? "rounded-full border border-primary/30 bg-primary/10 px-2.5 py-1 text-[11px] capitalize text-primary" : "rounded-full border border-border px-2.5 py-1 text-[11px] capitalize text-muted-foreground"}
-            >
-              {preset}
-            </button>
-          ))}
-        </div>
-        <div className="mt-3 flex flex-wrap gap-2">
-          {tags.map((tag) => (
-            <button
-              key={tag.id}
-              type="button"
-              onClick={() => void onAssignTag(tag.id)}
-              disabled={tag.isAssigned}
-              className={tag.isAssigned ? "rounded-full border border-emerald-500/40 bg-emerald-500/10 px-2.5 py-1 text-[11px] text-emerald-600" : "rounded-full border border-border px-2.5 py-1 text-[11px] text-foreground hover:bg-accent"}
-            >
-              {tag.name}
-            </button>
-          ))}
-          {!isLoadingCrm && tags.length === 0 ? <p className="text-xs text-muted-foreground">Belum ada label.</p> : null}
-        </div>
-      </AccordionCard>
-
       <AccordionCard id="crm-media" title="Media, Dokumen & Tautan" icon={ImageIcon}>
         <div className="space-y-4">
           <div>
@@ -797,6 +913,24 @@ export function CrmContextPanel({
         </div>
       </AccordionCard>
 
+      <div id="crm-invoices">
+        <AccordionCard id="crm-invoices-panel" title="Invoices" icon={FileText} defaultOpen={false}>
+          <InvoicesSection
+            invoices={invoices}
+            isLoadingCrm={isLoadingCrm}
+            isSendingInvoice={isSendingInvoice}
+            isMarkingInvoicePaid={isMarkingInvoicePaid}
+            canOperateInvoice={canOperateInvoice}
+            activeOrgRole={activeOrgRole}
+            invoiceActionError={invoiceActionError}
+            invoiceActionSuccess={invoiceActionSuccess}
+            onSendInvoice={onSendInvoice}
+            onMarkInvoicePaid={onMarkInvoicePaid}
+            formatDateTime={formatDateTime}
+          />
+        </AccordionCard>
+      </div>
+
       <AccordionCard id="crm-proof" title="Attach Payment Proof" icon={FileText} defaultOpen={false}>
         <p className="text-xs text-muted-foreground">Selected message: {selectedProofMessageId ?? "None (use \"Use as payment proof\" in chat bubble)"}</p>
         <div className="mt-3 grid gap-2 sm:grid-cols-2">
@@ -819,24 +953,6 @@ export function CrmContextPanel({
         </Button>
         {proofFeedback ? <p className="mt-2 text-xs text-muted-foreground">{proofFeedback}</p> : null}
       </AccordionCard>
-
-      <div id="crm-invoices">
-        <AccordionCard id="crm-invoices-panel" title="Invoices" icon={FileText} defaultOpen={false}>
-          <InvoicesSection
-            invoices={invoices}
-            isLoadingCrm={isLoadingCrm}
-            isSendingInvoice={isSendingInvoice}
-            isMarkingInvoicePaid={isMarkingInvoicePaid}
-            canOperateInvoice={canOperateInvoice}
-            activeOrgRole={activeOrgRole}
-            invoiceActionError={invoiceActionError}
-            invoiceActionSuccess={invoiceActionSuccess}
-            onSendInvoice={onSendInvoice}
-            onMarkInvoicePaid={onMarkInvoicePaid}
-            formatDateTime={formatDateTime}
-          />
-        </AccordionCard>
-      </div>
 
       <div id="crm-timeline">
         <AccordionCard id="crm-timeline-panel" title="Timeline" icon={Workflow} defaultOpen={false}>

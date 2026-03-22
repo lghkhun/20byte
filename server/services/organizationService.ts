@@ -1,6 +1,7 @@
 import { Role } from "@prisma/client";
 
 import { prisma } from "@/lib/db/prisma";
+import { getProxyAssetUrl, getPublicObjectKeyFromUrl } from "@/lib/r2/client";
 import {
   canAccessOrganizationSettings,
   canAssignOrganizationRole,
@@ -40,6 +41,7 @@ export type OrganizationBusinessProfile = {
   responsibleName: string | null;
   businessPhone: string | null;
   businessEmail: string | null;
+  businessNpwp: string | null;
   businessAddress: string | null;
   logoUrl: string | null;
   invoiceSignatureUrl: string | null;
@@ -53,6 +55,28 @@ type OrganizationMemberSummary = {
   name: string | null;
   createdAt: Date;
 };
+
+function normalizeAssetUrlForClient(value: string | null): string | null {
+  const normalized = normalizeOptionalText(value);
+  if (!normalized) {
+    return null;
+  }
+
+  const objectKey = getPublicObjectKeyFromUrl(normalized);
+  if (!objectKey) {
+    return normalized;
+  }
+
+  return getProxyAssetUrl(objectKey);
+}
+
+function mapBusinessProfileForClient(profile: OrganizationBusinessProfile): OrganizationBusinessProfile {
+  return {
+    ...profile,
+    logoUrl: normalizeAssetUrlForClient(profile.logoUrl),
+    invoiceSignatureUrl: normalizeAssetUrlForClient(profile.invoiceSignatureUrl)
+  };
+}
 
 function normalizeOrgName(value: string): string {
   return value.trim();
@@ -70,6 +94,15 @@ function normalizeOptionalEmail(value: string | null | undefined): string | null
   }
 
   return normalizeAndValidateEmail(normalized);
+}
+
+function isMissingBusinessNpwpFieldError(error: unknown): boolean {
+  if (!(error instanceof Error)) {
+    return false;
+  }
+
+  const message = error.message;
+  return message.includes("businessNpwp");
 }
 
 function validateOrgName(name: string): string {
@@ -257,28 +290,62 @@ export async function getOrganizationBusinessProfile(
   const orgId = await resolvePrimaryOrganizationIdForUser(actorUserId, candidateOrgId);
   await requireMembership(actorUserId, orgId);
 
-  const organization = await prisma.org.findUnique({
-    where: {
-      id: orgId
-    },
-    select: {
-      id: true,
-      name: true,
-      legalName: true,
-      responsibleName: true,
-      businessPhone: true,
-      businessEmail: true,
-      businessAddress: true,
-      logoUrl: true,
-      invoiceSignatureUrl: true
+  const selectWithNpwp = {
+    id: true,
+    name: true,
+    legalName: true,
+    responsibleName: true,
+    businessPhone: true,
+    businessEmail: true,
+    businessNpwp: true,
+    businessAddress: true,
+    logoUrl: true,
+    invoiceSignatureUrl: true
+  };
+  const selectWithoutNpwp = {
+    id: true,
+    name: true,
+    legalName: true,
+    responsibleName: true,
+    businessPhone: true,
+    businessEmail: true,
+    businessAddress: true,
+    logoUrl: true,
+    invoiceSignatureUrl: true
+  };
+
+  let organization: OrganizationBusinessProfile | null = null;
+  try {
+    organization = await prisma.org.findUnique({
+      where: {
+        id: orgId
+      },
+      select: selectWithNpwp
+    });
+  } catch (error) {
+    if (!isMissingBusinessNpwpFieldError(error)) {
+      throw error;
     }
-  });
+
+    const fallback = await prisma.org.findUnique({
+      where: {
+        id: orgId
+      },
+      select: selectWithoutNpwp
+    });
+    organization = fallback
+      ? {
+          ...fallback,
+          businessNpwp: null
+        }
+      : null;
+  }
 
   if (!organization) {
     throw new ServiceError(404, "ORG_NOT_FOUND", "No business is available for this account.");
   }
 
-  return organization;
+  return mapBusinessProfileForClient(organization);
 }
 
 export async function updateOrganizationBusinessProfile(input: {
@@ -289,6 +356,7 @@ export async function updateOrganizationBusinessProfile(input: {
   responsibleName?: string | null;
   businessPhone?: string | null;
   businessEmail?: string | null;
+  businessNpwp?: string | null;
   businessAddress?: string | null;
   logoUrl?: string | null;
   invoiceSignatureUrl?: string | null;
@@ -299,34 +367,79 @@ export async function updateOrganizationBusinessProfile(input: {
     throw new ServiceError(403, "FORBIDDEN_SETTINGS_ACCESS", "Your role cannot access organization settings.");
   }
 
-  const updated = await prisma.org.update({
-    where: {
-      id: orgId
-    },
-    data: {
-      name: validateOrgName(input.name),
-      legalName: normalizeOptionalText(input.legalName),
-      responsibleName: normalizeOptionalText(input.responsibleName),
-      businessPhone: normalizeOptionalText(input.businessPhone),
-      businessEmail: normalizeOptionalEmail(input.businessEmail),
-      businessAddress: normalizeOptionalText(input.businessAddress),
-      logoUrl: normalizeOptionalText(input.logoUrl),
-      invoiceSignatureUrl: normalizeOptionalText(input.invoiceSignatureUrl)
-    },
-    select: {
-      id: true,
-      name: true,
-      legalName: true,
-      responsibleName: true,
-      businessPhone: true,
-      businessEmail: true,
-      businessAddress: true,
-      logoUrl: true,
-      invoiceSignatureUrl: true
-    }
-  });
+  const dataWithNpwp = {
+    name: validateOrgName(input.name),
+    legalName: normalizeOptionalText(input.legalName),
+    responsibleName: normalizeOptionalText(input.responsibleName),
+    businessPhone: normalizeOptionalText(input.businessPhone),
+    businessEmail: normalizeOptionalEmail(input.businessEmail),
+    businessNpwp: normalizeOptionalText(input.businessNpwp),
+    businessAddress: normalizeOptionalText(input.businessAddress),
+    logoUrl: normalizeOptionalText(input.logoUrl),
+    invoiceSignatureUrl: normalizeOptionalText(input.invoiceSignatureUrl)
+  };
+  const dataWithoutNpwp = {
+    name: validateOrgName(input.name),
+    legalName: normalizeOptionalText(input.legalName),
+    responsibleName: normalizeOptionalText(input.responsibleName),
+    businessPhone: normalizeOptionalText(input.businessPhone),
+    businessEmail: normalizeOptionalEmail(input.businessEmail),
+    businessAddress: normalizeOptionalText(input.businessAddress),
+    logoUrl: normalizeOptionalText(input.logoUrl),
+    invoiceSignatureUrl: normalizeOptionalText(input.invoiceSignatureUrl)
+  };
+  const selectWithNpwp = {
+    id: true,
+    name: true,
+    legalName: true,
+    responsibleName: true,
+    businessPhone: true,
+    businessEmail: true,
+    businessNpwp: true,
+    businessAddress: true,
+    logoUrl: true,
+    invoiceSignatureUrl: true
+  };
+  const selectWithoutNpwp = {
+    id: true,
+    name: true,
+    legalName: true,
+    responsibleName: true,
+    businessPhone: true,
+    businessEmail: true,
+    businessAddress: true,
+    logoUrl: true,
+    invoiceSignatureUrl: true
+  };
 
-  return updated;
+  let updated: OrganizationBusinessProfile;
+  try {
+    updated = await prisma.org.update({
+      where: {
+        id: orgId
+      },
+      data: dataWithNpwp,
+      select: selectWithNpwp
+    });
+  } catch (error) {
+    if (!isMissingBusinessNpwpFieldError(error)) {
+      throw error;
+    }
+
+    const fallback = await prisma.org.update({
+      where: {
+        id: orgId
+      },
+      data: dataWithoutNpwp,
+      select: selectWithoutNpwp
+    });
+    updated = {
+      ...fallback,
+      businessNpwp: null
+    };
+  }
+
+  return mapBusinessProfileForClient(updated);
 }
 
 export async function listOrganizationMembers(

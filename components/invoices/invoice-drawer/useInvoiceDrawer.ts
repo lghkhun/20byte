@@ -4,7 +4,6 @@ import { type FormEvent, useEffect, useMemo, useState } from "react";
 import { InvoiceKind, InvoiceStatus, PaymentMilestoneType } from "@prisma/client";
 
 import {
-  computeInvoiceLine,
   computeInvoiceSummary,
   createDefaultItems,
   createDefaultMilestones,
@@ -24,6 +23,8 @@ export function useInvoiceDrawer(props: InvoiceDrawerProps) {
   const [items, setItems] = useState<InvoiceItemDraft[]>(createDefaultItems);
   const [invoiceDiscountType, setInvoiceDiscountType] = useState<"%" | "IDR">("%");
   const [invoiceDiscountValue, setInvoiceDiscountValue] = useState(0);
+  const [notes, setNotes] = useState("");
+  const [terms, setTerms] = useState("");
   const [dpPercentage, setDpPercentage] = useState(50);
   const [milestones, setMilestones] = useState<MilestoneDraft[]>(createDefaultMilestones(InvoiceKind.FULL, 0));
   const [invoiceDueDate, setInvoiceDueDate] = useState("");
@@ -66,6 +67,8 @@ export function useInvoiceDrawer(props: InvoiceDrawerProps) {
       setItems(createDefaultItems());
       setInvoiceDiscountType("%");
       setInvoiceDiscountValue(0);
+      setNotes("");
+      setTerms("");
       setDpPercentage(50);
       setMilestones(createDefaultMilestones(InvoiceKind.FULL, 0));
       setInvoiceDueDate("");
@@ -130,30 +133,16 @@ export function useInvoiceDrawer(props: InvoiceDrawerProps) {
   }
 
   function buildPayload() {
-    const normalizedItems = items.map((item) => {
-      const line = computeInvoiceLine(item);
-      const lineMeta = [
-        item.description.trim(),
-        line.qty > 0 ? `Qty ${line.qty}` : "",
-        line.unitPriceCents > 0 ? `Harga ${line.unitPriceCents}` : "",
-        line.discountCents > 0
-          ? item.discountType === "%"
-            ? `Diskon ${item.discountValue}%`
-            : `Diskon ${item.discountValue}`
-          : "",
-        line.taxCents > 0 ? `Pajak ${item.taxLabel}` : ""
-      ]
-        .filter(Boolean)
-        .join(" • ");
-
-      return {
-        name: item.name.trim(),
-        qty: 1,
-        priceCents: line.totalCents,
-        unit: item.unit.trim() || undefined,
-        description: lineMeta || undefined
-      };
-    });
+    const normalizedItems = items.map((item) => ({
+      name: item.name.trim(),
+      qty: Math.max(1, Math.floor(item.qty || 0)),
+      priceCents: Math.max(0, Math.floor(item.priceCents || 0)),
+      unit: item.unit.trim() || undefined,
+      description: item.description.trim() || undefined,
+      discountType: item.discountType,
+      discountValue: Math.max(0, Math.floor(item.discountValue || 0)),
+      taxLabel: item.taxLabel || undefined
+    }));
 
     const normalizedMilestones = milestones.map((milestone) => ({
       type: milestone.type,
@@ -163,6 +152,8 @@ export function useInvoiceDrawer(props: InvoiceDrawerProps) {
 
     return {
       items: normalizedItems,
+      invoiceDiscountType,
+      invoiceDiscountValue: Math.max(0, Math.floor(invoiceDiscountValue || 0)),
       milestones: normalizedMilestones
     };
   }
@@ -188,8 +179,12 @@ export function useInvoiceDrawer(props: InvoiceDrawerProps) {
           conversationId: conversationId ?? undefined,
           kind,
           currency: "IDR",
+          notes: notes.trim() || undefined,
+          terms: terms.trim() || undefined,
           dueDate: invoiceDueDate ? new Date(invoiceDueDate).toISOString() : undefined,
           items: payload.items,
+          invoiceDiscountType: payload.invoiceDiscountType,
+          invoiceDiscountValue: payload.invoiceDiscountValue,
           milestones: payload.milestones
         })
       });
@@ -229,6 +224,10 @@ export function useInvoiceDrawer(props: InvoiceDrawerProps) {
         },
         body: JSON.stringify({
           items: payload.items,
+          notes: notes.trim() || undefined,
+          terms: terms.trim() || undefined,
+          invoiceDiscountType: payload.invoiceDiscountType,
+          invoiceDiscountValue: payload.invoiceDiscountValue,
           milestones: payload.milestones
         })
       });
@@ -324,6 +323,10 @@ export function useInvoiceDrawer(props: InvoiceDrawerProps) {
     setInvoiceDiscountType,
     invoiceDiscountValue,
     setInvoiceDiscountValue,
+    notes,
+    setNotes,
+    terms,
+    setTerms,
     dpPercentage,
     setDpPercentage,
     invoiceDueDate,

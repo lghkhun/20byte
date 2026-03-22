@@ -77,6 +77,7 @@ model Org {
   responsibleName    String?
   businessPhone      String?
   businessEmail      String?
+  businessNpwp       String?
   businessAddress    String?  @db.Text
   logoUrl            String?
   invoiceSignatureUrl String?
@@ -191,6 +192,16 @@ model Customer {
   phoneE164       String
   displayName     String?
   waProfilePicUrl String?
+  leadStatus      String   @default("NEW_LEAD")
+  followUpStatus  String?
+  followUpAt      DateTime?
+  businessCategory String?
+  detail          String?
+  hotness         String   @default("COLD")
+  packageName     String?
+  projectValueCents Int?
+  remarks         String?  @db.Text
+  assignedToMemberId String?
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
 
@@ -212,6 +223,11 @@ model Customer {
   @@unique([orgId, phoneE164])
   @@index([orgId])
   @@index([orgId, createdAt])
+  @@index([orgId, leadStatus, firstContactAt])
+  @@index([orgId, hotness, firstContactAt])
+  @@index([orgId, assignedToMemberId, firstContactAt])
+  @@index([orgId, source, firstContactAt])
+  @@index([orgId, followUpAt])
 }
 
 model Tag {
@@ -404,6 +420,12 @@ model Invoice {
   status           InvoiceStatus @default(DRAFT)
 
   currency         String        @default("IDR")
+  grossSubtotalCents Int         @default(0)
+  lineDiscountCents Int          @default(0)
+  invoiceDiscountType String     @default("%")
+  invoiceDiscountValue Int       @default(0)
+  invoiceDiscountCents Int       @default(0)
+  taxCents         Int           @default(0)
   subtotalCents    Int           @default(0)
   totalCents       Int           @default(0)
 
@@ -418,6 +440,8 @@ model Invoice {
 
   // PDF stored on R2
   pdfUrl           String?
+  notes            String?       @db.LongText
+  terms            String?       @db.LongText
 
   createdByUserId  String
   createdAt        DateTime      @default(now())
@@ -445,6 +469,13 @@ model InvoiceItem {
   qty         Int      @default(1)
   unit        String?
   priceCents  Int
+  subtotalCents Int    @default(0)
+  discountType String  @default("IDR")
+  discountValue Int    @default(0)
+  discountCents Int    @default(0)
+  taxLabel    String?
+  taxRateBps  Int      @default(0)
+  taxCents    Int      @default(0)
   amountCents Int
   createdAt   DateTime @default(now())
 

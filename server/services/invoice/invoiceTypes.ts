@@ -12,6 +12,9 @@ export type CreateInvoiceItemInput = {
   priceCents: number;
   unit?: string;
   description?: string;
+  discountType?: "%" | "IDR";
+  discountValue?: number;
+  taxLabel?: string;
 };
 
 export type NormalizedInvoiceItem = {
@@ -20,7 +23,19 @@ export type NormalizedInvoiceItem = {
   qty: number;
   unit: string | null;
   priceCents: number;
+  subtotalCents: number;
+  discountType: "%" | "IDR";
+  discountValue: number;
+  discountCents: number;
+  taxLabel: string | null;
+  taxRateBps: number;
+  taxCents: number;
   amountCents: number;
+};
+
+export type InvoiceDiscountInput = {
+  type: "%" | "IDR";
+  value: number;
 };
 
 export type NormalizedMilestone = {
@@ -37,7 +52,10 @@ export type CreateDraftInvoiceInput = {
   conversationId?: string;
   kind: InvoiceKind;
   currency?: string;
+  notes?: string;
+  terms?: string;
   items: CreateInvoiceItemInput[];
+  invoiceDiscount?: InvoiceDiscountInput;
   milestones?: InvoiceMilestoneInput[];
   dueDate?: Date;
 };
@@ -46,7 +64,10 @@ export type EditInvoiceItemsInput = {
   actorUserId: string;
   orgId: string;
   invoiceId: string;
+  notes?: string;
+  terms?: string;
   items: CreateInvoiceItemInput[];
+  invoiceDiscount?: InvoiceDiscountInput;
   milestones?: InvoiceMilestoneInput[];
 };
 

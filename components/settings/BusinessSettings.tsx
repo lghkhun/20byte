@@ -16,6 +16,7 @@ type BusinessProfile = {
   responsibleName: string | null;
   businessPhone: string | null;
   businessEmail: string | null;
+  businessNpwp: string | null;
   businessAddress: string | null;
   logoUrl: string | null;
   invoiceSignatureUrl: string | null;
@@ -30,6 +31,27 @@ type BusinessProfileResponse = {
     message?: string;
   };
 };
+
+function formatNpwpInput(value: string): string {
+  const digits = value.replace(/\D/g, "").slice(0, 15);
+  const parts = [
+    digits.slice(0, 2),
+    digits.slice(2, 5),
+    digits.slice(5, 8),
+    digits.slice(8, 9),
+    digits.slice(9, 12),
+    digits.slice(12, 15)
+  ];
+
+  let output = "";
+  if (parts[0]) output += parts[0];
+  if (parts[1]) output += `.${parts[1]}`;
+  if (parts[2]) output += `.${parts[2]}`;
+  if (parts[3]) output += `.${parts[3]}`;
+  if (parts[4]) output += `-${parts[4]}`;
+  if (parts[5]) output += `.${parts[5]}`;
+  return output;
+}
 
 function UploadAssetCard({
   title,
@@ -98,6 +120,7 @@ export function BusinessSettings() {
   const [responsibleName, setResponsibleName] = useState("");
   const [businessPhone, setBusinessPhone] = useState("");
   const [businessEmail, setBusinessEmail] = useState("");
+  const [businessNpwp, setBusinessNpwp] = useState("");
   const [businessAddress, setBusinessAddress] = useState("");
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
@@ -124,6 +147,7 @@ export function BusinessSettings() {
     setResponsibleName(nextProfile.responsibleName ?? "");
     setBusinessPhone(nextProfile.businessPhone ?? "");
     setBusinessEmail(nextProfile.businessEmail ?? "");
+    setBusinessNpwp(nextProfile.businessNpwp ? formatNpwpInput(nextProfile.businessNpwp) : "");
     setBusinessAddress(nextProfile.businessAddress ?? "");
   }, []);
 
@@ -164,7 +188,7 @@ export function BusinessSettings() {
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (!canSave || !profile) {
+    if (!canSave) {
       return;
     }
 
@@ -181,9 +205,10 @@ export function BusinessSettings() {
           responsibleName,
           businessPhone,
           businessEmail,
+          businessNpwp,
           businessAddress,
-          logoUrl: profile.logoUrl,
-          invoiceSignatureUrl: profile.invoiceSignatureUrl
+          logoUrl: profile?.logoUrl ?? null,
+          invoiceSignatureUrl: profile?.invoiceSignatureUrl ?? null
         })
       });
 
@@ -232,7 +257,7 @@ export function BusinessSettings() {
     <section className="space-y-6">
       {isLoading ? <p className="text-sm text-muted-foreground">Loading business profile...</p> : null}
 
-      {!isLoading && profile ? (
+      {!isLoading ? (
         <form id={formId} className="space-y-6" onSubmit={handleSubmit}>
           <div className="grid gap-4 lg:grid-cols-2">
             <div className="space-y-2">
@@ -276,6 +301,18 @@ export function BusinessSettings() {
               </label>
               <Input id="business-email" value={businessEmail} onChange={(event) => setBusinessEmail(event.target.value)} className="rounded-md" />
             </div>
+            <div className="space-y-2">
+              <label className="text-sm font-medium text-foreground" htmlFor="business-npwp">
+                NPWP Business
+              </label>
+              <Input
+                id="business-npwp"
+                value={businessNpwp}
+                onChange={(event) => setBusinessNpwp(formatNpwpInput(event.target.value))}
+                placeholder="00.000.000.0-000.000"
+                className="rounded-md"
+              />
+            </div>
             <div className="space-y-2 lg:col-span-2">
               <label className="text-sm font-medium text-foreground" htmlFor="business-address">
                 Alamat Business
@@ -296,24 +333,30 @@ export function BusinessSettings() {
             </div>
           </div>
 
-          <div className="grid gap-4 lg:grid-cols-2">
-            <UploadAssetCard
-              title="Logo Business"
-              description="Dipakai sebagai logo default invoice."
-              imageUrl={profile.logoUrl}
-              placeholderIcon={<Building2 className="h-7 w-7" />}
-              onUpload={(file) => handleAssetUpload("logo", file)}
-              isUploading={uploadingAsset === "logo"}
-            />
-            <UploadAssetCard
-              title="Tanda Tangan Invoice"
-              description="Dipakai sebagai tanda tangan default invoice."
-              imageUrl={profile.invoiceSignatureUrl}
-              placeholderIcon={<Landmark className="h-7 w-7" />}
-              onUpload={(file) => handleAssetUpload("signature", file)}
-              isUploading={uploadingAsset === "signature"}
-            />
-          </div>
+          {profile ? (
+            <div className="grid gap-4 lg:grid-cols-2">
+              <UploadAssetCard
+                title="Logo Business"
+                description="Dipakai sebagai logo default invoice."
+                imageUrl={profile.logoUrl}
+                placeholderIcon={<Building2 className="h-7 w-7" />}
+                onUpload={(file) => handleAssetUpload("logo", file)}
+                isUploading={uploadingAsset === "logo"}
+              />
+              <UploadAssetCard
+                title="Tanda Tangan Invoice"
+                description="Dipakai sebagai tanda tangan default invoice."
+                imageUrl={profile.invoiceSignatureUrl}
+                placeholderIcon={<Landmark className="h-7 w-7" />}
+                onUpload={(file) => handleAssetUpload("signature", file)}
+                isUploading={uploadingAsset === "signature"}
+              />
+            </div>
+          ) : (
+            <p className="rounded-md border border-border bg-background px-3 py-2 text-sm text-muted-foreground">
+              Asset belum bisa dimuat. Refresh halaman setelah profile berhasil terbaca.
+            </p>
+          )}
 
           {error ? <p className="rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm text-destructive">{error}</p> : null}
           {success ? <p className="rounded-md border border-primary/40 bg-primary/10 px-3 py-2 text-sm text-primary">{success}</p> : null}

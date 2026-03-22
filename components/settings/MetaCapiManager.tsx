@@ -4,10 +4,10 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { KeyRound, ShieldCheck, Sparkles } from "lucide-react";
 
 import { fetchOrganizationsCached } from "@/lib/client/orgsCache";
+import { notifyError, notifySuccess } from "@/lib/ui/notify";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { OperationFeedback } from "@/components/ui/operation-feedback";
 import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
@@ -177,6 +177,16 @@ export function MetaCapiManager() {
     };
   }, [loadConnectedPhone, loadIntegration, loadMetaStatus, loadOrganizations]);
 
+  useEffect(() => {
+    if (!error) return;
+    notifyError(error);
+  }, [error]);
+
+  useEffect(() => {
+    if (!success) return;
+    notifySuccess(success);
+  }, [success]);
+
   async function handleSave() {
     try {
       setIsSaving(true);
@@ -258,9 +268,6 @@ export function MetaCapiManager() {
           </div>
         </div>
       </div>
-
-      {error ? <OperationFeedback tone="error" message={error} /> : null}
-      {!error && success ? <OperationFeedback tone="success" message={success} /> : null}
 
       <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
         <TabsList className="h-10 rounded-xl">

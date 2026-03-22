@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { MoreHorizontal, Trash2 } from "lucide-react";
 
 import { fetchOrganizationsCached } from "@/lib/client/orgsCache";
+import { notifyError, notifySuccess } from "@/lib/ui/notify";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import {
@@ -14,7 +15,6 @@ import {
   DropdownMenuTrigger
 } from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
-import { OperationFeedback } from "@/components/ui/operation-feedback";
 import { useSettingsHeaderAction } from "@/components/settings/settings-header-actions";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 
@@ -156,6 +156,16 @@ export function BankAccountManager() {
     };
   }, [activeBusiness, loadBankAccounts]);
 
+  useEffect(() => {
+    if (!error) return;
+    notifyError(error);
+  }, [error]);
+
+  useEffect(() => {
+    if (!success) return;
+    notifySuccess(success);
+  }, [success]);
+
   async function handleCreate(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!canSubmit) {
@@ -224,9 +234,6 @@ export function BankAccountManager() {
 
   return (
     <section className="space-y-4">
-      {error ? <OperationFeedback tone="error" message={error} /> : null}
-      {!error && success ? <OperationFeedback tone="success" message={success} /> : null}
-
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h3 className="text-base font-semibold text-foreground">Bank Transfer Accounts</h3>

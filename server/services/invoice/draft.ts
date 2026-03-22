@@ -19,7 +19,15 @@ import type {
   InvoiceDraftResult,
   InvoiceItemsEditResult
 } from "@/server/services/invoice/invoiceTypes";
-import { normalize, normalizeCurrency, normalizeItems, normalizeMilestones } from "@/server/services/invoice/invoiceUtils";
+import {
+  computeInvoiceTotals,
+  normalize,
+  normalizeCurrency,
+  normalizeInvoiceDiscount,
+  normalizeItems,
+  normalizeMilestones,
+  normalizeOptional
+} from "@/server/services/invoice/invoiceUtils";
 import { ServiceError } from "@/server/services/serviceError";
 
 export async function createDraftInvoice(input: CreateDraftInvoiceInput): Promise<InvoiceDraftResult> {
@@ -27,6 +35,8 @@ export async function createDraftInvoice(input: CreateDraftInvoiceInput): Promis
   const customerId = normalize(input.customerId);
   const conversationId = normalizeConversationId(input.conversationId);
   const currency = normalizeCurrency(input.currency);
+  const notes = normalizeOptional(input.notes);
+  const terms = normalizeOptional(input.terms);
 
   if (!orgId) {
     throw new ServiceError(400, "MISSING_ORG_ID", "orgId is required.");
@@ -55,7 +65,18 @@ export async function createDraftInvoice(input: CreateDraftInvoiceInput): Promis
           }
         })
       : null;
-  const { normalizedItems, subtotalCents, totalCents, normalizedMilestones } = computeDraftInputDerived(input);
+  const {
+    normalizedItems,
+    subtotalCents,
+    totalCents,
+    grossSubtotalCents,
+    lineDiscountCents,
+    invoiceDiscountType,
+    invoiceDiscountValue,
+    invoiceDiscountCents,
+    taxCents,
+    normalizedMilestones
+  } = computeDraftInputDerived(input);
   const bankAccounts = await listOrgBankAccounts(orgId);
 
   const created = await createDraftInvoiceWithRetry({
@@ -65,10 +86,18 @@ export async function createDraftInvoice(input: CreateDraftInvoiceInput): Promis
     actorUserId: input.actorUserId,
     kind: input.kind,
     currency,
+    notes,
+    terms,
     dueDate: input.dueDate ?? undefined,
     bankAccounts,
     normalizedItems,
     normalizedMilestones,
+    grossSubtotalCents,
+    lineDiscountCents,
+    invoiceDiscountType,
+    invoiceDiscountValue,
+    invoiceDiscountCents,
+    taxCents,
     subtotalCents,
     totalCents
   });
@@ -78,6 +107,14 @@ export async function createDraftInvoice(input: CreateDraftInvoiceInput): Promis
     created,
     customer,
     currency,
+    grossSubtotalCents,
+    lineDiscountCents,
+    invoiceDiscountType,
+    invoiceDiscountValue,
+    invoiceDiscountCents,
+    taxCents,
+    notes,
+    terms,
     dueDate: input.dueDate ?? undefined,
     normalizedItems,
     bankAccounts
@@ -150,8 +187,12 @@ export async function editInvoiceItems(input: EditInvoiceItemsInput): Promise<In
   }
 
   const normalizedItems = normalizeItems(input.items);
-  const subtotalCents = normalizedItems.reduce((accumulator, item) => accumulator + item.amountCents, 0);
-  const totalCents = subtotalCents;
+  const normalizedInvoiceDiscount = normalizeInvoiceDiscount(input.invoiceDiscount);
+  const notes = normalizeOptional(input.notes);
+  const terms = normalizeOptional(input.terms);
+  const totals = computeInvoiceTotals(normalizedItems, normalizedInvoiceDiscount);
+  const subtotalCents = totals.subtotalCents;
+  const totalCents = totals.totalCents;
   const normalizedMilestones = normalizeMilestones(invoice.kind, totalCents, input.milestones);
 
   const updated = await prisma.$transaction(async (tx) => {
@@ -190,6 +231,14 @@ export async function editInvoiceItems(input: EditInvoiceItemsInput): Promise<In
       data: {
         subtotalCents,
         totalCents,
+        grossSubtotalCents: totals.grossSubtotalCents,
+        lineDiscountCents: totals.lineDiscountCents,
+        invoiceDiscountType: normalizedInvoiceDiscount.type,
+        invoiceDiscountValue: normalizedInvoiceDiscount.value,
+        invoiceDiscountCents: totals.invoiceDiscountCents,
+        taxCents: totals.taxCents,
+        notes: notes ?? null,
+        terms: terms ?? null,
         items: {
           create: normalizedItems.map((item) => ({
             ...item,

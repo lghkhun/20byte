@@ -10,8 +10,10 @@ import type {
   NormalizedMilestone
 } from "@/server/services/invoice/invoiceTypes";
 import {
+  computeInvoiceTotals,
   createPublicToken,
   isPrismaUniqueError,
+  normalizeInvoiceDiscount,
   normalizeItems,
   normalizeMilestones,
   normalizeOptional
@@ -61,14 +63,20 @@ export async function loadDraftCustomerContext(params: {
 
 export function computeDraftInputDerived(input: CreateDraftInvoiceInput) {
   const normalizedItems = normalizeItems(input.items);
-  const subtotalCents = normalizedItems.reduce((accumulator, item) => accumulator + item.amountCents, 0);
-  const totalCents = subtotalCents;
-  const normalizedMilestones = normalizeMilestones(input.kind, totalCents, input.milestones);
+  const normalizedInvoiceDiscount = normalizeInvoiceDiscount(input.invoiceDiscount);
+  const totals = computeInvoiceTotals(normalizedItems, normalizedInvoiceDiscount);
+  const normalizedMilestones = normalizeMilestones(input.kind, totals.totalCents, input.milestones);
 
   return {
     normalizedItems,
-    subtotalCents,
-    totalCents,
+    subtotalCents: totals.subtotalCents,
+    totalCents: totals.totalCents,
+    grossSubtotalCents: totals.grossSubtotalCents,
+    lineDiscountCents: totals.lineDiscountCents,
+    invoiceDiscountType: normalizedInvoiceDiscount.type,
+    invoiceDiscountValue: normalizedInvoiceDiscount.value,
+    invoiceDiscountCents: totals.invoiceDiscountCents,
+    taxCents: totals.taxCents,
     normalizedMilestones
   };
 }
@@ -97,10 +105,18 @@ export async function createDraftInvoiceWithRetry(params: {
   actorUserId: string;
   kind: CreateDraftInvoiceInput["kind"];
   currency: string;
+  notes?: string;
+  terms?: string;
   dueDate?: Date;
   bankAccounts: Array<{ bankName: string; accountNumber: string; accountHolder: string }>;
   normalizedItems: NormalizedInvoiceItem[];
   normalizedMilestones: NormalizedMilestone[];
+  grossSubtotalCents: number;
+  lineDiscountCents: number;
+  invoiceDiscountType: "%" | "IDR";
+  invoiceDiscountValue: number;
+  invoiceDiscountCents: number;
+  taxCents: number;
   subtotalCents: number;
   totalCents: number;
 }): Promise<InvoiceDraftResult> {
@@ -123,6 +139,14 @@ export async function createDraftInvoiceWithRetry(params: {
             kind: params.kind,
             status: InvoiceStatus.DRAFT,
             currency: params.currency,
+            notes: params.notes ?? null,
+            terms: params.terms ?? null,
+            grossSubtotalCents: params.grossSubtotalCents,
+            lineDiscountCents: params.lineDiscountCents,
+            invoiceDiscountType: params.invoiceDiscountType,
+            invoiceDiscountValue: params.invoiceDiscountValue,
+            invoiceDiscountCents: params.invoiceDiscountCents,
+            taxCents: params.taxCents,
             subtotalCents: params.subtotalCents,
             totalCents: params.totalCents,
             dueDate: params.dueDate ?? null,
@@ -186,6 +210,14 @@ export async function generateDraftPdfAndPersist(params: {
   created: InvoiceDraftResult;
   customer: { displayName: string | null; phoneE164: string };
   currency: string;
+  grossSubtotalCents: number;
+  lineDiscountCents: number;
+  invoiceDiscountType: "%" | "IDR";
+  invoiceDiscountValue: number;
+  invoiceDiscountCents: number;
+  taxCents: number;
+  notes?: string;
+  terms?: string;
   dueDate?: Date;
   normalizedItems: NormalizedInvoiceItem[];
   bankAccounts: Array<{ bankName: string; accountNumber: string; accountHolder: string }>;
@@ -198,8 +230,16 @@ export async function generateDraftPdfAndPersist(params: {
     customerName: params.customer.displayName,
     customerPhoneE164: params.customer.phoneE164,
     currency: params.currency,
+    grossSubtotalCents: params.grossSubtotalCents,
+    lineDiscountCents: params.lineDiscountCents,
+    invoiceDiscountType: params.invoiceDiscountType,
+    invoiceDiscountValue: params.invoiceDiscountValue,
+    invoiceDiscountCents: params.invoiceDiscountCents,
+    taxCents: params.taxCents,
     subtotalCents: params.created.subtotalCents,
     totalCents: params.created.totalCents,
+    notes: params.notes ?? null,
+    terms: params.terms ?? null,
     dueDate: params.dueDate ?? null,
     items: params.normalizedItems,
     milestones: params.created.milestones,

@@ -20,12 +20,12 @@ import { InvoiceStatusBadge } from "@/components/invoices/InvoiceStatusBadge";
 import type { ApiError, InvoiceItem, InvoiceTimeline, OrgItem } from "@/components/invoices/workspace/types";
 import { toErrorMessage } from "@/components/invoices/workspace/utils";
 import { fetchOrganizationsCached } from "@/lib/client/orgsCache";
+import { notifyError, notifySuccess } from "@/lib/ui/notify";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { DropdownMenu, DropdownMenuCheckboxItem, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
-import { OperationFeedback } from "@/components/ui/operation-feedback";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 
@@ -472,6 +472,16 @@ export function InvoicesWorkspace() {
       window.clearTimeout(timer);
     };
   }, [searchInput]);
+
+  useEffect(() => {
+    if (!error) return;
+    notifyError(error);
+  }, [error]);
+
+  useEffect(() => {
+    if (!success) return;
+    notifySuccess(success);
+  }, [success]);
 
   const columns = useMemo<ColumnDef<InvoiceItem>[]>(
     () => [
@@ -1069,11 +1079,6 @@ export function InvoicesWorkspace() {
           </div>
         </div>
       </section>
-
-      <div className="flex flex-wrap gap-2">
-        {error ? <OperationFeedback tone="error" message={error} /> : null}
-        {success ? <OperationFeedback tone="success" message={success} /> : null}
-      </div>
 
       <Dialog open={isDetailModalOpen} onOpenChange={setIsDetailModalOpen}>
         <DialogContent className="max-h-[92vh] overflow-auto sm:max-w-[1080px]">

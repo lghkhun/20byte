@@ -1,9 +1,9 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { FileText, LayoutDashboard, Link2, MessageCircle, Users, Workflow } from "lucide-react";
-import { useState } from "react";
+import { useEffect } from "react";
 
 import { NavMain } from "@/components/nav-main";
 import { NavUser } from "@/components/nav-user";
@@ -14,8 +14,7 @@ import {
   SidebarHeader,
   SidebarMenu,
   SidebarMenuButton,
-  SidebarMenuItem,
-  useSidebar
+  SidebarMenuItem
 } from "@/components/ui/sidebar";
 
 type AppSidebarProps = {
@@ -61,34 +60,19 @@ const navMain = [
 
 export function AppSidebar({ user }: AppSidebarProps) {
   const pathname = usePathname();
-  const { setOpen, isMobile } = useSidebar();
-  const [isAccountMenuOpen, setIsAccountMenuOpen] = useState(false);
+  const router = useRouter();
+
+  useEffect(() => {
+    // Warm-up critical routes so first click feels immediate.
+    for (const item of navMain) {
+      router.prefetch(item.url);
+    }
+    router.prefetch("/settings");
+    router.prefetch("/settings?tab=business");
+  }, [router]);
 
   return (
-    <Sidebar
-      collapsible="icon"
-      variant="inset"
-      onMouseEnter={() => {
-        if (!isMobile) {
-          setOpen(true);
-        }
-      }}
-      onMouseLeave={() => {
-        if (!isMobile && !isAccountMenuOpen) {
-          setOpen(false);
-        }
-      }}
-      onFocusCapture={() => {
-        if (!isMobile) {
-          setOpen(true);
-        }
-      }}
-      onBlurCapture={(event) => {
-        if (!isMobile && !event.currentTarget.contains(event.relatedTarget as Node | null)) {
-          setOpen(false);
-        }
-      }}
-    >
+    <Sidebar collapsible="icon" variant="inset">
       <SidebarHeader>
         <SidebarMenu>
           <SidebarMenuItem>
@@ -110,7 +94,7 @@ export function AppSidebar({ user }: AppSidebarProps) {
         <NavMain currentPath={pathname} items={navMain.map((item) => ({ ...item, isActive: pathname === item.url || pathname.startsWith(`${item.url}/`) }))} />
       </SidebarContent>
       <SidebarFooter>
-        <NavUser user={user} onMenuOpenChange={setIsAccountMenuOpen} />
+        <NavUser user={user} />
       </SidebarFooter>
     </Sidebar>
   );

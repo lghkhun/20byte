@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { Copy, MoreHorizontal, Pencil, Trash2 } from "lucide-react";
 
 import { fetchOrganizationsCached } from "@/lib/client/orgsCache";
+import { notifyError, notifySuccess } from "@/lib/ui/notify";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import {
@@ -14,7 +15,6 @@ import {
   DropdownMenuTrigger
 } from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
-import { OperationFeedback } from "@/components/ui/operation-feedback";
 import { useSettingsHeaderAction } from "@/components/settings/settings-header-actions";
 import { Switch } from "@/components/ui/switch";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -40,6 +40,7 @@ type ShortlinkItem = {
   medium: string | null;
   isEnabled: boolean;
   createdAt: string;
+  visitorCount: number;
 };
 
 type BaileysConnectionPayload = {
@@ -240,6 +241,16 @@ export function ShortlinkManager({ variant = "settings" }: { variant?: "settings
     };
   }, [activeBusiness, loadBaileysConnection, loadShortlinks]);
 
+  useEffect(() => {
+    if (!error) return;
+    notifyError(error);
+  }, [error]);
+
+  useEffect(() => {
+    if (!success) return;
+    notifySuccess(success);
+  }, [success]);
+
   async function handleCreateShortlink(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!canSubmit) {
@@ -437,9 +448,6 @@ export function ShortlinkManager({ variant = "settings" }: { variant?: "settings
           </Button>
         </div>
       ) : null}
-      {error ? <OperationFeedback tone="error" message={error} /> : null}
-      {!error && success ? <OperationFeedback tone="success" message={success} /> : null}
-
       <p className="text-sm text-muted-foreground">Buat CTWA shortlink untuk kampanye dan kelola status link dari satu tabel yang rapi.</p>
 
       <div className="overflow-x-auto rounded-2xl border border-border/70 bg-background/60">
@@ -456,6 +464,7 @@ export function ShortlinkManager({ variant = "settings" }: { variant?: "settings
               <TableHead>Ad</TableHead>
               <TableHead>Platform</TableHead>
               <TableHead>Medium</TableHead>
+              <TableHead className="text-right">Visitors</TableHead>
               <TableHead>Status</TableHead>
               <TableHead>Created</TableHead>
               <TableHead className="w-[56px]" />
@@ -464,13 +473,13 @@ export function ShortlinkManager({ variant = "settings" }: { variant?: "settings
           <TableBody>
             {isLoading ? (
               <TableRow>
-                <TableCell colSpan={13} className="h-20 text-center text-muted-foreground">
+                <TableCell colSpan={14} className="h-20 text-center text-muted-foreground">
                   Loading shortlinks...
                 </TableCell>
               </TableRow>
             ) : shortlinks.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={13} className="h-20 text-center text-muted-foreground">
+                <TableCell colSpan={14} className="h-20 text-center text-muted-foreground">
                   No shortlinks created yet.
                 </TableCell>
               </TableRow>
@@ -496,6 +505,7 @@ export function ShortlinkManager({ variant = "settings" }: { variant?: "settings
                   <TableCell className="text-muted-foreground">{shortlink.adName ?? shortlink.ad ?? "-"}</TableCell>
                   <TableCell className="text-muted-foreground">{shortlink.platform ?? "-"}</TableCell>
                   <TableCell className="text-muted-foreground">{shortlink.medium ?? "-"}</TableCell>
+                  <TableCell className="text-right font-medium text-foreground">{shortlink.visitorCount.toLocaleString("id-ID")}</TableCell>
                   <TableCell>
                     <div className="flex items-center gap-2">
                       <Switch

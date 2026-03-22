@@ -1,7 +1,7 @@
 "use client";
 
 import { type ReactNode, useCallback, useEffect, useMemo, useState } from "react";
-import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import { usePathname, useSearchParams } from "next/navigation";
 import { Building2, MessageSquareShare, ShieldCheck, Users2 } from "lucide-react";
 
 import { BankAccountManager } from "@/components/settings/BankAccountManager";
@@ -65,7 +65,6 @@ const SETTINGS_TAB_META: Record<
 };
 
 export function SettingsWorkspace({ initialTab }: { initialTab: string }) {
-  const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const [activeTab, setActiveTab] = useState<SettingsTabValue>(normalizeInitialTab(initialTab));
@@ -112,17 +111,28 @@ export function SettingsWorkspace({ initialTab }: { initialTab: string }) {
     [registerHeaderAction, unregisterHeaderAction]
   );
 
+  useEffect(() => {
+    const tabFromQuery = searchParams.get("tab");
+    if (tabFromQuery && isSettingsTabValue(tabFromQuery) && tabFromQuery !== activeTab) {
+      setActiveTab(tabFromQuery);
+    }
+  }, [activeTab, searchParams]);
+
   function handleTabChange(nextTab: SettingsTabValue) {
+    if (nextTab === activeTab) {
+      return;
+    }
     setActiveTab(nextTab);
     const params = new URLSearchParams(searchParams.toString());
     params.set("tab", nextTab);
-    router.replace(`${pathname}?${params.toString()}`, { scroll: false });
+    const nextUrl = `${pathname}?${params.toString()}`;
+    window.history.replaceState(null, "", nextUrl);
   }
 
   return (
     <div className="flex h-full min-h-0 flex-1 flex-col overflow-hidden">
-      <section className="grid min-h-0 flex-1 gap-4 overflow-hidden xl:grid-cols-[280px_minmax(0,1fr)]">
-        <aside className="flex min-h-0 flex-col rounded-[28px] border border-border/70 bg-card/95 p-3 shadow-sm">
+      <section className="grid min-h-0 flex-1 gap-4 overflow-hidden xl:gap-0 xl:grid-cols-[280px_minmax(0,1fr)]">
+        <aside className="flex min-h-0 flex-col rounded-[28px] border border-border/70 bg-card/95 p-3 shadow-sm xl:rounded-r-none xl:border-r-0">
           <div className="mb-3 shrink-0 px-2 pt-1">
             <p className="text-sm font-semibold text-foreground">Workspace Menu</p>
             <p className="mt-1 text-xs leading-5 text-muted-foreground">Pilih area pengaturan yang ingin Anda kelola.</p>
@@ -159,7 +169,7 @@ export function SettingsWorkspace({ initialTab }: { initialTab: string }) {
           </nav>
         </aside>
 
-        <div className="flex min-h-0 flex-col overflow-hidden rounded-[28px] border border-border/70 bg-card/95 px-3 py-2 shadow-sm md:px-4 md:py-3">
+        <div className="flex min-h-0 flex-col overflow-hidden rounded-[28px] border border-border/70 bg-card/95 px-3 py-2 shadow-sm md:px-4 md:py-3 xl:rounded-l-none">
           <section aria-label={`${activeMeta.title} content`} className="inbox-scroll min-h-0 flex-1 overflow-y-auto overscroll-contain pr-1">
             <div className="sticky top-0 z-10 -mx-1 mb-5 border-b border-border/70 bg-card/95 px-1 pb-3 pt-1 backdrop-blur supports-[backdrop-filter]:bg-card/85">
               <div className="px-2 py-2">

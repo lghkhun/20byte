@@ -2,7 +2,13 @@ import { InvoiceKind, InvoiceStatus, PaymentMilestoneType } from "@prisma/client
 import { randomBytes } from "crypto";
 
 import { ServiceError } from "@/server/services/serviceError";
-import type { CreateInvoiceItemInput, InvoiceMilestoneInput, NormalizedInvoiceItem, NormalizedMilestone } from "@/server/services/invoice/invoiceTypes";
+import type {
+  CreateInvoiceItemInput,
+  InvoiceDiscountInput,
+  InvoiceMilestoneInput,
+  NormalizedInvoiceItem,
+  NormalizedMilestone
+} from "@/server/services/invoice/invoiceTypes";
 
 export function normalize(value: string): string {
   return value.trim();
@@ -66,7 +72,18 @@ export function normalizeItems(items: CreateInvoiceItemInput[]): NormalizedInvoi
 
     const qty = toPositiveInteger(item.qty);
     const priceCents = toPositiveInteger(item.priceCents);
-    const amountCents = qty * priceCents;
+    const subtotalCents = qty * priceCents;
+    const discountType = item.discountType === "%" ? "%" : "IDR";
+    const discountValue = Math.max(0, Math.floor(item.discountValue ?? 0));
+    const discountCents =
+      discountType === "%"
+        ? Math.round((subtotalCents * Math.min(100, discountValue)) / 100)
+        : Math.min(subtotalCents, discountValue);
+    const taxableBaseCents = Math.max(0, subtotalCents - discountCents);
+    const taxLabel = normalizeOptional(item.taxLabel) ?? null;
+    const taxRateBps = resolveTaxRateBps(taxLabel);
+    const taxCents = Math.round((taxableBaseCents * taxRateBps) / 10_000);
+    const amountCents = taxableBaseCents + taxCents;
 
     return {
       name,
@@ -74,9 +91,81 @@ export function normalizeItems(items: CreateInvoiceItemInput[]): NormalizedInvoi
       qty,
       unit: normalizeOptional(item.unit) ?? null,
       priceCents,
+      subtotalCents,
+      discountType,
+      discountValue,
+      discountCents,
+      taxLabel,
+      taxRateBps,
+      taxCents,
       amountCents
     };
   });
+}
+
+export function normalizeInvoiceDiscount(input?: InvoiceDiscountInput): { type: "%" | "IDR"; value: number } {
+  if (!input) {
+    return { type: "%", value: 0 };
+  }
+
+  const type = input.type === "IDR" ? "IDR" : "%";
+  const value = Math.max(0, Math.floor(input.value));
+  return { type, value };
+}
+
+export function computeInvoiceTotals(
+  normalizedItems: NormalizedInvoiceItem[],
+  invoiceDiscount: { type: "%" | "IDR"; value: number }
+): {
+  grossSubtotalCents: number;
+  lineDiscountCents: number;
+  subtotalCents: number;
+  invoiceDiscountCents: number;
+  taxCents: number;
+  totalCents: number;
+} {
+  const grossSubtotalCents = normalizedItems.reduce((sum, item) => sum + item.subtotalCents, 0);
+  const lineDiscountCents = normalizedItems.reduce((sum, item) => sum + item.discountCents, 0);
+  const taxCents = normalizedItems.reduce((sum, item) => sum + item.taxCents, 0);
+  const subtotalCents = Math.max(0, grossSubtotalCents - lineDiscountCents);
+  const invoiceDiscountCents =
+    invoiceDiscount.type === "%"
+      ? Math.round((subtotalCents * Math.min(100, invoiceDiscount.value)) / 100)
+      : Math.min(subtotalCents, invoiceDiscount.value);
+  const totalCents = Math.max(0, subtotalCents - invoiceDiscountCents + taxCents);
+
+  return {
+    grossSubtotalCents,
+    lineDiscountCents,
+    subtotalCents,
+    invoiceDiscountCents,
+    taxCents,
+    totalCents
+  };
+}
+
+function resolveTaxRateBps(label: string | null): number {
+  if (!label) {
+    return 0;
+  }
+
+  const normalized = label.trim().toUpperCase();
+  if (normalized === "PPN_11") {
+    return 1100;
+  }
+  if (normalized === "PPN_12") {
+    return 1200;
+  }
+  if (normalized === "PPH_21_25") {
+    return 250;
+  }
+  if (normalized === "PPH_21_3") {
+    return 300;
+  }
+  if (normalized === "PPH_23_4") {
+    return 400;
+  }
+  return 0;
 }
 
 function buildDefaultMilestones(kind: InvoiceKind, totalCents: number): NormalizedMilestone[] {

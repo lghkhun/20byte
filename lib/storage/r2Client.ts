@@ -1,4 +1,4 @@
-import { DeleteObjectCommand, PutObjectCommand, S3Client } from "@aws-sdk/client-s3";
+import { DeleteObjectCommand, GetObjectCommand, PutObjectCommand, S3Client } from "@aws-sdk/client-s3";
 
 type R2Config = {
   accountId: string;
@@ -74,7 +74,7 @@ export async function uploadToR2(input: UploadToR2Input): Promise<string> {
     })
   );
 
-  return `${config.publicUrl}/${input.objectKey}`;
+  return getProxyAssetUrl(input.objectKey);
 }
 
 export async function deleteFromR2(objectKey: string): Promise<void> {
@@ -99,12 +99,73 @@ export function getPublicObjectKeyFromUrl(fileUrl: string): string | null {
     return null;
   }
 
+  const proxyPrefix = "/api/storage/public/";
+  if (normalized.startsWith(proxyPrefix)) {
+    const objectKey = decodeURIComponent(normalized.slice(proxyPrefix.length)).trim();
+    return objectKey || null;
+  }
+
   const config = getR2Config();
   const prefix = `${config.publicUrl}/`;
   if (!normalized.startsWith(prefix)) {
-    return null;
+    try {
+      const parsed = new URL(normalized);
+      if (parsed.pathname.startsWith(proxyPrefix)) {
+        const objectKeyFromPath = decodeURIComponent(parsed.pathname.slice(proxyPrefix.length)).trim();
+        return objectKeyFromPath || null;
+      }
+
+      const configuredOrigin = new URL(config.publicUrl).origin;
+      const isKnownR2Origin =
+        parsed.origin === configuredOrigin ||
+        parsed.hostname.endsWith(".r2.cloudflarestorage.com") ||
+        parsed.hostname.endsWith(".r2.dev");
+      if (!isKnownR2Origin) {
+        return null;
+      }
+
+      const objectKeyFromPublic = decodeURIComponent(parsed.pathname.replace(/^\/+/, "")).trim();
+      return objectKeyFromPublic || null;
+    } catch {
+      return null;
+    }
   }
 
   const objectKey = normalized.slice(prefix.length).trim();
   return objectKey || null;
+}
+
+export function getProxyAssetUrl(objectKey: string): string {
+  return `/api/storage/public/${encodeURIComponent(objectKey)}`;
+}
+
+export async function getObjectFromR2(objectKeyInput: string): Promise<{
+  body: Uint8Array;
+  contentType: string | null;
+  cacheControl: string | null;
+}> {
+  const objectKey = objectKeyInput.trim();
+  if (!objectKey) {
+    throw new Error("objectKey is required");
+  }
+
+  const client = getR2Client();
+  const config = getR2Config();
+  const response = await client.send(
+    new GetObjectCommand({
+      Bucket: config.bucket,
+      Key: objectKey
+    })
+  );
+
+  const body = await response.Body?.transformToByteArray();
+  if (!body) {
+    throw new Error("Object body is empty.");
+  }
+
+  return {
+    body,
+    contentType: response.ContentType ?? null,
+    cacheControl: response.CacheControl ?? null
+  };
 }

@@ -88,7 +88,7 @@ https://20byte.com/s/abc123
 ```
 
 Redirect to:
-
+Seed Org Alpha
 ```
 https://wa.me/628xxx?text=Hello%20[ref:abc123xyz]
 ```

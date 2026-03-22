@@ -1,0 +1,2 @@
+ALTER TABLE `Org`
+  ADD COLUMN `businessNpwp` VARCHAR(191) NULL;

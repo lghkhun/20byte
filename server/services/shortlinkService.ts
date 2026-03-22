@@ -25,6 +25,7 @@ type ShortlinkItem = {
   disabledAt: Date | null;
   createdAt: Date;
   shortUrl: string;
+  visitorCount: number;
 };
 
 type CreateShortlinkInput = {
@@ -201,6 +202,9 @@ function mapShortlink(row: {
   isEnabled: boolean;
   disabledAt: Date | null;
   createdAt: Date;
+  _count: {
+    clicks: number;
+  };
 }): ShortlinkItem {
   const parsedDestination = parseWhatsAppDestination(row.destinationUrl);
   return {
@@ -219,7 +223,8 @@ function mapShortlink(row: {
     isEnabled: row.isEnabled,
     disabledAt: row.disabledAt,
     createdAt: row.createdAt,
-    shortUrl: buildShortUrl(row.code)
+    shortUrl: buildShortUrl(row.code),
+    visitorCount: row._count.clicks
   };
 }
 
@@ -235,7 +240,12 @@ const shortlinkSelect = {
   medium: true,
   isEnabled: true,
   disabledAt: true,
-  createdAt: true
+  createdAt: true,
+  _count: {
+    select: {
+      clicks: true
+    }
+  }
 } as const;
 
 async function findShortlinkByIdInOrg(orgId: string, shortlinkId: string) {

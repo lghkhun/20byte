@@ -12,6 +12,9 @@ type InvoiceItemInput = {
   priceCents?: unknown;
   unit?: unknown;
   description?: unknown;
+  discountType?: unknown;
+  discountValue?: unknown;
+  taxLabel?: unknown;
 };
 
 type MilestoneInput = {
@@ -26,8 +29,12 @@ type CreateInvoiceRequest = {
   conversationId?: unknown;
   kind?: unknown;
   currency?: unknown;
+  notes?: unknown;
+  terms?: unknown;
   dueDate?: unknown;
   items?: unknown;
+  invoiceDiscountType?: unknown;
+  invoiceDiscountValue?: unknown;
   milestones?: unknown;
 };
 
@@ -73,8 +80,26 @@ function parseMilestoneType(value: unknown): PaymentMilestoneType | null {
   return null;
 }
 
+function parseDiscountType(value: unknown): "%" | "IDR" | undefined {
+  if (value === "%") {
+    return "%";
+  }
+  if (value === "IDR") {
+    return "IDR";
+  }
+  return undefined;
+}
+
 function parsePositiveNumber(value: unknown): number | null {
   if (typeof value !== "number" || !Number.isFinite(value) || value <= 0) {
+    return null;
+  }
+
+  return value;
+}
+
+function parseNonNegativeNumber(value: unknown): number | null {
+  if (typeof value !== "number" || !Number.isFinite(value) || value < 0) {
     return null;
   }
 
@@ -147,7 +172,10 @@ export async function POST(request: NextRequest) {
     qty: parsePositiveNumber(item.qty),
     priceCents: parsePositiveNumber(item.priceCents),
     unit: typeof item.unit === "string" ? item.unit : undefined,
-    description: typeof item.description === "string" ? item.description : undefined
+    description: typeof item.description === "string" ? item.description : undefined,
+    discountType: parseDiscountType(item.discountType),
+    discountValue: parseNonNegativeNumber(item.discountValue) ?? undefined,
+    taxLabel: typeof item.taxLabel === "string" ? item.taxLabel : undefined
   }));
 
   if (normalizedItems.some((item) => !item.name.trim() || !item.qty || !item.priceCents)) {
@@ -177,6 +205,8 @@ export async function POST(request: NextRequest) {
       conversationId: typeof body.conversationId === "string" ? body.conversationId : undefined,
       kind,
       currency: typeof body.currency === "string" ? body.currency : undefined,
+      notes: typeof body.notes === "string" ? body.notes : undefined,
+      terms: typeof body.terms === "string" ? body.terms : undefined,
       dueDate: parseDate(body.dueDate),
       items: normalizedItems as Array<{
         name: string;
@@ -184,7 +214,14 @@ export async function POST(request: NextRequest) {
         priceCents: number;
         unit?: string;
         description?: string;
+        discountType?: "%" | "IDR";
+        discountValue?: number;
+        taxLabel?: string;
       }>,
+      invoiceDiscount: {
+        type: body.invoiceDiscountType === "IDR" ? "IDR" : "%",
+        value: parseNonNegativeNumber(body.invoiceDiscountValue) ?? 0
+      },
       milestones: normalizedMilestones as
         | Array<{
             type: PaymentMilestoneType;

@@ -197,9 +197,9 @@ export function ConversationListPanel({
           </label>
           <Button
             type="button"
-            variant="secondary"
+            variant="default"
             size="sm"
-            className="h-10 gap-2 rounded-xl border border-border/70 px-3"
+            className="h-10 gap-2 rounded-xl border border-primary/70 bg-primary px-3 text-primary-foreground hover:bg-primary/90"
             title="Start new chat workflow"
             onClick={() => {
               setCreateError(null);

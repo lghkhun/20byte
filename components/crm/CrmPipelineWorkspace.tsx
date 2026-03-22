@@ -12,7 +12,7 @@ import {
   DropdownMenuLabel,
   DropdownMenuTrigger
 } from "@/components/ui/dropdown-menu";
-import { OperationFeedback } from "@/components/ui/operation-feedback";
+import { notifyError } from "@/lib/ui/notify";
 import { cn } from "@/lib/utils";
 
 type StageItem = {
@@ -78,12 +78,12 @@ const STAGE_COLOR_CLASS: Record<string, string> = {
 
 function formatLastActivity(value: string | null): string {
   if (!value) {
-    return "Belum ada aktivitas";
+    return "No activity yet";
   }
 
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) {
-    return "Belum ada aktivitas";
+    return "No activity yet";
   }
 
   return new Intl.DateTimeFormat("id-ID", {
@@ -237,6 +237,11 @@ export function CrmPipelineWorkspace() {
     void loadBoard("");
   }, [loadBoard]);
 
+  useEffect(() => {
+    if (!error) return;
+    notifyError(error);
+  }, [error]);
+
   const activePipeline = useMemo(() => board?.pipeline ?? null, [board]);
 
   const isCompact = true;
@@ -244,9 +249,11 @@ export function CrmPipelineWorkspace() {
 
   return (
     <section className="flex h-full min-h-0 flex-1 flex-col overflow-hidden">
-      {error ? <OperationFeedback tone="error" message={error} /> : null}
-
       <section className="flex min-h-0 flex-1 flex-col overflow-hidden">
+        <div className="flex items-center justify-between gap-2 px-3 pt-2 text-xs text-muted-foreground md:px-4">
+          <p>Drag and drop leads between stages to update pipeline progress.</p>
+          {isSavingMove ? <p className="font-medium text-foreground">Saving move...</p> : null}
+        </div>
         {isLoadingBoard ? <p className="px-3 py-3 text-sm text-muted-foreground md:px-4">Loading board...</p> : null}
 
         {!isLoadingBoard && board ? (
@@ -258,7 +265,7 @@ export function CrmPipelineWorkspace() {
               >
               <article className={cn("flex h-full min-h-0 flex-col rounded-[22px] border border-dashed border-border/80 bg-background/45", isCompact ? "p-3" : "p-4")}>
                 <div className="mb-3 flex items-center justify-between">
-                  <h3 className="text-[13px] font-semibold uppercase tracking-[0.16em] text-foreground">Belum Masuk Stage</h3>
+                  <h3 className="text-[13px] font-semibold uppercase tracking-[0.16em] text-foreground">Unassigned</h3>
                   <span className="rounded-full border border-border bg-background px-2.5 py-1 text-[11px] text-muted-foreground">{board.unassigned.cardCount}</span>
                 </div>
                 <div className={cn("inbox-scroll flex-1 overflow-y-auto pr-1", isCompact ? "space-y-3" : "space-y-4")}>
@@ -272,10 +279,10 @@ export function CrmPipelineWorkspace() {
                     >
                       <p className="truncate text-[15px] font-semibold text-foreground">{card.customerName}</p>
                       <p className="truncate pt-1 text-[12px] text-muted-foreground">{card.customerPhoneE164}</p>
-                      <p className="mt-2 line-clamp-3 text-[12px] leading-6 text-muted-foreground">{card.lastMessagePreview ?? "Belum ada pesan"}</p>
+                      <p className="mt-2 line-clamp-3 text-[12px] leading-6 text-muted-foreground">{card.lastMessagePreview ?? "No message yet"}</p>
                     </div>
                   ))}
-                  {board.unassigned.cards.length === 0 ? <p className="text-xs text-muted-foreground">Tidak ada kartu.</p> : null}
+                  {board.unassigned.cards.length === 0 ? <p className="text-xs text-muted-foreground">No cards.</p> : null}
                 </div>
               </article>
 
@@ -304,7 +311,7 @@ export function CrmPipelineWorkspace() {
                   <div className="mb-2.5 flex items-center justify-between gap-2">
                     <div className="min-w-0">
                       <h3 className="truncate text-[13px] font-semibold uppercase tracking-[0.16em] text-foreground">{column.stageName}</h3>
-                      <p className="pt-0.5 text-[11px] text-muted-foreground">Tahap {column.position + 1}</p>
+                      <p className="pt-0.5 text-[11px] text-muted-foreground">Stage {column.position + 1}</p>
                     </div>
                     <span className={`rounded-full border px-2.5 py-1 text-[11px] ${getStageColorClass(column.stageColor)}`}>
                       {column.cardCount}
@@ -329,13 +336,13 @@ export function CrmPipelineWorkspace() {
                           <span className="rounded-full border border-primary/30 bg-primary/10 px-2.5 py-1 text-[11px] text-primary">{card.unreadCount} unread</span>
                         ) : null}
                       </div>
-                        <p className="mt-1 line-clamp-3 text-[12px] leading-5 text-muted-foreground">{card.lastMessagePreview ?? "Belum ada pesan"}</p>
+                        <p className="mt-1 line-clamp-3 text-[12px] leading-5 text-muted-foreground">{card.lastMessagePreview ?? "No message yet"}</p>
                         <div className="mt-1.5 flex items-center gap-3 text-[11px] leading-4.5 text-muted-foreground">
                           <span>Invoice: {card.invoiceCount}</span>
-                          <span>Belum lunas: {card.unpaidInvoiceCount}</span>
+                          <span>Unpaid: {card.unpaidInvoiceCount}</span>
                         </div>
                         <div className="mt-2 flex items-center justify-between gap-2">
-                          <p className="text-[11px] leading-4.5 text-muted-foreground">Aktivitas: {formatLastActivity(card.lastMessageAt)}</p>
+                          <p className="text-[11px] leading-4.5 text-muted-foreground">Last activity: {formatLastActivity(card.lastMessageAt)}</p>
                           <div className="flex items-center gap-1">
                             <DropdownMenu>
                               <DropdownMenuTrigger asChild>
@@ -345,7 +352,7 @@ export function CrmPipelineWorkspace() {
                                 </Button>
                               </DropdownMenuTrigger>
                               <DropdownMenuContent align="end">
-                                <DropdownMenuLabel>Pindah stage</DropdownMenuLabel>
+                                <DropdownMenuLabel>Move to stage</DropdownMenuLabel>
                                 {board.columns.map((targetColumn) => (
                                   <DropdownMenuItem
                                     key={targetColumn.stageId}
@@ -364,13 +371,13 @@ export function CrmPipelineWorkspace() {
                               prefetch={false}
                               className="text-[11px] font-medium text-primary underline-offset-2 hover:underline"
                             >
-                              Buka Inbox
+                              Open Inbox
                             </Link>
                           </div>
                         </div>
                       </div>
                     ))}
-                    {column.cards.length === 0 ? <p className="text-xs text-muted-foreground">Belum ada kartu di stage ini.</p> : null}
+                    {column.cards.length === 0 ? <p className="text-xs text-muted-foreground">No cards in this stage yet.</p> : null}
                   </div>
 
                   {board.unassigned.cards.length > 0 ? (
@@ -388,7 +395,7 @@ export function CrmPipelineWorkspace() {
                         await moveConversation(topUnassigned.id, column.stageId);
                       }}
                     >
-                      Masukkan 1 lead dari unassigned
+                      Move 1 lead from Unassigned
                     </Button>
                   ) : null}
                 </article>
@@ -396,8 +403,17 @@ export function CrmPipelineWorkspace() {
               </div>
             </div>
 
-            {activePipeline?.stages.length === 0 ? <p className="px-1 text-sm text-muted-foreground">Pipeline default belum punya stage.</p> : null}
+            {activePipeline?.stages.length === 0 ? <p className="px-1 text-sm text-muted-foreground">Default pipeline has no stages yet.</p> : null}
           </>
+        ) : null}
+
+        {!isLoadingBoard && !board ? (
+          <div className="flex flex-1 items-center justify-center px-4">
+            <div className="rounded-xl border border-border/70 bg-card/80 px-5 py-4 text-center">
+              <p className="text-sm font-medium text-foreground">Pipeline board is unavailable.</p>
+              <p className="mt-1 text-xs text-muted-foreground">Please refresh or create a default pipeline stage in CRM settings.</p>
+            </div>
+          </div>
         ) : null}
       </section>
     </section>
