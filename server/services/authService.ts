@@ -2,15 +2,21 @@ import { hashPassword, validatePasswordPolicy, verifyPassword } from "@/lib/auth
 import { createSessionToken } from "@/lib/auth/session";
 import { prisma } from "@/lib/db/prisma";
 import { logAuthFailure } from "@/lib/logging/auth";
+import { getProxyAssetUrl, getPublicObjectKeyFromUrl } from "@/lib/r2/client";
+import { normalizePossibleE164, normalizeWhatsAppDestination } from "@/lib/whatsapp/e164";
+import { ensureBillingRecordForOrg } from "@/server/services/billingService";
+import { createOrganizationForUser } from "@/server/services/organizationService";
 import { ServiceError } from "@/server/services/serviceError";
 
 type RegisterUserInput = {
   email?: unknown;
   password?: unknown;
   name?: unknown;
+  phone?: unknown;
 };
 
 type LoginUserInput = {
+  identifier?: unknown;
   email?: unknown;
   password?: unknown;
 };
@@ -33,11 +39,16 @@ type RegisterResult = {
     name: string | null;
     createdAt: Date;
   };
+  organization: {
+    id: string;
+    name: string;
+  };
 };
 
 type ProfileResult = {
   id: string;
   email: string;
+  phoneE164: string | null;
   name: string | null;
   avatarUrl: string | null;
   createdAt: Date;
@@ -46,12 +57,38 @@ type ProfileResult = {
 
 type UpdateProfileInput = {
   name?: unknown;
+  phone?: unknown;
   currentPassword?: unknown;
   newPassword?: unknown;
 };
 
+function normalizeAvatarUrlForClient(value: string | null): string | null {
+  const normalized = value?.trim() ?? "";
+  if (!normalized) {
+    return null;
+  }
+
+  const objectKey = getPublicObjectKeyFromUrl(normalized);
+  if (!objectKey) {
+    return normalized;
+  }
+
+  return getProxyAssetUrl(objectKey);
+}
+
+function mapProfileForClient(profile: ProfileResult): ProfileResult {
+  return {
+    ...profile,
+    avatarUrl: normalizeAvatarUrlForClient(profile.avatarUrl)
+  };
+}
+
 function normalizeEmail(value: unknown): string {
   return typeof value === "string" ? value.trim().toLowerCase() : "";
+}
+
+function normalizeIdentifier(value: unknown): string {
+  return typeof value === "string" ? value.trim() : "";
 }
 
 function normalizeName(value: unknown): string | undefined {
@@ -76,6 +113,7 @@ export async function registerUser(input: RegisterUserInput): Promise<RegisterRe
   const email = normalizeEmail(input.email);
   const password = normalizePassword(input.password);
   const name = normalizeName(input.name);
+  const phoneE164 = normalizeWhatsAppDestination(typeof input.phone === "string" ? input.phone : undefined);
 
   if (!isValidEmail(email)) {
     throw new ServiceError(400, "INVALID_EMAIL", "Email format is invalid.");
@@ -88,6 +126,10 @@ export async function registerUser(input: RegisterUserInput): Promise<RegisterRe
 
   if (name && name.length > 120) {
     throw new ServiceError(400, "INVALID_NAME", "Name must be 120 characters or fewer.");
+  }
+
+  if (!phoneE164) {
+    throw new ServiceError(400, "INVALID_PHONE", "Valid WhatsApp number is required.");
   }
 
   const existingUser = await prisma.user.findUnique({
@@ -103,11 +145,26 @@ export async function registerUser(input: RegisterUserInput): Promise<RegisterRe
     throw new ServiceError(400, "EMAIL_ALREADY_REGISTERED", "Email is already registered.");
   }
 
+  const existingByPhone = await prisma.user.findUnique({
+    where: {
+      phoneE164
+    },
+    select: {
+      id: true
+    }
+  });
+
+  if (existingByPhone) {
+    throw new ServiceError(400, "PHONE_ALREADY_REGISTERED", "WhatsApp number is already registered.");
+  }
+
   const passwordHash = await hashPassword(password);
   const user = await prisma.user.create({
     data: {
       email,
+      phoneE164,
       passwordHash,
+      passwordSetAt: new Date(),
       name: name ?? null
     },
     select: {
@@ -118,27 +175,44 @@ export async function registerUser(input: RegisterUserInput): Promise<RegisterRe
     }
   });
 
+  const organization = await createOrganizationForUser({
+    userId: user.id,
+    name: `${name ?? email.split("@")[0] ?? "Business"} Business`
+  });
+  await ensureBillingRecordForOrg(organization.id, user.createdAt);
+
   return {
-    user
+    user,
+    organization: {
+      id: organization.id,
+      name: organization.name
+    }
   };
 }
 
 export async function loginUser(input: LoginUserInput): Promise<LoginResult> {
-  const email = normalizeEmail(input.email);
+  const identifierRaw = normalizeIdentifier(input.identifier) || normalizeIdentifier(input.email);
+  const normalizedEmailCandidate = normalizeEmail(identifierRaw);
+  const email = isValidEmail(normalizedEmailCandidate) ? normalizedEmailCandidate : "";
+  const normalizedPhone = normalizePossibleE164(identifierRaw) ?? normalizeWhatsAppDestination(identifierRaw);
   const password = normalizePassword(input.password);
 
-  if (!isValidEmail(email)) {
-    throw new ServiceError(400, "INVALID_EMAIL", "Email format is invalid.");
+  if (!email && !normalizedPhone) {
+    throw new ServiceError(400, "INVALID_IDENTIFIER", "Identifier must be a valid email or WhatsApp number.");
   }
 
   if (!password) {
     throw new ServiceError(400, "INVALID_PASSWORD", "Password is required.");
   }
 
-  const user = await prisma.user.findUnique({
-    where: {
-      email
-    },
+  const user = await prisma.user.findFirst({
+    where: email
+      ? {
+          email
+        }
+      : {
+          phoneE164: normalizedPhone ?? undefined
+        },
     select: {
       id: true,
       email: true,
@@ -150,9 +224,13 @@ export async function loginUser(input: LoginUserInput): Promise<LoginResult> {
   if (!user) {
     logAuthFailure({
       reason: "LOGIN_USER_NOT_FOUND",
-      email
+      email: email || normalizedPhone || identifierRaw
     });
     throw new ServiceError(401, "INVALID_CREDENTIALS", "Email or password is invalid.");
+  }
+
+  if (!user.passwordHash) {
+    throw new ServiceError(403, "ACCOUNT_SETUP_REQUIRED", "Akun belum aktif, buka link aktivasi yang dikirim owner.");
   }
 
   const isPasswordValid = await verifyPassword(password, user.passwordHash);
@@ -186,6 +264,7 @@ export async function getProfile(userId: string): Promise<ProfileResult> {
     select: {
       id: true,
       email: true,
+      phoneE164: true,
       name: true,
       avatarUrl: true,
       createdAt: true,
@@ -197,7 +276,7 @@ export async function getProfile(userId: string): Promise<ProfileResult> {
     throw new ServiceError(404, "USER_NOT_FOUND", "User account not found.");
   }
 
-  return user;
+  return mapProfileForClient(user);
 }
 
 export async function updateProfile(userId: string, input: UpdateProfileInput): Promise<ProfileResult> {
@@ -206,6 +285,8 @@ export async function updateProfile(userId: string, input: UpdateProfileInput): 
   }
 
   const nextName = normalizeName(input.name);
+  const hasPhoneInput = typeof input.phone === "string";
+  const nextPhoneE164 = hasPhoneInput ? normalizeWhatsAppDestination(input.phone as string) : null;
   const currentPassword = normalizePassword(input.currentPassword);
   const newPassword = normalizePassword(input.newPassword);
   const shouldUpdatePassword = Boolean(currentPassword || newPassword);
@@ -234,6 +315,7 @@ export async function updateProfile(userId: string, input: UpdateProfileInput): 
     select: {
       id: true,
       email: true,
+      phoneE164: true,
       name: true,
       avatarUrl: true,
       passwordHash: true,
@@ -246,12 +328,32 @@ export async function updateProfile(userId: string, input: UpdateProfileInput): 
     throw new ServiceError(404, "USER_NOT_FOUND", "User account not found.");
   }
 
-  const data: { name?: string | null; passwordHash?: string } = {};
+  const data: { name?: string | null; phoneE164?: string; passwordHash?: string } = {};
   if (typeof input.name === "string") {
     data.name = nextName ?? null;
   }
 
+  if (hasPhoneInput) {
+    if (!nextPhoneE164) {
+      throw new ServiceError(400, "INVALID_PHONE", "Valid WhatsApp number is required.");
+    }
+    const phoneOwner = await prisma.user.findUnique({
+      where: { phoneE164: nextPhoneE164 },
+      select: { id: true }
+    });
+    if (phoneOwner && phoneOwner.id !== user.id) {
+      throw new ServiceError(409, "PHONE_ALREADY_REGISTERED", "WhatsApp number is already registered.");
+    }
+    data.phoneE164 = nextPhoneE164;
+  } else if (!user.phoneE164) {
+    throw new ServiceError(400, "PHONE_REQUIRED", "WhatsApp number is required.");
+  }
+
   if (shouldUpdatePassword) {
+    if (!user.passwordHash) {
+      throw new ServiceError(400, "PASSWORD_NOT_SET", "Password is not set for this account.");
+    }
+
     const isPasswordValid = await verifyPassword(currentPassword, user.passwordHash);
     if (!isPasswordValid) {
       throw new ServiceError(401, "INVALID_CURRENT_PASSWORD", "Current password is invalid.");
@@ -260,15 +362,16 @@ export async function updateProfile(userId: string, input: UpdateProfileInput): 
     data.passwordHash = await hashPassword(newPassword);
   }
 
-  if (!data.name && !data.passwordHash) {
-    return {
+  if (!data.name && !data.passwordHash && !data.phoneE164) {
+    return mapProfileForClient({
       id: user.id,
       email: user.email,
+      phoneE164: user.phoneE164,
       name: user.name,
       avatarUrl: user.avatarUrl,
       createdAt: user.createdAt,
       updatedAt: user.updatedAt
-    };
+    });
   }
 
   const updatedUser = await prisma.user.update({
@@ -277,6 +380,7 @@ export async function updateProfile(userId: string, input: UpdateProfileInput): 
     select: {
       id: true,
       email: true,
+      phoneE164: true,
       name: true,
       avatarUrl: true,
       createdAt: true,
@@ -284,7 +388,7 @@ export async function updateProfile(userId: string, input: UpdateProfileInput): 
     }
   });
 
-  return updatedUser;
+  return mapProfileForClient(updatedUser);
 }
 
 export async function updateProfileAvatar(userId: string, avatarUrl: string | null): Promise<ProfileResult> {
@@ -303,7 +407,7 @@ export async function updateProfileAvatar(userId: string, avatarUrl: string | nu
     throw new ServiceError(404, "USER_NOT_FOUND", "User account not found.");
   }
 
-  return prisma.user.update({
+  const updatedUser = await prisma.user.update({
     where: { id: userId },
     data: {
       avatarUrl
@@ -311,10 +415,13 @@ export async function updateProfileAvatar(userId: string, avatarUrl: string | nu
     select: {
       id: true,
       email: true,
+      phoneE164: true,
       name: true,
       avatarUrl: true,
       createdAt: true,
       updatedAt: true
     }
   });
+
+  return mapProfileForClient(updatedUser);
 }

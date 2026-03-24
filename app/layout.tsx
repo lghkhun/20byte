@@ -1,6 +1,8 @@
 import type { Metadata } from "next";
 import { cookies } from "next/headers";
-import { Space_Grotesk } from "next/font/google";
+import "@fontsource/space-grotesk/400.css";
+import "@fontsource/space-grotesk/500.css";
+import "@fontsource/space-grotesk/700.css";
 
 import "@/styles/globals.css";
 import { AppShell } from "@/components/layout/AppShell";
@@ -8,9 +10,8 @@ import { ThemeProvider } from "@/components/providers/ThemeProvider";
 import { Toaster } from "@/components/ui/sonner";
 import { SESSION_COOKIE_NAME, verifySessionToken } from "@/lib/auth/session";
 import { cn } from "@/lib/utils";
-import { getProfile } from "@/server/services/authService";
-
-const spaceGrotesk = Space_Grotesk({ subsets: ["latin"], weight: ["400", "500", "700"] });
+import { isSuperadmin } from "@/server/services/platformAccessService";
+import { getPrimaryOrganizationForUser } from "@/server/services/organizationService";
 
 export const metadata: Metadata = {
   title: "20byte",
@@ -24,13 +25,17 @@ export default async function RootLayout({
 }>) {
   const token = cookies().get(SESSION_COOKIE_NAME)?.value;
   const session = token ? verifySessionToken(token) : null;
-  const profile = session ? await getProfile(session.userId).catch(() => null) : null;
+  const [superadminEnabled, primaryOrganization] = session
+    ? await Promise.all([
+      isSuperadmin(session.userId, session.email).catch(() => false),
+      getPrimaryOrganizationForUser(session.userId).catch(() => null)
+    ])
+    : [false, null];
 
   return (
     <html lang="en" suppressHydrationWarning className="h-full overflow-hidden">
       <body
         className={cn(
-          spaceGrotesk.className,
           "h-full overflow-hidden bg-[radial-gradient(1200px_700px_at_20%_0%,hsl(var(--primary)/0.18),transparent_60%),radial-gradient(1000px_600px_at_100%_100%,hsl(var(--accent)/0.16),transparent_65%)] antialiased"
         )}
       >
@@ -41,7 +46,10 @@ export default async function RootLayout({
                 ? {
                     email: session.email,
                     name: session.name,
-                    avatarUrl: profile?.avatarUrl ?? null
+                    avatarUrl: null,
+                    isSuperadmin: superadminEnabled,
+                    primaryOrgId: primaryOrganization?.id ?? null,
+                    primaryOrgRole: primaryOrganization?.role ?? null
                   }
                 : null
             }

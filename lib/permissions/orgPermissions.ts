@@ -1,7 +1,7 @@
 import { Role } from "@prisma/client";
 
 const MEMBER_VIEW_ROLES = new Set<Role>([Role.OWNER, Role.ADMIN]);
-const OWNER_ASSIGNABLE_ROLES = new Set<Role>([Role.ADMIN, Role.CS, Role.ADVERTISER]);
+const OWNER_ASSIGNABLE_ROLES = new Set<Role>([Role.CS, Role.ADVERTISER]);
 const ADMIN_ASSIGNABLE_ROLES = new Set<Role>([Role.CS, Role.ADVERTISER]);
 const OWNER_MANAGEABLE_ROLES = new Set<Role>([Role.OWNER, Role.ADMIN, Role.CS, Role.ADVERTISER]);
 const ADMIN_MANAGEABLE_ROLES = new Set<Role>([Role.CS, Role.ADVERTISER]);

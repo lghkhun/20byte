@@ -2,9 +2,11 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { ArrowDown, ArrowUp, CalendarDays, ChevronDown, Inbox, Lock, Plus, Search, SlidersHorizontal, UserRound } from "lucide-react";
+import { ArrowDown, ArrowUp, CalendarDays, ChevronDown, Inbox, Lock, Plus, Search, SlidersHorizontal, UserRound, Users } from "lucide-react";
 
 import { BUSINESS_CATEGORY_OPTIONS, FOLLOW_UP_OPTIONS, LEAD_STATUS_OPTIONS, formatLeadSettingLabel } from "@/lib/crm/leadSettingsConfig";
+import { subscribeToOrgMessageEvents } from "@/lib/ably/client";
+import { fetchOrganizationsCached } from "@/lib/client/orgsCache";
 import { notifyError, notifySuccess } from "@/lib/ui/notify";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -19,7 +21,7 @@ import {
   DrawerHeader,
   DrawerTitle
 } from "@/components/ui/drawer";
-import { DropdownMenu, DropdownMenuCheckboxItem, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -100,6 +102,13 @@ type CustomersResponse = {
   };
 };
 
+type LeadsCacheEntry = {
+  leads: LeadRow[];
+  assignees: LeadAssignee[];
+  totalLeads: number;
+  cachedAt: number;
+};
+
 type CustomerDetailResponse = {
   data?: {
     customer?: LeadRow;
@@ -117,6 +126,11 @@ type ApiError = {
 };
 
 type BulkAction = "SET_STATUS" | "SET_FOLLOW_UP" | "ASSIGN" | "DELETE";
+type OrgItem = {
+  id: string;
+  name: string;
+  role: string;
+};
 
 type FrozenFieldKey =
   | "name"
@@ -136,7 +150,6 @@ type ColumnKey =
   | "createdOn"
   | "name"
   | "whatsapp"
-  | "tagProgress"
   | "businessCategory"
   | "detail"
   | "source"
@@ -149,11 +162,12 @@ type ColumnKey =
 
 const FROZEN_FIELDS_STORAGE_KEY = "customers.leads.frozen-fields.v1";
 const LEADS_TABLE_CONFIG_STORAGE_KEY = "customers.leads.table-config.v1";
+const LEADS_QUERY_CACHE_TTL_MS = 30_000;
+const PIPELINE_STAGES_CACHE_TTL_MS = 60_000;
 const DEFAULT_COLUMN_ORDER: ColumnKey[] = [
   "createdOn",
   "name",
   "whatsapp",
-  "tagProgress",
   "businessCategory",
   "detail",
   "source",
@@ -169,7 +183,6 @@ const COLUMN_WIDTHS: Record<ColumnKey, number> = {
   createdOn: 176,
   name: 220,
   whatsapp: 170,
-  tagProgress: 210,
   businessCategory: 220,
   detail: 220,
   source: 130,
@@ -186,7 +199,6 @@ const COLUMN_LABELS: Record<ColumnKey, string> = {
   createdOn: "Created On",
   name: "Name",
   whatsapp: "WhatsApp",
-  tagProgress: "Progress Tag",
   businessCategory: "Business Category",
   detail: "Detail",
   source: "Source",
@@ -194,13 +206,25 @@ const COLUMN_LABELS: Record<ColumnKey, string> = {
   followUp: "Follow-up",
   statusLead: "Status Lead",
   projectValue: "Project Value",
-  remarks: "Remarks",
+  remarks: "Notes",
   assignee: "Assignee"
 };
-const INTERACTIVE_COLUMNS: ColumnKey[] = ["whatsapp", "tagProgress", "businessCategory", "pipelineStage", "followUp", "statusLead"];
+const INTERACTIVE_COLUMNS: ColumnKey[] = ["whatsapp", "businessCategory", "pipelineStage", "followUp", "statusLead"];
+const CUSTOMERS_DATE_TIME_FORMATTER = new Intl.DateTimeFormat("en-GB", {
+  day: "2-digit",
+  month: "short",
+  year: "numeric",
+  hour: "2-digit",
+  minute: "2-digit"
+});
+const CUSTOMERS_MONEY_FORMATTER = new Intl.NumberFormat("id-ID", {
+  style: "currency",
+  currency: "IDR",
+  maximumFractionDigits: 0
+});
 
 const DEFAULT_FROZEN_FIELDS: FrozenFieldState = {
-  name: true,
+  name: false,
   phone: true,
   leadStatus: false,
   followUpStatus: false,
@@ -226,21 +250,11 @@ function formatDateTime(value: string): string {
     return "-";
   }
 
-  return new Intl.DateTimeFormat("en-GB", {
-    day: "2-digit",
-    month: "short",
-    year: "numeric",
-    hour: "2-digit",
-    minute: "2-digit"
-  }).format(date);
+  return CUSTOMERS_DATE_TIME_FORMATTER.format(date);
 }
 
 function formatMoney(cents: number): string {
-  return new Intl.NumberFormat("id-ID", {
-    style: "currency",
-    currency: "IDR",
-    maximumFractionDigits: 0
-  }).format(Math.max(0, cents) / 100);
+  return CUSTOMERS_MONEY_FORMATTER.format(Math.max(0, cents) / 100);
 }
 
 function formatLabel(value: string | null | undefined): string {
@@ -315,7 +329,7 @@ function readFrozenFieldsFromStorage(): FrozenFieldState {
     return {
       ...DEFAULT_FROZEN_FIELDS,
       ...parsed,
-      name: true,
+      name: false,
       phone: true
     };
   } catch {
@@ -381,15 +395,34 @@ export function CustomersWorkspace() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const openedDeepLinkLeadIdRef = useRef<string | null>(null);
+  const leadsQueryCacheRef = useRef<Map<string, LeadsCacheEntry>>(new Map());
+  const hasPrimedDefaultLeadsRef = useRef(false);
+  const leadsRef = useRef<LeadRow[]>([]);
+  const leadsRequestIdRef = useRef(0);
+  const isMountedRef = useRef(true);
+  const leadsInFlightRef = useRef<{
+    key: string;
+    promise: Promise<void>;
+  } | null>(null);
+  const lastRealtimeRefreshAtRef = useRef(0);
+  const leadsAbortControllerRef = useRef<AbortController | null>(null);
+  const pipelineStagesCacheRef = useRef<Map<string, { pipelineId: string | null; stages: PipelineStageOption[]; cachedAt: number }>>(new Map());
+  const pipelineStagesInFlightRef = useRef<{
+    key: string;
+    promise: Promise<void>;
+  } | null>(null);
+  const pipelineStagesAbortControllerRef = useRef<AbortController | null>(null);
 
   const [leads, setLeads] = useState<LeadRow[]>([]);
-  const [tags, setTags] = useState<LeadTag[]>([]);
+  const [orgs, setOrgs] = useState<OrgItem[]>([]);
+  const [hasLoadedOrganizations, setHasLoadedOrganizations] = useState(false);
   const [assignees, setAssignees] = useState<LeadAssignee[]>([]);
   const [totalLeads, setTotalLeads] = useState(0);
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(30);
 
   const [isLoading, setIsLoading] = useState(true);
+  const [isRefreshingLeads, setIsRefreshingLeads] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
 
@@ -409,10 +442,9 @@ export function CustomersWorkspace() {
   const [isInlineUpdating, setIsInlineUpdating] = useState(false);
   const [tableColumnOrder, setTableColumnOrder] = useState<ColumnKey[]>(DEFAULT_COLUMN_ORDER);
   const [frozenColumns, setFrozenColumns] = useState<ColumnKey[]>(DEFAULT_FROZEN_COLUMNS);
+  const [draftTableColumnOrder, setDraftTableColumnOrder] = useState<ColumnKey[]>(DEFAULT_COLUMN_ORDER);
+  const [draftFrozenColumns, setDraftFrozenColumns] = useState<ColumnKey[]>(DEFAULT_FROZEN_COLUMNS);
   const [isTableLayoutDialogOpen, setIsTableLayoutDialogOpen] = useState(false);
-  const [isAddTagDialogOpen, setIsAddTagDialogOpen] = useState(false);
-  const [addTagTargetLeadId, setAddTagTargetLeadId] = useState<string | null>(null);
-  const [newTagName, setNewTagName] = useState("");
   const [isAddCategoryDialogOpen, setIsAddCategoryDialogOpen] = useState(false);
   const [addCategoryTargetLeadId, setAddCategoryTargetLeadId] = useState<string | null>(null);
   const [newCategoryName, setNewCategoryName] = useState("");
@@ -444,15 +476,8 @@ export function CustomersWorkspace() {
 
   const totalPages = Math.max(1, Math.ceil(totalLeads / pageSize));
 
-  const visibleLeads = useMemo(() => {
-    if (pipelineStageFilter === "__all__") {
-      return leads;
-    }
-    if (pipelineStageFilter === "__none__") {
-      return leads.filter((lead) => !lead.crmStageId);
-    }
-    return leads.filter((lead) => lead.crmStageId === pipelineStageFilter);
-  }, [leads, pipelineStageFilter]);
+  const visibleLeads = useMemo(() => leads, [leads]);
+  const activeBusiness = useMemo(() => orgs[0] ?? null, [orgs]);
 
   const selectedLeadIdSet = useMemo(() => new Set(selectedIds), [selectedIds]);
   const allPageSelected = visibleLeads.length > 0 && visibleLeads.every((lead) => selectedLeadIdSet.has(lead.id));
@@ -467,47 +492,195 @@ export function CustomersWorkspace() {
     return Array.from(sourceSet).sort((a, b) => a.localeCompare(b));
   }, [leads]);
 
-  const fetchLeads = useCallback(async () => {
-    setIsLoading(true);
-    setError(null);
-
-    try {
+  const fetchLeads = useCallback(
+    async (options?: { force?: boolean }) => {
+      if (!isMountedRef.current) {
+        return;
+      }
       const params = new URLSearchParams({
         page: String(page),
-        limit: String(pageSize)
+        limit: String(pageSize),
+        light: "1"
       });
       if (searchQuery.trim()) params.set("q", searchQuery.trim());
       if (statusFilter !== "__all__") params.set("leadStatus", statusFilter);
       if (sourceFilter !== "__all__") params.set("source", sourceFilter);
       if (assigneeFilter !== "__all__") params.set("assignedToMemberId", assigneeFilter);
-
-      const response = await fetch(`/api/customers?${params.toString()}`, { cache: "no-store" });
-      const payload = (await response.json().catch(() => null)) as CustomersResponse | null;
-      if (!response.ok) {
-        throw new Error(payload?.error?.message ?? "Failed to load leads.");
+      if (pipelineStageFilter === "__none__") {
+        params.set("crmStageUnassigned", "1");
+      } else if (pipelineStageFilter !== "__all__") {
+        params.set("crmStageId", pipelineStageFilter);
+      }
+      const queryKey = params.toString();
+      const orgId = activeBusiness?.id ?? "";
+      const requestPath = `/api/customers?${queryKey}${orgId ? `&orgId=${encodeURIComponent(orgId)}` : ""}`;
+      const requestKey = `${orgId}::${queryKey}`;
+      if (!options?.force && leadsInFlightRef.current?.key === requestKey) {
+        await leadsInFlightRef.current.promise;
+        return;
       }
 
-      setLeads(payload?.data?.customers ?? []);
-      setTags(payload?.data?.tags ?? []);
-      setAssignees(payload?.data?.assignees ?? []);
-      setTotalLeads(payload?.meta?.total ?? 0);
-    } catch (loadError) {
-      setError(toErrorMessage(loadError, "Failed to load leads."));
-    } finally {
-      setIsLoading(false);
+      const cached = leadsQueryCacheRef.current.get(requestKey);
+      if (cached) {
+        setLeads(cached.leads);
+        setAssignees(cached.assignees);
+        setTotalLeads(cached.totalLeads);
+      }
+      const isCacheFresh = Boolean(cached && Date.now() - cached.cachedAt < LEADS_QUERY_CACHE_TTL_MS);
+      if (isCacheFresh && !options?.force) {
+        setIsLoading(false);
+        return;
+      }
+
+      const requestId = ++leadsRequestIdRef.current;
+
+      if (leadsRef.current.length === 0 && !cached) {
+        setIsLoading(true);
+      } else {
+        setIsRefreshingLeads(true);
+      }
+      setError(null);
+
+      const fetchPromise = (async () => {
+        const abortController = new AbortController();
+        leadsAbortControllerRef.current?.abort();
+        leadsAbortControllerRef.current = abortController;
+        try {
+          const response = await fetch(requestPath, { cache: "no-store", signal: abortController.signal });
+          const payload = (await response.json().catch(() => null)) as CustomersResponse | null;
+          if (!isMountedRef.current || requestId !== leadsRequestIdRef.current) {
+            return;
+          }
+          if (!response.ok) {
+            throw new Error(payload?.error?.message ?? "Failed to load leads.");
+          }
+
+          const nextLeads = payload?.data?.customers ?? [];
+          const nextAssignees = payload?.data?.assignees ?? [];
+          const nextTotalLeads = payload?.meta?.total ?? 0;
+
+          leadsQueryCacheRef.current.set(requestKey, {
+            leads: nextLeads,
+            assignees: nextAssignees,
+            totalLeads: nextTotalLeads,
+            cachedAt: Date.now()
+          });
+
+          setLeads(nextLeads);
+          setAssignees(nextAssignees);
+          setTotalLeads(nextTotalLeads);
+        } catch (loadError) {
+          if (loadError instanceof DOMException && loadError.name === "AbortError") {
+            return;
+          }
+          if (!isMountedRef.current || requestId !== leadsRequestIdRef.current) {
+            return;
+          }
+          setError(toErrorMessage(loadError, "Failed to load leads."));
+        } finally {
+          if (leadsAbortControllerRef.current === abortController) {
+            leadsAbortControllerRef.current = null;
+          }
+          if (leadsInFlightRef.current?.key === requestKey) {
+            leadsInFlightRef.current = null;
+          }
+          if (!isMountedRef.current || requestId !== leadsRequestIdRef.current) {
+            return;
+          }
+          setIsLoading(false);
+          setIsRefreshingLeads(false);
+        }
+      })();
+      leadsInFlightRef.current = {
+        key: requestKey,
+        promise: fetchPromise
+      };
+      await fetchPromise;
+    },
+    [activeBusiness?.id, page, pageSize, searchQuery, statusFilter, sourceFilter, assigneeFilter, pipelineStageFilter]
+  );
+
+  const primeDefaultLeadsCache = useCallback(async () => {
+    if (hasPrimedDefaultLeadsRef.current) {
+      return;
     }
-  }, [page, pageSize, searchQuery, statusFilter, sourceFilter, assigneeFilter]);
+    const orgId = activeBusiness?.id ?? "";
+    if (!orgId) {
+      return;
+    }
+    hasPrimedDefaultLeadsRef.current = true;
+
+    const params = new URLSearchParams({
+      page: "1",
+      limit: "30",
+      light: "1"
+    });
+    const queryKey = params.toString();
+    const cacheKey = `${orgId}::${queryKey}`;
+    if (leadsInFlightRef.current?.key === cacheKey) {
+      await leadsInFlightRef.current.promise;
+      return;
+    }
+    const cached = leadsQueryCacheRef.current.get(cacheKey);
+    if (cached && Date.now() - cached.cachedAt < LEADS_QUERY_CACHE_TTL_MS) {
+      return;
+    }
+
+    try {
+      const response = await fetch(`/api/customers?${queryKey}&orgId=${encodeURIComponent(orgId)}`, { cache: "no-store" });
+      const payload = (await response.json().catch(() => null)) as CustomersResponse | null;
+      if (!response.ok) {
+        return;
+      }
+      leadsQueryCacheRef.current.set(cacheKey, {
+        leads: payload?.data?.customers ?? [],
+        assignees: payload?.data?.assignees ?? [],
+        totalLeads: payload?.meta?.total ?? 0,
+        cachedAt: Date.now()
+      });
+    } catch {
+      // ignore background prefetch error
+    }
+  }, [activeBusiness?.id]);
 
   const loadPipelineStages = useCallback(async () => {
     try {
-      const response = await fetch("/api/crm/pipelines/board?status=OPEN", { cache: "no-store" });
+      const orgId = activeBusiness?.id ?? "";
+      if (!orgId) {
+        setPipelineId(null);
+        setPipelineStages([]);
+        return;
+      }
+
+      const cached = pipelineStagesCacheRef.current.get(orgId);
+      if (cached && Date.now() - cached.cachedAt < PIPELINE_STAGES_CACHE_TTL_MS) {
+        setPipelineId(cached.pipelineId);
+        setPipelineStages(cached.stages);
+        return;
+      }
+
+      if (pipelineStagesInFlightRef.current?.key === orgId) {
+        await pipelineStagesInFlightRef.current.promise;
+        return;
+      }
+
+      const abortController = new AbortController();
+      const requestPromise = (async () => {
+      pipelineStagesAbortControllerRef.current?.abort();
+      pipelineStagesAbortControllerRef.current = abortController;
+      const response = await fetch(`/api/crm/pipelines${orgId ? `?orgId=${encodeURIComponent(orgId)}` : ""}`, {
+        cache: "no-store",
+        signal: abortController.signal
+      });
       const payload = (await response.json().catch(() => null)) as
         | {
             data?: {
-              board?: {
-                pipeline?: { id: string } | null;
-                columns?: Array<{ stageId: string; stageName: string; stageColor: string; position: number }>;
-              };
+              pipelines?: Array<{
+                id: string;
+                name: string;
+                isDefault: boolean;
+                stages?: Array<{ id: string; name: string; color: string; position: number }>;
+              }>;
             };
             error?: { message?: string };
           }
@@ -516,20 +689,50 @@ export function CustomersWorkspace() {
         throw new Error(payload?.error?.message ?? "Failed to load CRM pipeline stages.");
       }
 
-      const board = payload?.data?.board;
-      setPipelineId(board?.pipeline?.id ?? null);
-      setPipelineStages(
-        (board?.columns ?? [])
-          .map((column) => ({
-            stageId: column.stageId,
-            stageName: column.stageName,
-            stageColor: column.stageColor,
-            position: column.position
-          }))
-          .sort((a, b) => a.position - b.position)
-      );
+      const pipelines = payload?.data?.pipelines ?? [];
+      const selectedPipeline = pipelines.find((pipeline) => pipeline.isDefault) ?? pipelines[0] ?? null;
+      const nextStages = (selectedPipeline?.stages ?? [])
+        .map((stage) => ({
+          stageId: stage.id,
+          stageName: stage.name,
+          stageColor: stage.color,
+          position: stage.position
+        }))
+        .sort((a, b) => a.position - b.position);
+      pipelineStagesCacheRef.current.set(orgId, {
+        pipelineId: selectedPipeline?.id ?? null,
+        stages: nextStages,
+        cachedAt: Date.now()
+      });
+      setPipelineId(selectedPipeline?.id ?? null);
+      setPipelineStages(nextStages);
+      })().finally(() => {
+        if (pipelineStagesAbortControllerRef.current === abortController) {
+          pipelineStagesAbortControllerRef.current = null;
+        }
+        if (pipelineStagesInFlightRef.current?.key === orgId) {
+          pipelineStagesInFlightRef.current = null;
+        }
+      });
+      pipelineStagesInFlightRef.current = {
+        key: orgId,
+        promise: requestPromise
+      };
+      await requestPromise;
     } catch (pipelineError) {
+      if (pipelineError instanceof DOMException && pipelineError.name === "AbortError") {
+        return;
+      }
       setError(toErrorMessage(pipelineError, "Failed to load CRM pipeline stages."));
+    }
+  }, [activeBusiness?.id]);
+
+  const loadOrganizations = useCallback(async () => {
+    try {
+      const organizations = (await fetchOrganizationsCached()) as OrgItem[];
+      setOrgs(organizations);
+    } finally {
+      setHasLoadedOrganizations(true);
     }
   }, []);
 
@@ -538,9 +741,137 @@ export function CustomersWorkspace() {
     const tableConfig = readTableConfigFromStorage();
     setTableColumnOrder(tableConfig.columnOrder);
     setFrozenColumns(tableConfig.frozenColumns);
+    void loadOrganizations().catch((loadError) => {
+      setError(toErrorMessage(loadError, "Failed to load organizations."));
+    });
+  }, [loadOrganizations]);
+
+  useEffect(() => {
+    if (!hasLoadedOrganizations) {
+      return;
+    }
     void fetchLeads();
+  }, [fetchLeads, hasLoadedOrganizations]);
+
+  useEffect(() => {
+    if (!hasLoadedOrganizations) {
+      return;
+    }
     void loadPipelineStages();
-  }, [fetchLeads, loadPipelineStages]);
+  }, [activeBusiness?.id, hasLoadedOrganizations, loadPipelineStages]);
+
+  useEffect(() => {
+    leadsRef.current = leads;
+  }, [leads]);
+
+  useEffect(() => {
+    if (!hasLoadedOrganizations || !activeBusiness?.id) {
+      return;
+    }
+
+    let active = true;
+    let cleanup: (() => void) | null = null;
+    let refreshTimer: ReturnType<typeof setTimeout> | null = null;
+    let fallbackTimer: ReturnType<typeof setInterval> | null = null;
+
+    const scheduleRefresh = () => {
+      if (refreshTimer) {
+        clearTimeout(refreshTimer);
+      }
+
+      refreshTimer = setTimeout(() => {
+        if (!active) {
+          return;
+        }
+        if (leadsInFlightRef.current) {
+          return;
+        }
+        if (Date.now() - lastRealtimeRefreshAtRef.current < 900) {
+          return;
+        }
+        lastRealtimeRefreshAtRef.current = Date.now();
+        void fetchLeads({ force: true });
+      }, 220);
+    };
+
+    const startSubscription = async () => {
+      try {
+        cleanup = await subscribeToOrgMessageEvents({
+          orgId: activeBusiness.id,
+          onMessageNew: scheduleRefresh,
+          onConversationUpdated: scheduleRefresh,
+          onAssignmentChanged: scheduleRefresh,
+          onInvoiceCreated: scheduleRefresh,
+          onInvoiceUpdated: scheduleRefresh,
+          onInvoicePaid: scheduleRefresh,
+          onProofAttached: scheduleRefresh,
+          onCustomerUpdated: scheduleRefresh,
+          onStorageUpdated: scheduleRefresh
+        });
+      } catch (subscriptionError) {
+        const message = subscriptionError instanceof Error ? subscriptionError.message : "Unknown realtime subscribe error";
+        console.error(`[realtime] customers subscription failed: ${message}`);
+      }
+    };
+
+    void startSubscription();
+
+    fallbackTimer = setInterval(() => {
+      if (!active || leadsInFlightRef.current) {
+        return;
+      }
+      void fetchLeads({ force: true });
+    }, 20000);
+
+    return () => {
+      active = false;
+      if (refreshTimer) {
+        clearTimeout(refreshTimer);
+      }
+      if (fallbackTimer) {
+        clearInterval(fallbackTimer);
+      }
+      if (cleanup) {
+        cleanup();
+      }
+    };
+  }, [activeBusiness?.id, fetchLeads, hasLoadedOrganizations]);
+
+  useEffect(() => {
+    isMountedRef.current = true;
+    return () => {
+      isMountedRef.current = false;
+      leadsAbortControllerRef.current?.abort();
+      pipelineStagesAbortControllerRef.current?.abort();
+    };
+  }, []);
+
+  useEffect(() => {
+    if (hasPrimedDefaultLeadsRef.current) {
+      return;
+    }
+
+    let timeoutId: ReturnType<typeof setTimeout> | null = null;
+    let idleId: number | null = null;
+    const runPrefetch = () => {
+      void primeDefaultLeadsCache();
+    };
+
+    if (typeof window !== "undefined" && "requestIdleCallback" in window) {
+      idleId = window.requestIdleCallback(runPrefetch, { timeout: 1200 });
+    } else {
+      timeoutId = globalThis.setTimeout(runPrefetch, 600);
+    }
+
+    return () => {
+      if (idleId !== null && typeof window !== "undefined" && "cancelIdleCallback" in window) {
+        window.cancelIdleCallback(idleId);
+      }
+      if (timeoutId !== null) {
+        globalThis.clearTimeout(timeoutId);
+      }
+    };
+  }, [primeDefaultLeadsCache]);
 
   useEffect(() => {
     const timer = window.setTimeout(() => {
@@ -560,6 +891,16 @@ export function CustomersWorkspace() {
   }, [visibleLeads, selectedIds.length]);
 
   useEffect(() => {
+    if (pipelineStageFilter === "__all__" || pipelineStageFilter === "__none__") {
+      return;
+    }
+    const isValidStage = pipelineStages.some((stage) => stage.stageId === pipelineStageFilter);
+    if (!isValidStage) {
+      setPipelineStageFilter("__all__");
+    }
+  }, [pipelineStageFilter, pipelineStages]);
+
+  useEffect(() => {
     if (!error) return;
     notifyError(error);
   }, [error]);
@@ -569,20 +910,7 @@ export function CustomersWorkspace() {
     notifySuccess(success);
   }, [success]);
 
-  useEffect(() => {
-    const deepLinkLeadId = searchParams.get("leadId")?.trim() ?? "";
-    if (!deepLinkLeadId) {
-      openedDeepLinkLeadIdRef.current = null;
-      return;
-    }
-    if (openedDeepLinkLeadIdRef.current === deepLinkLeadId) {
-      return;
-    }
-    openedDeepLinkLeadIdRef.current = deepLinkLeadId;
-    void openLeadDrawer(deepLinkLeadId);
-  }, [searchParams]);
-
-  async function openLeadDrawer(leadId: string) {
+  const openLeadDrawer = useCallback(async (leadId: string) => {
     setIsDrawerOpen(true);
     setIsLeadLoading(true);
     setError(null);
@@ -601,26 +929,39 @@ export function CustomersWorkspace() {
     } finally {
       setIsLeadLoading(false);
     }
-  }
+  }, []);
 
-  function toggleSelectAllRows(checked: boolean) {
+  useEffect(() => {
+    const deepLinkLeadId = searchParams.get("leadId")?.trim() ?? "";
+    if (!deepLinkLeadId) {
+      openedDeepLinkLeadIdRef.current = null;
+      return;
+    }
+    if (openedDeepLinkLeadIdRef.current === deepLinkLeadId) {
+      return;
+    }
+    openedDeepLinkLeadIdRef.current = deepLinkLeadId;
+    void openLeadDrawer(deepLinkLeadId);
+  }, [openLeadDrawer, searchParams]);
+
+  const toggleSelectAllRows = useCallback((checked: boolean) => {
     if (!checked) {
       setSelectedIds([]);
       return;
     }
     setSelectedIds(visibleLeads.map((lead) => lead.id));
-  }
+  }, [visibleLeads]);
 
-  function toggleRowSelection(leadId: string, checked: boolean) {
+  const toggleRowSelection = useCallback((leadId: string, checked: boolean) => {
     setSelectedIds((current) => {
       if (checked) {
         return Array.from(new Set([...current, leadId]));
       }
       return current.filter((id) => id !== leadId);
     });
-  }
+  }, []);
 
-  async function openOrCreateConversation(lead: LeadRow) {
+  const openOrCreateConversation = useCallback(async (lead: LeadRow) => {
     try {
       if (lead.latestConversationId) {
         router.push(`/inbox?conversationId=${encodeURIComponent(lead.latestConversationId)}`);
@@ -657,9 +998,9 @@ export function CustomersWorkspace() {
     } catch (openError) {
       setError(toErrorMessage(openError, "Failed to open inbox conversation."));
     }
-  }
+  }, [router]);
 
-  async function moveLeadToPipelineStage(lead: LeadRow, stageId: string) {
+  const moveLeadToPipelineStage = useCallback(async (lead: LeadRow, stageId: string) => {
     if (!pipelineId) {
       setError("Pipeline is not configured yet.");
       return;
@@ -715,15 +1056,15 @@ export function CustomersWorkspace() {
       }
 
       setSuccess("Lead moved to selected pipeline stage.");
-      await fetchLeads();
+      await fetchLeads({ force: true });
     } catch (moveError) {
       setError(toErrorMessage(moveError, "Failed to move lead to pipeline stage."));
     } finally {
       setIsInlineUpdating(false);
     }
-  }
+  }, [fetchLeads, pipelineId]);
 
-  async function quickUpdateLead(leadId: string, payload: Record<string, unknown>, successMessage?: string) {
+  const quickUpdateLead = useCallback(async (leadId: string, payload: Record<string, unknown>, successMessage?: string) => {
     try {
       setIsInlineUpdating(true);
       setError(null);
@@ -741,87 +1082,13 @@ export function CustomersWorkspace() {
       if (successMessage) {
         setSuccess(successMessage);
       }
-      await fetchLeads();
+      await fetchLeads({ force: true });
     } catch (updateError) {
       setError(toErrorMessage(updateError, "Failed to update lead."));
     } finally {
       setIsInlineUpdating(false);
     }
-  }
-
-  async function updateLeadTags(lead: LeadRow, nextTagIds: string[]) {
-    try {
-      setIsInlineUpdating(true);
-      const response = await fetch(`/api/customers/${encodeURIComponent(lead.id)}/tags`, {
-        method: "PUT",
-        headers: {
-          "Content-Type": "application/json"
-        },
-        body: JSON.stringify({
-          tagIds: nextTagIds
-        })
-      });
-      const result = (await response.json().catch(() => null)) as ApiError | null;
-      if (!response.ok) {
-        throw new Error(result?.error?.message ?? "Failed to update tag progress.");
-      }
-      await fetchLeads();
-    } catch (updateError) {
-      setError(toErrorMessage(updateError, "Failed to update tag progress."));
-    } finally {
-      setIsInlineUpdating(false);
-    }
-  }
-
-  async function handleCreateTag() {
-    const tagName = newTagName.trim();
-    const targetLeadId = addTagTargetLeadId;
-    if (!tagName || !targetLeadId) {
-      return;
-    }
-
-    try {
-      setIsInlineUpdating(true);
-      setError(null);
-      const response = await fetch("/api/tags", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json"
-        },
-        body: JSON.stringify({
-          name: tagName
-        })
-      });
-      const payload = (await response.json().catch(() => null)) as
-        | {
-            data?: {
-              tag?: LeadTag;
-            };
-            error?: {
-              message?: string;
-            };
-          }
-        | null;
-      if (!response.ok || !payload?.data?.tag) {
-        throw new Error(payload?.error?.message ?? "Failed to create tag.");
-      }
-
-      const targetLead = leads.find((lead) => lead.id === targetLeadId);
-      if (!targetLead) {
-        throw new Error("Lead not found.");
-      }
-      const nextIds = Array.from(new Set([...targetLead.tags.map((item) => item.id), payload.data.tag.id]));
-      await updateLeadTags(targetLead, nextIds);
-      setNewTagName("");
-      setAddTagTargetLeadId(null);
-      setIsAddTagDialogOpen(false);
-      setSuccess("Tag created.");
-    } catch (createError) {
-      setError(toErrorMessage(createError, "Failed to create tag."));
-    } finally {
-      setIsInlineUpdating(false);
-    }
-  }
+  }, [fetchLeads]);
 
   async function handleCreateCustomCategory() {
     const category = newCategoryName.trim();
@@ -896,7 +1163,7 @@ export function CustomersWorkspace() {
       if (page !== 1) {
         setPage(1);
       } else {
-        await fetchLeads();
+        await fetchLeads({ force: true });
       }
     } catch (saveError) {
       setError(toErrorMessage(saveError, "Failed to create lead."));
@@ -940,7 +1207,7 @@ export function CustomersWorkspace() {
       setBulkAction("");
       setBulkValue("");
       setSuccess("Bulk action applied.");
-      await fetchLeads();
+      await fetchLeads({ force: true });
     } catch (bulkError) {
       setError(toErrorMessage(bulkError, "Failed to apply bulk action."));
     } finally {
@@ -1032,7 +1299,7 @@ export function CustomersWorkspace() {
       }
 
       setSuccess("Lead updated.");
-      await fetchLeads();
+      await fetchLeads({ force: true });
       await openLeadDrawer(selectedLeadId);
     } catch (saveError) {
       setError(toErrorMessage(saveError, "Failed to save lead."));
@@ -1051,8 +1318,8 @@ export function CustomersWorkspace() {
     });
   }
 
-  function moveColumn(columnKey: ColumnKey, direction: "up" | "down") {
-    setTableColumnOrder((current) => {
+  function moveDraftColumn(columnKey: ColumnKey, direction: "up" | "down") {
+    setDraftTableColumnOrder((current) => {
       const index = current.indexOf(columnKey);
       if (index < 0) return current;
       const targetIndex = direction === "up" ? index - 1 : index + 1;
@@ -1062,24 +1329,39 @@ export function CustomersWorkspace() {
       const next = [...current];
       const [item] = next.splice(index, 1);
       next.splice(targetIndex, 0, item);
-      writeTableConfigToStorage({
-        columnOrder: next,
-        frozenColumns
-      });
       return next;
     });
   }
 
-  function toggleFrozenColumn(columnKey: ColumnKey, checked: boolean) {
-    setFrozenColumns((current) => {
-      const next = checked ? Array.from(new Set([...current, columnKey])) : current.filter((key) => key !== columnKey);
-      writeTableConfigToStorage({
-        columnOrder: tableColumnOrder,
-        frozenColumns: next
-      });
-      return next;
-    });
+  function toggleDraftFrozenColumn(columnKey: ColumnKey, checked: boolean) {
+    setDraftFrozenColumns((current) => (checked ? Array.from(new Set([...current, columnKey])) : current.filter((key) => key !== columnKey)));
   }
+
+  function openTableLayoutDialog() {
+    setDraftTableColumnOrder(tableColumnOrder);
+    setDraftFrozenColumns(frozenColumns);
+    setIsTableLayoutDialogOpen(true);
+  }
+
+  function handleSaveTableLayout() {
+    setTableColumnOrder(draftTableColumnOrder);
+    setFrozenColumns(draftFrozenColumns);
+    writeTableConfigToStorage({
+      columnOrder: draftTableColumnOrder,
+      frozenColumns: draftFrozenColumns
+    });
+    setIsTableLayoutDialogOpen(false);
+  }
+
+  const resetListFilters = useCallback(() => {
+    setSearchInput("");
+    setSearchQuery("");
+    setStatusFilter("__all__");
+    setSourceFilter("__all__");
+    setAssigneeFilter("__all__");
+    setPipelineStageFilter("__all__");
+    setPage(1);
+  }, []);
 
   const stickyOffsetMap = useMemo(() => {
     const offsets = new Map<ColumnKey, number>();
@@ -1093,7 +1375,7 @@ export function CustomersWorkspace() {
     return offsets;
   }, [frozenColumns, tableColumnOrder]);
 
-  async function setFollowUpDate(lead: LeadRow, date: Date | undefined) {
+  const setFollowUpDate = useCallback(async (lead: LeadRow, date: Date | undefined) => {
     if (!date) {
       await quickUpdateLead(lead.id, { followUpAt: null });
       return;
@@ -1102,9 +1384,9 @@ export function CustomersWorkspace() {
     const next = new Date(date);
     next.setHours(current.getHours() || 9, current.getMinutes() || 0, 0, 0);
     await quickUpdateLead(lead.id, { followUpAt: next.toISOString() });
-  }
+  }, [quickUpdateLead]);
 
-  async function setFollowUpTime(lead: LeadRow, value: string) {
+  const setFollowUpTime = useCallback(async (lead: LeadRow, value: string) => {
     if (!lead.followUpAt) return;
     const [hourText, minuteText] = value.split(":");
     const hour = Number(hourText);
@@ -1113,9 +1395,9 @@ export function CustomersWorkspace() {
     const next = new Date(lead.followUpAt);
     next.setHours(hour, minute, 0, 0);
     await quickUpdateLead(lead.id, { followUpAt: next.toISOString() });
-  }
+  }, [quickUpdateLead]);
 
-  function getColumnCell(lead: LeadRow, key: ColumnKey) {
+  const getColumnCell = useCallback((lead: LeadRow, key: ColumnKey) => {
     if (key === "createdOn") {
       return <span className="block truncate text-sm text-muted-foreground">{formatDateTime(lead.firstContactAt)}</span>;
     }
@@ -1139,53 +1421,6 @@ export function CustomersWorkspace() {
           <Inbox className="mr-1.5 h-3.5 w-3.5" />
           <span className="truncate">{lead.phoneE164}</span>
         </Button>
-      );
-    }
-    if (key === "tagProgress") {
-      return (
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <Button type="button" variant="ghost" className="h-8 rounded-lg border border-border/70 px-2.5">
-              <div className="flex max-w-[180px] items-center gap-1.5 overflow-hidden">
-                {lead.tags.length === 0 ? <Badge className="rounded-full bg-blue-500 text-white hover:bg-blue-500">Wait Response</Badge> : null}
-                {lead.tags.slice(0, 1).map((tag) => (
-                  <Badge key={tag.id} className="rounded-full bg-blue-500 text-white hover:bg-blue-500">
-                    {tag.name}
-                  </Badge>
-                ))}
-                {lead.tags.length > 1 ? <Badge className="rounded-full bg-slate-300 text-slate-800">+{lead.tags.length - 1}</Badge> : null}
-                <ChevronDown className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
-              </div>
-            </Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="start" className="w-56">
-            {tags.map((tag) => {
-              const checked = lead.tags.some((leadTag) => leadTag.id === tag.id);
-              return (
-                <DropdownMenuCheckboxItem
-                  key={tag.id}
-                  checked={checked}
-                  onCheckedChange={(nextChecked) => {
-                    const currentIds = lead.tags.map((item) => item.id);
-                    const nextIds = nextChecked ? Array.from(new Set([...currentIds, tag.id])) : currentIds.filter((id) => id !== tag.id);
-                    void updateLeadTags(lead, nextIds);
-                  }}
-                >
-                  {tag.name}
-                </DropdownMenuCheckboxItem>
-              );
-            })}
-            <DropdownMenuItem
-              onClick={() => {
-                setAddTagTargetLeadId(lead.id);
-                setNewTagName("");
-                setIsAddTagDialogOpen(true);
-              }}
-            >
-              + Add new tag
-            </DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
       );
     }
     if (key === "businessCategory") {
@@ -1315,15 +1550,104 @@ export function CustomersWorkspace() {
         {lead.assignedToName || "-"}
       </div>
     );
-  }
+  }, [moveLeadToPipelineStage, openOrCreateConversation, pipelineStages, quickUpdateLead, setFollowUpDate, setFollowUpTime]);
+
+  const tableBodyRows = useMemo(() => {
+    if (isLoading && visibleLeads.length === 0) {
+      return (
+        <TableRow>
+          <TableCell colSpan={tableColumnOrder.length + 1} className="h-20 text-center text-muted-foreground">
+            Loading leads...
+          </TableCell>
+        </TableRow>
+      );
+    }
+
+    if (visibleLeads.length === 0) {
+      return (
+        <TableRow>
+          <TableCell colSpan={tableColumnOrder.length + 1} className="h-20 text-center text-muted-foreground">
+            <div className="flex flex-col items-center gap-2 py-2">
+              <p>No leads found for current filter.</p>
+              {(searchQuery || statusFilter !== "__all__" || sourceFilter !== "__all__" || assigneeFilter !== "__all__" || pipelineStageFilter !== "__all__") && (
+                <Button type="button" variant="outline" size="sm" className="h-8" onClick={resetListFilters}>
+                  Reset filter
+                </Button>
+              )}
+            </div>
+          </TableCell>
+        </TableRow>
+      );
+    }
+
+    return visibleLeads.map((lead) => (
+      <TableRow key={lead.id} className="cursor-pointer align-top transition-colors hover:bg-accent/40" onClick={() => void openLeadDrawer(lead.id)}>
+        <TableCell
+          onClick={(event) => event.stopPropagation()}
+          className="relative sticky left-0 z-20 border-r border-border bg-background after:absolute after:-right-px after:top-0 after:h-full after:w-px after:bg-border after:content-['']"
+          style={{ width: SELECT_COLUMN_WIDTH, minWidth: SELECT_COLUMN_WIDTH, maxWidth: SELECT_COLUMN_WIDTH }}
+        >
+          <Checkbox
+            checked={selectedLeadIdSet.has(lead.id)}
+            onCheckedChange={(checked) => toggleRowSelection(lead.id, Boolean(checked))}
+            aria-label={`Select ${lead.displayName ?? lead.phoneE164}`}
+          />
+        </TableCell>
+        {tableColumnOrder.map((columnKey) => {
+          const isFrozen = frozenColumns.includes(columnKey);
+          const left = stickyOffsetMap.get(columnKey);
+          return (
+            <TableCell
+              key={`${lead.id}-${columnKey}`}
+              onClick={INTERACTIVE_COLUMNS.includes(columnKey) ? (event) => event.stopPropagation() : undefined}
+              className={
+                isFrozen
+                  ? "relative sticky z-10 border-r border-border bg-background align-top py-3 after:absolute after:-right-px after:top-0 after:h-full after:w-px after:bg-border after:content-['']"
+                  : "align-top py-3"
+              }
+              style={{
+                ...(isFrozen ? { left } : {}),
+                width: COLUMN_WIDTHS[columnKey],
+                minWidth: COLUMN_WIDTHS[columnKey],
+                maxWidth: COLUMN_WIDTHS[columnKey]
+              }}
+            >
+              {getColumnCell(lead, columnKey)}
+            </TableCell>
+          );
+        })}
+      </TableRow>
+    ));
+  }, [
+    assigneeFilter,
+    frozenColumns,
+    getColumnCell,
+    isLoading,
+    openLeadDrawer,
+    pipelineStageFilter,
+    resetListFilters,
+    searchQuery,
+    selectedLeadIdSet,
+    sourceFilter,
+    statusFilter,
+    stickyOffsetMap,
+    tableColumnOrder,
+    toggleRowSelection,
+    visibleLeads
+  ]);
 
   return (
     <section className="flex h-full min-h-0 flex-1 overflow-hidden">
       <div className="flex h-full min-h-0 w-full flex-col rounded-2xl border border-border/70 bg-card/95 p-3 shadow-sm md:p-5">
-        <div className="flex flex-wrap items-start justify-between gap-3">
-          <div>
-            <h1 className="text-xl font-semibold tracking-tight text-foreground md:text-2xl">Leads</h1>
-            <p className="mt-1 text-sm text-muted-foreground">Powerful contact database for pipeline and conversion tracking.</p>
+        <div className="flex flex-wrap items-center justify-between gap-3 md:gap-4">
+          <div className="flex items-center gap-3 md:gap-4">
+            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-sky-50 text-sky-600 md:h-11 md:w-11 md:rounded-2xl">
+              <Users className="h-5 w-5" />
+            </div>
+            <div>
+              <h1 className="text-xl font-semibold tracking-tight text-foreground md:text-3xl">Customer Management</h1>
+              <p className="text-xs text-muted-foreground md:text-sm">Kelola database customer, status lead, dan pipeline dari satu workspace.</p>
+            </div>
           </div>
           <div className="flex w-full flex-wrap items-center justify-end gap-2 md:w-auto">
             <Button
@@ -1343,7 +1667,7 @@ export function CustomersWorkspace() {
 
         <div className="mt-3 grid grid-cols-1 gap-2 rounded-xl border border-border/70 bg-background/50 p-2.5 lg:grid-cols-[minmax(300px,1fr)_auto_auto_auto_auto]">
           <div className="flex min-w-0 items-center gap-2">
-            <Button type="button" size="sm" variant="outline" className="h-9 shrink-0 rounded-lg px-3" onClick={() => setIsTableLayoutDialogOpen(true)}>
+            <Button type="button" size="sm" variant="outline" className="h-9 shrink-0 rounded-lg px-3" onClick={openTableLayoutDialog}>
               <SlidersHorizontal className="mr-1.5 h-4 w-4" />
               Table Layout
             </Button>
@@ -1516,7 +1840,7 @@ export function CustomersWorkspace() {
         </div>
 
         <div className="mt-1 flex items-center justify-between gap-2">
-          {isInlineUpdating ? <p className="text-xs text-muted-foreground">Updating lead...</p> : <span />}
+          {isInlineUpdating ? <p className="text-xs text-muted-foreground">Updating lead...</p> : isRefreshingLeads ? <p className="text-xs text-muted-foreground">Refreshing leads...</p> : <span />}
           <p className="text-xs text-muted-foreground md:hidden">Swipe horizontally to see all columns.</p>
         </div>
 
@@ -1555,60 +1879,7 @@ export function CustomersWorkspace() {
                   })}
                 </TableRow>
               </TableHeader>
-              <TableBody>
-                {isLoading ? (
-                  <TableRow>
-                    <TableCell colSpan={tableColumnOrder.length + 1} className="h-20 text-center text-muted-foreground">
-                      Loading leads...
-                    </TableCell>
-                  </TableRow>
-                ) : visibleLeads.length === 0 ? (
-                  <TableRow>
-                    <TableCell colSpan={tableColumnOrder.length + 1} className="h-20 text-center text-muted-foreground">
-                      No leads found.
-                    </TableCell>
-                  </TableRow>
-                ) : (
-                  visibleLeads.map((lead) => (
-                    <TableRow key={lead.id} className="cursor-pointer align-top transition-colors hover:bg-accent/40" onClick={() => void openLeadDrawer(lead.id)}>
-                      <TableCell
-                        onClick={(event) => event.stopPropagation()}
-                        className="relative sticky left-0 z-20 border-r border-border bg-background after:absolute after:-right-px after:top-0 after:h-full after:w-px after:bg-border after:content-['']"
-                        style={{ width: SELECT_COLUMN_WIDTH, minWidth: SELECT_COLUMN_WIDTH, maxWidth: SELECT_COLUMN_WIDTH }}
-                      >
-                        <Checkbox
-                          checked={selectedLeadIdSet.has(lead.id)}
-                          onCheckedChange={(checked) => toggleRowSelection(lead.id, Boolean(checked))}
-                          aria-label={`Select ${lead.displayName ?? lead.phoneE164}`}
-                        />
-                      </TableCell>
-                      {tableColumnOrder.map((columnKey) => {
-                        const isFrozen = frozenColumns.includes(columnKey);
-                        const left = stickyOffsetMap.get(columnKey);
-                        return (
-                          <TableCell
-                            key={`${lead.id}-${columnKey}`}
-                            onClick={INTERACTIVE_COLUMNS.includes(columnKey) ? (event) => event.stopPropagation() : undefined}
-                            className={
-                              isFrozen
-                                ? "relative sticky z-10 border-r border-border bg-background align-top py-3 after:absolute after:-right-px after:top-0 after:h-full after:w-px after:bg-border after:content-['']"
-                                : "align-top py-3"
-                            }
-                            style={{
-                              ...(isFrozen ? { left } : {}),
-                              width: COLUMN_WIDTHS[columnKey],
-                              minWidth: COLUMN_WIDTHS[columnKey],
-                              maxWidth: COLUMN_WIDTHS[columnKey]
-                            }}
-                          >
-                            {getColumnCell(lead, columnKey)}
-                          </TableCell>
-                        );
-                      })}
-                    </TableRow>
-                  ))
-                )}
-              </TableBody>
+              <TableBody>{tableBodyRows}</TableBody>
             </Table>
           </div>
         </div>
@@ -1760,8 +2031,8 @@ export function CustomersWorkspace() {
               </Select>
             </div>
             <div className="space-y-1 md:col-span-2">
-              <p className="text-xs text-muted-foreground">Remarks</p>
-              <Textarea placeholder="Remarks" value={addRemarks} onChange={(event) => setAddRemarks(event.target.value)} />
+              <p className="text-xs text-muted-foreground">Notes</p>
+              <Textarea placeholder="Notes" value={addRemarks} onChange={(event) => setAddRemarks(event.target.value)} />
             </div>
           </div>
           <DialogFooter>
@@ -1782,11 +2053,11 @@ export function CustomersWorkspace() {
             <DialogDescription>Freeze columns and reorder them to match your workflow.</DialogDescription>
           </DialogHeader>
           <div className="max-h-[60vh] space-y-2 overflow-y-auto py-1">
-            {tableColumnOrder.map((columnKey, index) => (
+            {draftTableColumnOrder.map((columnKey, index) => (
               <div key={columnKey} className="flex items-center gap-2 rounded-lg border border-border/70 px-3 py-2">
-                <Checkbox checked={frozenColumns.includes(columnKey)} onCheckedChange={(checked) => toggleFrozenColumn(columnKey, Boolean(checked))} />
+                <Checkbox checked={draftFrozenColumns.includes(columnKey)} onCheckedChange={(checked) => toggleDraftFrozenColumn(columnKey, Boolean(checked))} />
                 <p className="flex-1 text-sm font-medium">{COLUMN_LABELS[columnKey]}</p>
-                <Button type="button" size="icon" variant="ghost" className="h-8 w-8" onClick={() => moveColumn(columnKey, "up")} disabled={index === 0}>
+                <Button type="button" size="icon" variant="ghost" className="h-8 w-8" onClick={() => moveDraftColumn(columnKey, "up")} disabled={index === 0}>
                   <ArrowUp className="h-4 w-4" />
                 </Button>
                 <Button
@@ -1794,8 +2065,8 @@ export function CustomersWorkspace() {
                   size="icon"
                   variant="ghost"
                   className="h-8 w-8"
-                  onClick={() => moveColumn(columnKey, "down")}
-                  disabled={index === tableColumnOrder.length - 1}
+                  onClick={() => moveDraftColumn(columnKey, "down")}
+                  disabled={index === draftTableColumnOrder.length - 1}
                 >
                   <ArrowDown className="h-4 w-4" />
                 </Button>
@@ -1803,26 +2074,8 @@ export function CustomersWorkspace() {
             ))}
           </div>
           <DialogFooter>
-            <Button type="button" variant="outline" onClick={() => setIsTableLayoutDialogOpen(false)}>
-              Done
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      <Dialog open={isAddTagDialogOpen} onOpenChange={setIsAddTagDialogOpen}>
-        <DialogContent className="sm:max-w-[420px]">
-          <DialogHeader>
-            <DialogTitle>Add New Tag</DialogTitle>
-            <DialogDescription>Create a progress tag and assign it to this lead.</DialogDescription>
-          </DialogHeader>
-          <Input placeholder="Tag name" value={newTagName} onChange={(event) => setNewTagName(event.target.value)} />
-          <DialogFooter>
-            <Button type="button" variant="outline" onClick={() => setIsAddTagDialogOpen(false)}>
-              Cancel
-            </Button>
-            <Button type="button" onClick={() => void handleCreateTag()} disabled={!newTagName.trim() || isInlineUpdating}>
-              Create Tag
+            <Button type="button" variant="outline" onClick={handleSaveTableLayout}>
+              Save
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -1850,20 +2103,19 @@ export function CustomersWorkspace() {
         <DialogContent className="sm:max-w-[560px]">
           <DialogHeader>
             <DialogTitle>Frozen Fields</DialogTitle>
-            <DialogDescription>Name and WhatsApp are always frozen. Set additional fields to lock.</DialogDescription>
+            <DialogDescription>WhatsApp is always frozen. Set additional fields to lock.</DialogDescription>
           </DialogHeader>
           <div className="grid grid-cols-1 gap-2 py-2 sm:grid-cols-2">
             {(Object.keys(DEFAULT_FROZEN_FIELDS) as FrozenFieldKey[]).map((fieldKey) => (
               <label key={fieldKey} className="flex items-center gap-2 rounded-md border border-border/70 px-3 py-2 text-sm">
                 <Checkbox
                   checked={frozenFields[fieldKey]}
-                  disabled={fieldKey === "name" || fieldKey === "phone"}
+                  disabled={fieldKey === "phone"}
                   onCheckedChange={(checked) => {
                     setFrozenFields((current) => {
                       const next = {
                         ...current,
                         [fieldKey]: Boolean(checked),
-                        name: true,
                         phone: true
                       };
                       writeFrozenFieldsToStorage(next);
@@ -2103,7 +2355,7 @@ export function CustomersWorkspace() {
                       </Select>
                     </div>
                     <div className="space-y-1 md:col-span-2">
-                      <p className="text-xs text-muted-foreground">Remarks</p>
+                      <p className="text-xs text-muted-foreground">Notes</p>
                       <Textarea value={selectedLead.remarks ?? ""} disabled={frozenFields.remarks} onChange={(event) => updateSelectedLead("remarks", event.target.value || null)} />
                     </div>
                   </div>

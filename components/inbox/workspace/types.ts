@@ -13,13 +13,6 @@ export type CustomerTagItem = {
   isAssigned: boolean;
 };
 
-export type CustomerNoteItem = {
-  id: string;
-  content: string;
-  authorUserId: string;
-  createdAt: string;
-};
-
 export type CrmInvoiceItem = {
   id: string;
   invoiceNo: string;
@@ -48,6 +41,7 @@ export type ListConversationsResponse = {
     total?: number;
   };
   error?: {
+    code?: string;
     message?: string;
   };
 };
@@ -57,6 +51,7 @@ export type ConversationFetchResponse = {
     conversation?: ConversationItem;
   };
   error?: {
+    code?: string;
     message?: string;
   };
 };
@@ -66,6 +61,7 @@ export type OrganizationsResponse = {
     organizations?: OrgSummary[];
   };
   error?: {
+    code?: string;
     message?: string;
   };
 };
@@ -80,6 +76,7 @@ export type ListMessagesResponse = {
     total?: number;
   };
   error?: {
+    code?: string;
     message?: string;
   };
 };
@@ -89,16 +86,19 @@ export type SendMessageResponse = {
     message?: {
       id: string;
       sendStatus?: "PENDING" | "SENT" | "FAILED";
+      deliveryStatus?: "SENT" | "DELIVERED" | "READ" | null;
       sendError?: string | null;
     };
   };
   error?: {
+    code?: string;
     message?: string;
   };
 };
 
 export type AssignConversationResponse = {
   error?: {
+    code?: string;
     message?: string;
   };
 };
@@ -108,15 +108,7 @@ export type CustomerTagsResponse = {
     tags?: CustomerTagItem[];
   };
   error?: {
-    message?: string;
-  };
-};
-
-export type CustomerNotesResponse = {
-  data?: {
-    notes?: CustomerNoteItem[];
-  };
-  error?: {
+    code?: string;
     message?: string;
   };
 };
@@ -128,24 +120,7 @@ export type CreateTagResponse = {
     };
   };
   error?: {
-    message?: string;
-  };
-};
-
-export type CreateNoteResponse = {
-  error?: {
-    message?: string;
-  };
-};
-
-export type UpdateNoteResponse = {
-  error?: {
-    message?: string;
-  };
-};
-
-export type DeleteNoteResponse = {
-  error?: {
+    code?: string;
     message?: string;
   };
 };
@@ -157,6 +132,7 @@ export type AttachProofResponse = {
     };
   };
   error?: {
+    code?: string;
     message?: string;
   };
 };
@@ -176,6 +152,16 @@ export type UpdateConversationStatusResponse = {
     conversation?: ConversationItem;
   };
   error?: {
+    message?: string;
+  };
+};
+
+export type DeleteConversationResponse = {
+  data?: {
+    conversationId?: string;
+  };
+  error?: {
+    code?: string;
     message?: string;
   };
 };

@@ -15,7 +15,14 @@ type OptionalEnvKey =
   | "R2_SECRET_ACCESS_KEY"
   | "R2_BUCKET"
   | "R2_PUBLIC_URL"
-  | "WHATSAPP_MOCK_MODE";
+  | "WHATSAPP_MOCK_MODE"
+  | "PAKASIR_PROJECT_SLUG"
+  | "PAKASIR_API_KEY"
+  | "PAKASIR_BASE_URL"
+  | "PAKASIR_DEFAULT_METHOD"
+  | "PAKASIR_WEBHOOK_PATH"
+  | "PAKASIR_WEBHOOK_TOKEN"
+  | "SUPERADMIN_EMAILS";
 
 export type AppEnv = Record<RequiredEnvKey, string> &
   Partial<Record<OptionalEnvKey, string>> & {
@@ -41,7 +48,14 @@ const OPTIONAL_ENV_KEYS: OptionalEnvKey[] = [
   "R2_SECRET_ACCESS_KEY",
   "R2_BUCKET",
   "R2_PUBLIC_URL",
-  "WHATSAPP_MOCK_MODE"
+  "WHATSAPP_MOCK_MODE",
+  "PAKASIR_PROJECT_SLUG",
+  "PAKASIR_API_KEY",
+  "PAKASIR_BASE_URL",
+  "PAKASIR_DEFAULT_METHOD",
+  "PAKASIR_WEBHOOK_PATH",
+  "PAKASIR_WEBHOOK_TOKEN",
+  "SUPERADMIN_EMAILS"
 ];
 
 let cachedEnv: AppEnv | null = null;
@@ -93,4 +107,39 @@ export function getAuthSecret(): string {
   }
 
   throw new Error("Missing required environment variable: NEXTAUTH_SECRET");
+}
+
+export function getPakasirConfig() {
+  const slug = process.env.PAKASIR_PROJECT_SLUG?.trim() ?? "";
+  const apiKey = process.env.PAKASIR_API_KEY?.trim() ?? "";
+  const baseUrl = process.env.PAKASIR_BASE_URL?.trim() || "https://app.pakasir.com";
+  const defaultMethod = process.env.PAKASIR_DEFAULT_METHOD?.trim() || "qris";
+  const webhookPath = process.env.PAKASIR_WEBHOOK_PATH?.trim() || "/api/billing/webhooks/pakasir";
+  const webhookToken = process.env.PAKASIR_WEBHOOK_TOKEN?.trim() || "";
+
+  if (!slug) {
+    throw new Error("Missing required environment variable: PAKASIR_PROJECT_SLUG");
+  }
+
+  if (!apiKey) {
+    throw new Error("Missing required environment variable: PAKASIR_API_KEY");
+  }
+
+  return {
+    slug,
+    apiKey,
+    baseUrl: baseUrl.replace(/\/+$/, ""),
+    defaultMethod,
+    webhookPath,
+    webhookToken
+  };
+}
+
+export function getSuperadminEmailAllowlist(): Set<string> {
+  const raw = process.env.SUPERADMIN_EMAILS ?? "";
+  const emails = raw
+    .split(",")
+    .map((entry) => entry.trim().toLowerCase())
+    .filter(Boolean);
+  return new Set(emails);
 }

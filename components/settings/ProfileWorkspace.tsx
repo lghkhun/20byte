@@ -10,7 +10,13 @@ export function ProfileWorkspace() {
   const [headerActions, setHeaderActions] = useState<Record<string, ReactNode>>({});
   const renderedHeaderActions = useMemo(() => Object.entries(headerActions).sort(([left], [right]) => left.localeCompare(right)), [headerActions]);
   const registerHeaderAction = useCallback((key: string, action: ReactNode) => {
-    setHeaderActions((current) => ({ ...current, [key]: action }));
+    setHeaderActions((current) => {
+      if (current[key] === action) {
+        return current;
+      }
+
+      return { ...current, [key]: action };
+    });
   }, []);
   const unregisterHeaderAction = useCallback((key: string) => {
     setHeaderActions((current) => {
@@ -23,6 +29,13 @@ export function ProfileWorkspace() {
       return next;
     });
   }, []);
+  const headerActionContextValue = useMemo(
+    () => ({
+      register: registerHeaderAction,
+      unregister: unregisterHeaderAction
+    }),
+    [registerHeaderAction, unregisterHeaderAction]
+  );
 
   return (
     <div className="flex h-full min-h-0 flex-1 flex-col overflow-hidden">
@@ -53,12 +66,7 @@ export function ProfileWorkspace() {
             </div>
           </div>
 
-          <SettingsHeaderActionContext.Provider
-            value={{
-              register: registerHeaderAction,
-              unregister: unregisterHeaderAction
-            }}
-          >
+          <SettingsHeaderActionContext.Provider value={headerActionContextValue}>
             <div className="px-2 pb-4">
               <ProfileSettings />
             </div>

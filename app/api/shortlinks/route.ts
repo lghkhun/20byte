@@ -33,10 +33,19 @@ type DisableShortlinkRequest = {
   medium?: unknown;
 };
 
+function withServerTiming<T>(response: T, startedAt: number): T {
+  const durationMs = Number((performance.now() - startedAt).toFixed(1));
+  if (response instanceof Response) {
+    response.headers.set("Server-Timing", `app;dur=${durationMs}`);
+  }
+  return response;
+}
+
 export async function GET(request: NextRequest) {
+  const startedAt = performance.now();
   const auth = requireApiSession(request);
   if (auth.response) {
-    return auth.response;
+    return withServerTiming(auth.response, startedAt);
   }
 
   try {
@@ -45,32 +54,33 @@ export async function GET(request: NextRequest) {
       request.nextUrl.searchParams.get("orgId")?.trim() ?? ""
     );
     const shortlinks = await listShortlinks(auth.session.userId, orgId);
-    return successResponse(
+    return withServerTiming(successResponse(
       {
         shortlinks
       },
       200
-    );
+    ), startedAt);
   } catch (error) {
     if (error instanceof ServiceError) {
-      return errorResponse(error.status, error.code, error.message);
+      return withServerTiming(errorResponse(error.status, error.code, error.message), startedAt);
     }
 
-    return errorResponse(500, "SHORTLINK_LIST_FAILED", "Failed to load shortlinks.");
+    return withServerTiming(errorResponse(500, "SHORTLINK_LIST_FAILED", "Failed to load shortlinks."), startedAt);
   }
 }
 
 export async function POST(request: NextRequest) {
+  const startedAt = performance.now();
   const auth = requireApiSession(request);
   if (auth.response) {
-    return auth.response;
+    return withServerTiming(auth.response, startedAt);
   }
 
   let body: CreateShortlinkRequest;
   try {
     body = (await request.json()) as CreateShortlinkRequest;
   } catch {
-    return errorResponse(400, "INVALID_JSON", "Request body must be valid JSON.");
+    return withServerTiming(errorResponse(400, "INVALID_JSON", "Request body must be valid JSON."), startedAt);
   }
 
   try {
@@ -92,32 +102,33 @@ export async function POST(request: NextRequest) {
       medium: typeof body.medium === "string" ? body.medium : undefined
     });
 
-    return successResponse(
+    return withServerTiming(successResponse(
       {
         shortlink
       },
       201
-    );
+    ), startedAt);
   } catch (error) {
     if (error instanceof ServiceError) {
-      return errorResponse(error.status, error.code, error.message);
+      return withServerTiming(errorResponse(error.status, error.code, error.message), startedAt);
     }
 
-    return errorResponse(500, "SHORTLINK_CREATE_FAILED", "Failed to create shortlink.");
+    return withServerTiming(errorResponse(500, "SHORTLINK_CREATE_FAILED", "Failed to create shortlink."), startedAt);
   }
 }
 
 export async function PATCH(request: NextRequest) {
+  const startedAt = performance.now();
   const auth = requireApiSession(request);
   if (auth.response) {
-    return auth.response;
+    return withServerTiming(auth.response, startedAt);
   }
 
   let body: DisableShortlinkRequest;
   try {
     body = (await request.json()) as DisableShortlinkRequest;
   } catch {
-    return errorResponse(400, "INVALID_JSON", "Request body must be valid JSON.");
+    return withServerTiming(errorResponse(400, "INVALID_JSON", "Request body must be valid JSON."), startedAt);
   }
 
   try {
@@ -153,42 +164,43 @@ export async function PATCH(request: NextRequest) {
         medium: typeof body.medium === "string" ? body.medium : undefined
       });
 
-      return successResponse(
+      return withServerTiming(successResponse(
         {
           shortlink
         },
         200
-      );
+      ), startedAt);
     }
 
     const shortlink = await setShortlinkEnabled(auth.session.userId, orgId, shortlinkId, isEnabled ?? false);
 
-    return successResponse(
+    return withServerTiming(successResponse(
       {
         shortlink
       },
       200
-    );
+    ), startedAt);
   } catch (error) {
     if (error instanceof ServiceError) {
-      return errorResponse(error.status, error.code, error.message);
+      return withServerTiming(errorResponse(error.status, error.code, error.message), startedAt);
     }
 
-    return errorResponse(500, "SHORTLINK_DISABLE_FAILED", "Failed to disable shortlink.");
+    return withServerTiming(errorResponse(500, "SHORTLINK_DISABLE_FAILED", "Failed to disable shortlink."), startedAt);
   }
 }
 
 export async function DELETE(request: NextRequest) {
+  const startedAt = performance.now();
   const auth = requireApiSession(request);
   if (auth.response) {
-    return auth.response;
+    return withServerTiming(auth.response, startedAt);
   }
 
   let body: DisableShortlinkRequest;
   try {
     body = (await request.json()) as DisableShortlinkRequest;
   } catch {
-    return errorResponse(400, "INVALID_JSON", "Request body must be valid JSON.");
+    return withServerTiming(errorResponse(400, "INVALID_JSON", "Request body must be valid JSON."), startedAt);
   }
 
   try {
@@ -199,17 +211,17 @@ export async function DELETE(request: NextRequest) {
     const shortlinkId = typeof body.shortlinkId === "string" ? body.shortlinkId : "";
     await deleteShortlink(auth.session.userId, orgId, shortlinkId);
 
-    return successResponse(
+    return withServerTiming(successResponse(
       {
         deleted: true
       },
       200
-    );
+    ), startedAt);
   } catch (error) {
     if (error instanceof ServiceError) {
-      return errorResponse(error.status, error.code, error.message);
+      return withServerTiming(errorResponse(error.status, error.code, error.message), startedAt);
     }
 
-    return errorResponse(500, "SHORTLINK_DELETE_FAILED", "Failed to delete shortlink.");
+    return withServerTiming(errorResponse(500, "SHORTLINK_DELETE_FAILED", "Failed to delete shortlink."), startedAt);
   }
 }

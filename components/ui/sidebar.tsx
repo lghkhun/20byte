@@ -3,7 +3,7 @@
 import * as React from "react"
 import { Slot } from "@radix-ui/react-slot"
 import { cva, type VariantProps } from "class-variance-authority"
-import { PanelLeft } from "lucide-react"
+import { ChevronLeft, ChevronRight, PanelLeft } from "lucide-react"
 
 import { useIsMobile } from "@/hooks/use-mobile"
 import { cn } from "@/lib/utils"
@@ -27,9 +27,9 @@ import {
 
 const SIDEBAR_COOKIE_NAME = "sidebar_state"
 const SIDEBAR_COOKIE_MAX_AGE = 60 * 60 * 24 * 7
-const SIDEBAR_WIDTH = "16rem"
-const SIDEBAR_WIDTH_MOBILE = "18rem"
-const SIDEBAR_WIDTH_ICON = "3rem"
+const SIDEBAR_WIDTH = "var(--app-sidebar-width, 16rem)"
+const SIDEBAR_WIDTH_MOBILE = "var(--app-sidebar-width-mobile, 18rem)"
+const SIDEBAR_WIDTH_ICON = "var(--app-sidebar-width-icon, 3rem)"
 const SIDEBAR_KEYBOARD_SHORTCUT = "b"
 
 type SidebarContextProps = {
@@ -238,7 +238,7 @@ const Sidebar = React.forwardRef<
             "group-data-[collapsible=offcanvas]:w-0",
             "group-data-[side=right]:rotate-180",
             variant === "floating" || variant === "inset"
-              ? "group-data-[collapsible=icon]:w-[calc(var(--sidebar-width-icon)_+_theme(spacing.4))]"
+              ? "group-data-[collapsible=icon]:w-[calc(var(--sidebar-width-icon)_+_theme(spacing.2))]"
               : "group-data-[collapsible=icon]:w-[--sidebar-width-icon]"
           )}
         />
@@ -250,7 +250,7 @@ const Sidebar = React.forwardRef<
               : "right-0 group-data-[collapsible=offcanvas]:right-[calc(var(--sidebar-width)*-1)]",
             // Adjust the padding for floating and inset variants.
             variant === "floating" || variant === "inset"
-              ? "p-2 group-data-[collapsible=icon]:w-[calc(var(--sidebar-width-icon)_+_theme(spacing.4)_+2px)]"
+              ? "p-2 group-data-[collapsible=icon]:w-[calc(var(--sidebar-width-icon)_+_theme(spacing.2)_+2px)] group-data-[collapsible=icon]:p-1"
               : "group-data-[collapsible=icon]:w-[--sidebar-width-icon] group-data-[side=left]:border-r group-data-[side=right]:border-l",
             className
           )}
@@ -297,29 +297,40 @@ SidebarTrigger.displayName = "SidebarTrigger"
 
 const SidebarRail = React.forwardRef<
   HTMLButtonElement,
-  React.ComponentProps<"button">
->(({ className, ...props }, ref) => {
-  const { toggleSidebar } = useSidebar()
+  React.ComponentProps<"button"> & {
+    side?: "left" | "right"
+  }
+>(({ className, side = "left", ...props }, ref) => {
+  const { state, toggleSidebar } = useSidebar()
+  const isCollapsed = state === "collapsed"
+  const Icon =
+    side === "left"
+      ? isCollapsed
+        ? ChevronRight
+        : ChevronLeft
+      : isCollapsed
+        ? ChevronLeft
+        : ChevronRight
 
   return (
     <button
       ref={ref}
       data-sidebar="rail"
       aria-label="Toggle Sidebar"
-      tabIndex={-1}
       onClick={toggleSidebar}
-      title="Toggle Sidebar"
+      title={isCollapsed ? "Open sidebar" : "Close sidebar"}
       className={cn(
-        "absolute inset-y-0 z-20 hidden w-4 -translate-x-1/2 transition-all ease-linear after:absolute after:inset-y-0 after:left-1/2 after:w-[2px] hover:after:bg-sidebar-border group-data-[side=left]:-right-4 group-data-[side=right]:left-0 sm:flex",
-        "[[data-side=left]_&]:cursor-w-resize [[data-side=right]_&]:cursor-e-resize",
-        "[[data-side=left][data-state=collapsed]_&]:cursor-e-resize [[data-side=right][data-state=collapsed]_&]:cursor-w-resize",
-        "group-data-[collapsible=offcanvas]:translate-x-0 group-data-[collapsible=offcanvas]:after:left-full group-data-[collapsible=offcanvas]:hover:bg-sidebar",
-        "[[data-side=left][data-collapsible=offcanvas]_&]:-right-2",
-        "[[data-side=right][data-collapsible=offcanvas]_&]:-left-2",
+        "absolute top-1/2 z-30 hidden h-8 w-8 -translate-y-1/2 items-center justify-center rounded-full border border-sidebar-border bg-sidebar text-sidebar-foreground shadow-sm transition-all hover:bg-accent sm:flex",
+        "[[data-side=left]_&]:-right-4 [[data-side=right]_&]:-left-4",
+        "[[data-side=left][data-collapsible=offcanvas]_&]:-right-3",
+        "[[data-side=right][data-collapsible=offcanvas]_&]:-left-3",
         className
       )}
       {...props}
-    />
+    >
+      <Icon className="h-4 w-4" />
+      <span className="sr-only">{isCollapsed ? "Open sidebar" : "Close sidebar"}</span>
+    </button>
   )
 })
 SidebarRail.displayName = "SidebarRail"

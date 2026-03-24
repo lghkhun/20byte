@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/db/prisma";
 import { canAccessInbox } from "@/lib/permissions/orgPermissions";
+import { assertOrgBillingAccess } from "@/server/services/billingService";
 import type { ListMessagesInput, MessageListResult } from "@/server/services/message/messageTypes";
 import { normalize, normalizeLimit, normalizePage } from "@/server/services/message/messageUtils";
 import { ServiceError } from "@/server/services/serviceError";
@@ -24,6 +25,8 @@ async function requireInboxMembership(userId: string, orgId: string) {
   if (!canAccessInbox(membership.role)) {
     throw new ServiceError(403, "FORBIDDEN_INBOX_ACCESS", "Your role cannot access inbox conversations.");
   }
+
+  await assertOrgBillingAccess(orgId, "write");
 }
 
 export async function listConversationMessages(input: ListMessagesInput): Promise<MessageListResult> {
@@ -86,9 +89,12 @@ export async function listConversationMessages(input: ListMessagesInput): Promis
         templateLanguageCode: true,
         isAutomated: true,
         sendStatus: true,
+        deliveryStatus: true,
         sendError: true,
         retryable: true,
         sendAttemptCount: true,
+        deliveredAt: true,
+        readAt: true,
         createdAt: true
       }
     })

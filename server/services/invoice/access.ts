@@ -2,6 +2,7 @@ import type { Prisma, Role } from "@prisma/client";
 
 import { prisma } from "@/lib/db/prisma";
 import { canAccessInbox } from "@/lib/permissions/orgPermissions";
+import { assertOrgBillingAccess } from "@/server/services/billingService";
 import { formatInvoiceNumber } from "@/server/services/invoiceNumberService";
 import { ServiceError } from "@/server/services/serviceError";
 
@@ -25,6 +26,8 @@ export async function requireInvoiceAccess(actorUserId: string, orgId: string): 
   if (!canAccessInbox(membership.role)) {
     throw new ServiceError(403, "FORBIDDEN_INVOICE_ACCESS", "Your role cannot create invoices.");
   }
+
+  await assertOrgBillingAccess(orgId, "write");
 }
 
 export async function requireInvoiceMembershipRole(actorUserId: string, orgId: string): Promise<Role> {
@@ -47,6 +50,8 @@ export async function requireInvoiceMembershipRole(actorUserId: string, orgId: s
   if (!canAccessInbox(membership.role)) {
     throw new ServiceError(403, "FORBIDDEN_INVOICE_ACCESS", "Your role cannot access invoices.");
   }
+
+  await assertOrgBillingAccess(orgId, "write");
 
   return membership.role;
 }

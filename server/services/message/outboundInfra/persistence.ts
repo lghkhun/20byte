@@ -20,6 +20,7 @@ export async function storeOutboundRecord(params: {
   templateLanguageCode?: string;
   templateComponentsJson?: string | null;
   sendStatus?: "PENDING" | "SENT" | "FAILED";
+  deliveryStatus?: "SENT" | "DELIVERED" | "READ" | null;
   sendError?: string | null;
   retryable?: boolean;
   incrementAttemptCount?: boolean;
@@ -43,6 +44,7 @@ export async function storeOutboundRecord(params: {
         templateLanguageCode: params.templateLanguageCode,
         templateComponentsJson: params.templateComponentsJson,
         sendStatus: params.sendStatus ?? "SENT",
+        deliveryStatus: params.deliveryStatus ?? (params.sendStatus === "SENT" || !params.sendStatus ? "SENT" : null),
         sendError: params.sendError ?? null,
         retryable: params.retryable ?? false,
         sendAttemptCount: params.incrementAttemptCount ? 1 : 0,
@@ -53,6 +55,7 @@ export async function storeOutboundRecord(params: {
         waMessageId: true,
         type: true,
         sendStatus: true,
+        deliveryStatus: true,
         sendError: true,
         retryable: true,
         sendAttemptCount: true,
@@ -78,6 +81,7 @@ export async function storeOutboundRecord(params: {
     waMessageId: createdMessage.waMessageId,
     type: createdMessage.type as "TEXT" | "IMAGE" | "VIDEO" | "AUDIO" | "DOCUMENT" | "TEMPLATE" | "SYSTEM",
     sendStatus: createdMessage.sendStatus ?? "SENT",
+    deliveryStatus: (createdMessage.deliveryStatus as "SENT" | "DELIVERED" | "READ" | null) ?? null,
     sendError: createdMessage.sendError ?? null,
     retryable: createdMessage.retryable,
     sendAttemptCount: createdMessage.sendAttemptCount,
@@ -102,6 +106,7 @@ export async function updateOutboundSendResult(params: {
     data: {
       waMessageId: params.waMessageId ?? null,
       sendStatus: params.sendStatus,
+      deliveryStatus: params.sendStatus === "SENT" ? "SENT" : null,
       sendError: params.sendError,
       retryable: params.retryable,
       sendAttemptCount: {
@@ -114,4 +119,91 @@ export async function updateOutboundSendResult(params: {
   if (updated.count !== 1) {
     throw new ServiceError(404, "MESSAGE_NOT_FOUND", "Outbound message does not exist.");
   }
+}
+
+function deliveryRank(status: "SENT" | "DELIVERED" | "READ" | null | undefined): number {
+  if (status === "READ") return 3;
+  if (status === "DELIVERED") return 2;
+  if (status === "SENT") return 1;
+  return 0;
+}
+
+export async function updateOutboundDeliveryStatusByWaMessageId(params: {
+  orgId: string;
+  waMessageId: string;
+  deliveryStatus: "SENT" | "DELIVERED" | "READ";
+  at?: Date;
+}): Promise<{
+  messageId: string;
+  conversationId: string;
+  conversationStatus: "OPEN" | "CLOSED";
+  assignedToMemberId: string | null;
+} | null> {
+  const existing = await prisma.message.findFirst({
+    where: {
+      orgId: params.orgId,
+      direction: MessageDirection.OUTBOUND,
+      waMessageId: params.waMessageId
+    },
+    select: {
+      id: true,
+      conversationId: true,
+      deliveryStatus: true,
+      deliveredAt: true,
+      readAt: true,
+      conversation: {
+        select: {
+          status: true,
+          assignedToMemberId: true
+        }
+      }
+    }
+  });
+
+  if (!existing) {
+    return null;
+  }
+
+  const incomingRank = deliveryRank(params.deliveryStatus);
+  const currentRank = deliveryRank(existing.deliveryStatus as "SENT" | "DELIVERED" | "READ" | null);
+  const at = params.at ?? new Date();
+
+  const data: {
+    deliveryStatus?: "SENT" | "DELIVERED" | "READ";
+    deliveredAt?: Date;
+    readAt?: Date;
+  } = {};
+
+  if (incomingRank > currentRank) {
+    data.deliveryStatus = params.deliveryStatus;
+  }
+
+  if (params.deliveryStatus === "DELIVERED" && !existing.deliveredAt) {
+    data.deliveredAt = at;
+  }
+
+  if (params.deliveryStatus === "READ") {
+    if (!existing.deliveredAt) {
+      data.deliveredAt = at;
+    }
+    if (!existing.readAt) {
+      data.readAt = at;
+    }
+  }
+
+  if (Object.keys(data).length > 0) {
+    await prisma.message.update({
+      where: {
+        id: existing.id
+      },
+      data
+    });
+  }
+
+  return {
+    messageId: existing.id,
+    conversationId: existing.conversationId,
+    conversationStatus: existing.conversation.status,
+    assignedToMemberId: existing.conversation.assignedToMemberId
+  };
 }

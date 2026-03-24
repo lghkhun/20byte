@@ -16,7 +16,8 @@ export async function POST(request: NextRequest) {
     const result = await registerUser((body ?? {}) as Record<string, unknown>);
     return successResponse(
       {
-        user: result.user
+        user: result.user,
+        organization: result.organization
       },
       201
     );

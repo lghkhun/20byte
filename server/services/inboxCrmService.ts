@@ -80,6 +80,7 @@ export async function getConversationCrmContext(
     },
     select: {
       id: true,
+      customerId: true,
       createdAt: true
     }
   });
@@ -91,7 +92,7 @@ export async function getConversationCrmContext(
   const invoices = await prisma.invoice.findMany({
     where: {
       orgId,
-      conversationId: conversation.id
+      customerId: conversation.customerId
     },
     orderBy: {
       createdAt: "desc"

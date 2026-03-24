@@ -1,0 +1,170 @@
+{
+  "generatedAt": "2026-03-22T10:39:59.973Z",
+  "totals": {
+    "suites": 7,
+    "passed": 5,
+    "failed": 0,
+    "skipped": 1
+  },
+  "reports": [
+    {
+      "suite": "smoke-ui",
+      "status": "passed",
+      "baseUrl": "http://localhost:3001",
+      "startedAt": "2026-03-22T10:39:13.606Z",
+      "endedAt": "2026-03-22T10:39:25.610Z",
+      "durationMs": 12004,
+      "failures": [],
+      "skippedReason": null,
+      "error": null,
+      "meta": {
+        "consoleErrorCount": 0
+      }
+    },
+    {
+      "suite": "smoke-ui-customers-deep",
+      "status": "passed",
+      "baseUrl": "http://localhost:3001",
+      "startedAt": "2026-03-22T10:39:26.986Z",
+      "endedAt": "2026-03-22T10:39:32.715Z",
+      "durationMs": 5729,
+      "failures": [],
+      "skippedReason": null,
+      "error": null,
+      "meta": {}
+    },
+    {
+      "suite": "smoke-ui-inbox-deep",
+      "status": "passed",
+      "baseUrl": "http://localhost:3001",
+      "startedAt": "2026-03-22T10:39:33.829Z",
+      "endedAt": "2026-03-22T10:39:46.523Z",
+      "durationMs": 12694,
+      "failures": [],
+      "skippedReason": null,
+      "error": null,
+      "meta": {}
+    },
+    {
+      "suite": "smoke-ui-invoices-deep",
+      "status": "passed",
+      "baseUrl": "http://localhost:3001",
+      "startedAt": "2026-03-22T10:39:55.282Z",
+      "endedAt": "2026-03-22T10:39:59.532Z",
+      "durationMs": 4250,
+      "failures": [],
+      "skippedReason": null,
+      "error": null,
+      "meta": {}
+    },
+    {
+      "suite": "smoke-ui-pipeline-deep",
+      "status": "passed",
+      "baseUrl": "http://localhost:3001",
+      "startedAt": "2026-03-22T10:39:50.755Z",
+      "endedAt": "2026-03-22T10:39:54.021Z",
+      "durationMs": 3266,
+      "failures": [],
+      "skippedReason": null,
+      "error": null,
+      "meta": {}
+    },
+    {
+      "suite": "smoke-ui-shortlinks-deep",
+      "status": "skipped",
+      "baseUrl": "http://localhost:3001",
+      "startedAt": "2026-03-22T10:39:47.862Z",
+      "endedAt": "2026-03-22T10:39:49.613Z",
+      "durationMs": 1751,
+      "failures": [],
+      "skippedReason": "Baileys connected number is unavailable, create flow skipped.",
+      "error": null,
+      "meta": {}
+    },
+    {
+      "generatedAt": "2026-03-22T10:21:37.193Z",
+      "totals": {
+        "suites": 6,
+        "passed": 5,
+        "failed": 0,
+        "skipped": 1
+      },
+      "reports": [
+        {
+          "suite": "smoke-ui",
+          "status": "passed",
+          "baseUrl": "http://localhost:3001",
+          "startedAt": "2026-03-22T10:20:37.317Z",
+          "endedAt": "2026-03-22T10:20:54.295Z",
+          "durationMs": 16978,
+          "failures": [],
+          "skippedReason": null,
+          "error": null,
+          "meta": {
+            "consoleErrorCount": 0
+          }
+        },
+        {
+          "suite": "smoke-ui-customers-deep",
+          "status": "passed",
+          "baseUrl": "http://localhost:3001",
+          "startedAt": "2026-03-22T10:20:55.617Z",
+          "endedAt": "2026-03-22T10:21:01.854Z",
+          "durationMs": 6237,
+          "failures": [],
+          "skippedReason": null,
+          "error": null,
+          "meta": {}
+        },
+        {
+          "suite": "smoke-ui-inbox-deep",
+          "status": "passed",
+          "baseUrl": "http://localhost:3001",
+          "startedAt": "2026-03-22T10:21:03.351Z",
+          "endedAt": "2026-03-22T10:21:19.484Z",
+          "durationMs": 16133,
+          "failures": [],
+          "skippedReason": null,
+          "error": null,
+          "meta": {}
+        },
+        {
+          "suite": "smoke-ui-invoices-deep",
+          "status": "passed",
+          "baseUrl": "http://localhost:3001",
+          "startedAt": "2026-03-22T10:21:33.012Z",
+          "endedAt": "2026-03-22T10:21:36.822Z",
+          "durationMs": 3810,
+          "failures": [],
+          "skippedReason": null,
+          "error": null,
+          "meta": {}
+        },
+        {
+          "suite": "smoke-ui-pipeline-deep",
+          "status": "passed",
+          "baseUrl": "http://localhost:3001",
+          "startedAt": "2026-03-22T10:21:27.063Z",
+          "endedAt": "2026-03-22T10:21:31.804Z",
+          "durationMs": 4741,
+          "failures": [],
+          "skippedReason": null,
+          "error": null,
+          "meta": {}
+        },
+        {
+          "suite": "smoke-ui-shortlinks-deep",
+          "status": "skipped",
+          "baseUrl": "http://localhost:3001",
+          "startedAt": "2026-03-22T10:21:22.583Z",
+          "endedAt": "2026-03-22T10:21:24.706Z",
+          "durationMs": 2123,
+          "failures": [],
+          "skippedReason": "Baileys connected number is unavailable, create flow skipped.",
+          "error": null,
+          "meta": {}
+        }
+      ]
+    }
+  ]
+}

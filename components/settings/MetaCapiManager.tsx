@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { KeyRound, ShieldCheck, Sparkles } from "lucide-react";
 
 import { fetchOrganizationsCached } from "@/lib/client/orgsCache";
+import { fetchJsonCached, invalidateFetchCache } from "@/lib/client/fetchCache";
 import { notifyError, notifySuccess } from "@/lib/ui/notify";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -91,12 +92,10 @@ export function MetaCapiManager() {
   }, []);
 
   const loadIntegration = useCallback(async () => {
-    const response = await fetch("/api/meta/integration", { cache: "no-store" });
-    const payload = (await response.json()) as { data?: { integration?: MetaIntegrationView | null } } & ApiError;
-
-    if (!response.ok) {
-      throw new Error(payload.error?.message ?? "Failed to load Meta integration.");
-    }
+    const payload = await fetchJsonCached<{ data?: { integration?: MetaIntegrationView | null } } & ApiError>("/api/meta/integration", {
+      ttlMs: 15_000,
+      init: { cache: "no-store" }
+    });
 
     const integration = payload.data?.integration ?? null;
     setPixelId(integration?.pixelId ?? "");
@@ -109,11 +108,10 @@ export function MetaCapiManager() {
   const loadMetaStatus = useCallback(async () => {
     try {
       setIsLoadingStatus(true);
-      const response = await fetch("/api/meta/integration/status", { cache: "no-store" });
-      const payload = (await response.json()) as { data?: { status?: MetaStatusView } } & ApiError;
-      if (!response.ok) {
-        throw new Error(payload.error?.message ?? "Failed to load Meta status.");
-      }
+      const payload = await fetchJsonCached<{ data?: { status?: MetaStatusView } } & ApiError>("/api/meta/integration/status", {
+        ttlMs: 10_000,
+        init: { cache: "no-store" }
+      });
       setEventStatus(payload.data?.status ?? null);
     } finally {
       setIsLoadingStatus(false);
@@ -124,8 +122,7 @@ export function MetaCapiManager() {
     if (!activeBusiness) {
       return;
     }
-    const response = await fetch(`/api/whatsapp/baileys?orgId=${encodeURIComponent(activeBusiness.id)}`, { cache: "no-store" });
-    const payload = (await response.json()) as {
+    const payload = await fetchJsonCached<{
       data?: {
         connection?: {
           connectedAccount?: {
@@ -137,10 +134,10 @@ export function MetaCapiManager() {
         code?: string;
         message?: string;
       };
-    };
-    if (!response.ok) {
-      return;
-    }
+    }>(`/api/whatsapp/baileys?orgId=${encodeURIComponent(activeBusiness.id)}`, {
+      ttlMs: 8_000,
+      init: { cache: "no-store" }
+    });
     const phone = payload.data?.connection?.connectedAccount?.displayPhone?.trim() ?? "";
     setConnectedPhone(phone);
     setTestPhoneNumber((current) => current || phone);
@@ -214,6 +211,8 @@ export function MetaCapiManager() {
       const integration = payload.data?.integration;
       setHasAccessToken(Boolean(integration?.hasAccessToken));
       setAccessTokenInput("");
+      invalidateFetchCache("GET:/api/meta/integration");
+      invalidateFetchCache("GET:/api/meta/integration/status");
       await loadMetaStatus();
       setSuccess("Konfigurasi Meta Pixel & CAPI tersimpan.");
     } catch (err) {

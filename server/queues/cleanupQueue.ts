@@ -60,3 +60,18 @@ export async function dequeueStorageCleanupJob(timeoutSeconds = 5): Promise<Stor
 
   return parseJobPayload(response[1]);
 }
+
+export async function getStorageCleanupQueueSize(): Promise<number> {
+  const response = await sendRedisCommand(getRedisUrl(), ["LLEN", CLEANUP_QUEUE_KEY]);
+  if (typeof response === "number") {
+    return response;
+  }
+  if (typeof response === "string") {
+    const parsed = Number.parseInt(response, 10);
+    if (Number.isFinite(parsed) && parsed >= 0) {
+      return parsed;
+    }
+  }
+
+  throw new Error("Invalid LLEN response for cleanup queue.");
+}

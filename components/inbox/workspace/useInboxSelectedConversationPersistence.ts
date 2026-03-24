@@ -10,7 +10,7 @@ type UseInboxSelectedConversationPersistenceInput = {
   orgId: string | null;
   selectedConversationId: string | null;
   conversations: ConversationLike[];
-  setSelectedConversationId: (conversationId: string) => void;
+  setSelectedConversationId: (conversationId: string | null) => void;
   loadConversation: (conversationId: string) => Promise<void>;
 };
 

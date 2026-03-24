@@ -35,7 +35,8 @@ export async function fetchOrganizationsCached(options?: { force?: boolean }): P
   const force = Boolean(options?.force);
   const now = Date.now();
 
-  if (!force && orgCache && orgCache.expiresAt > now) {
+  const hasUsableCache = Boolean(orgCache && orgCache.expiresAt > now && orgCache.value.length > 0);
+  if (!force && hasUsableCache && orgCache) {
     return orgCache.value;
   }
 

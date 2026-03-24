@@ -3,6 +3,14 @@
 @tailwind utilities;
 
 :root {
+  --app-font-size: 14px;
+  --app-line-height: 1.45;
+  --app-shell-padding: 1rem;
+  --app-shell-radius: 28px;
+  --app-sidebar-width: 16rem;
+  --app-sidebar-width-mobile: 18rem;
+  --app-sidebar-width-icon: 3rem;
+  --inbox-list-panel-width: 340px;
   --background: 210 40% 98%;
   --foreground: 222 47% 11%;
   --surface: 0 0% 100%;
@@ -70,7 +78,30 @@
 }
 
 body {
-  @apply bg-background text-[13.5px] leading-[1.45] text-foreground transition-colors duration-200 md:text-sm;
+  @apply bg-background text-sm text-foreground transition-colors duration-200;
+  font-family: "Space Grotesk", "Segoe UI", system-ui, -apple-system, sans-serif;
+  font-size: var(--app-font-size);
+  line-height: var(--app-line-height);
+}
+
+@media (min-width: 1024px) and (max-width: 1366px), (min-width: 1024px) and (max-height: 800px) {
+  :root {
+    --app-font-size: 12.75px;
+    --app-line-height: 1.4;
+    --app-shell-padding: 0.625rem;
+    --app-shell-radius: 16px;
+    --app-sidebar-width: 13.5rem;
+    --app-sidebar-width-icon: 2.75rem;
+    --inbox-list-panel-width: 300px;
+  }
+
+  .app-shell-main {
+    padding: var(--app-shell-padding) !important;
+  }
+
+  .app-shell-surface {
+    border-radius: var(--app-shell-radius) !important;
+  }
 }
 
 /* Global radius cap: keep UI corners consistent across the app. */

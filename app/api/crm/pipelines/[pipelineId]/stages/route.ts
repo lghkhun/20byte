@@ -9,6 +9,14 @@ function errorResponse(status: number, code: string, message: string) {
   return NextResponse.json({ error: { code, message } }, { status });
 }
 
+function withServerTiming<T>(response: T, startedAt: number): T {
+  const durationMs = Number((performance.now() - startedAt).toFixed(1));
+  if (response instanceof Response) {
+    response.headers.set("Server-Timing", `app;dur=${durationMs}`);
+  }
+  return response;
+}
+
 export async function POST(
   request: NextRequest,
   context: {
@@ -17,16 +25,17 @@ export async function POST(
     };
   }
 ) {
+  const startedAt = performance.now();
   const auth = requireApiSession(request);
   if (auth.response) {
-    return auth.response;
+    return withServerTiming(auth.response, startedAt);
   }
 
   let body: { name?: unknown; color?: unknown; orgId?: unknown };
   try {
     body = (await request.json()) as { name?: unknown; color?: unknown; orgId?: unknown };
   } catch {
-    return errorResponse(400, "INVALID_JSON", "Request body must be valid JSON.");
+    return withServerTiming(errorResponse(400, "INVALID_JSON", "Request body must be valid JSON."), startedAt);
   }
 
   try {
@@ -38,11 +47,11 @@ export async function POST(
       name: typeof body.name === "string" ? body.name : "",
       color: typeof body.color === "string" ? body.color : ""
     });
-    return NextResponse.json({ data: { pipeline }, meta: {} }, { status: 201 });
+    return withServerTiming(NextResponse.json({ data: { pipeline }, meta: {} }, { status: 201 }), startedAt);
   } catch (error) {
     if (error instanceof ServiceError) {
-      return errorResponse(error.status, error.code, error.message);
+      return withServerTiming(errorResponse(error.status, error.code, error.message), startedAt);
     }
-    return errorResponse(500, "CRM_STAGE_CREATE_FAILED", "Failed to create CRM stage.");
+    return withServerTiming(errorResponse(500, "CRM_STAGE_CREATE_FAILED", "Failed to create CRM stage."), startedAt);
   }
 }

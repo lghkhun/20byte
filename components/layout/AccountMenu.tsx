@@ -6,6 +6,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { ChevronUp, LogOut, Settings, UserCircle } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
+import { invalidateOrganizationsCache } from "@/lib/client/orgsCache";
 
 type AccountMenuProps = {
   user: {
@@ -203,6 +204,7 @@ export function AccountMenu({ user, sidebarExpanded = false }: AccountMenuProps)
                   try {
                     await fetch("/api/auth/logout", { method: "POST" });
                   } finally {
+                    invalidateOrganizationsCache();
                     setOpen(false);
                     setIsSubmitting(false);
                     router.push("/login");

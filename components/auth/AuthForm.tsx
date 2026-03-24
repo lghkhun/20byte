@@ -6,6 +6,7 @@ import { type FormEvent, useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { invalidateOrganizationsCache } from "@/lib/client/orgsCache";
 
 type AuthFormMode = "login" | "register";
 
@@ -28,6 +29,7 @@ export function AuthForm({ mode }: AuthFormProps) {
   const router = useRouter();
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
+  const [phone, setPhone] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
@@ -42,7 +44,7 @@ export function AuthForm({ mode }: AuthFormProps) {
     setIsSubmitting(true);
 
     const endpoint = isLogin ? "/api/auth/login" : "/api/auth/register";
-    const payload = isLogin ? { email, password } : { name, email, password };
+    const payload = isLogin ? { identifier: email, password } : { name, email, phone, password };
 
     try {
       const response = await fetch(endpoint, {
@@ -60,6 +62,7 @@ export function AuthForm({ mode }: AuthFormProps) {
       }
 
       if (isLogin) {
+        invalidateOrganizationsCache();
         setSuccess("Login successful. Redirecting to inbox...");
         router.push("/inbox");
         router.refresh();
@@ -81,7 +84,7 @@ export function AuthForm({ mode }: AuthFormProps) {
     <div className="mx-auto w-full max-w-md rounded-xl border border-border bg-surface/80 p-6">
       <h1 className="text-xl font-semibold">{isLogin ? "Sign in to 20byte" : "Create your account"}</h1>
       <p className="mt-1 text-sm text-muted-foreground">
-        {isLogin ? "Use your email and password to continue." : "Start with your team account credentials."}
+        {isLogin ? "Use your email atau WhatsApp dan password untuk lanjut." : "Start with your team account credentials."}
       </p>
 
       <form className="mt-6 space-y-4" onSubmit={handleSubmit}>
@@ -103,19 +106,37 @@ export function AuthForm({ mode }: AuthFormProps) {
 
         <div className="space-y-2">
           <label className="text-sm font-medium" htmlFor="email">
-            Email
+            {isLogin ? "Email atau WhatsApp" : "Email"}
           </label>
           <Input
             id="email"
             name="email"
-            type="email"
-            autoComplete="email"
+            type={isLogin ? "text" : "email"}
+            autoComplete={isLogin ? "username" : "email"}
             required
             value={email}
             onChange={(event) => setEmail(event.target.value)}
-            placeholder="you@company.com"
+            placeholder={isLogin ? "you@company.com atau 08xxxxxx" : "you@company.com"}
           />
         </div>
+
+        {!isLogin ? (
+          <div className="space-y-2">
+            <label className="text-sm font-medium" htmlFor="phone">
+              WhatsApp Number
+            </label>
+            <Input
+              id="phone"
+              name="phone"
+              type="text"
+              autoComplete="tel"
+              required
+              value={phone}
+              onChange={(event) => setPhone(event.target.value)}
+              placeholder="+628123456789 atau 08123456789"
+            />
+          </div>
+        ) : null}
 
         <div className="space-y-2">
           <label className="text-sm font-medium" htmlFor="password">

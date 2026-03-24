@@ -25,11 +25,14 @@ export function InboxWorkspace() {
   const { density } = useInboxWorkspacePreferences();
   const {
     orgId,
+    hasLoadedOrganizations,
     error,
     isLoadingList,
     conversations,
     selectedConversationId,
     setSelectedConversationId,
+    selectConversation,
+    clearSelectedConversation,
     filter,
     statusFilter,
     setFilter,
@@ -45,6 +48,7 @@ export function InboxWorkspace() {
     createConversation,
     sendAttachmentMessage,
     toggleSelectedConversationStatus,
+    deleteSelectedConversation,
     retryOutboundMessage,
     setSelectedProofMessageId,
     setProofFeedback,
@@ -52,20 +56,12 @@ export function InboxWorkspace() {
     isLoadingConversation,
     isAssigning,
     assignError,
-    tags,
-    notes,
     crmInvoices,
     crmActivity,
+    typingConversationId,
     isLoadingCrm,
     crmError,
-    createTagForCustomer,
-    assignTagForCustomer,
-    createCustomerNoteEntry,
-    updateCustomerNoteEntry,
-    deleteCustomerNoteEntry,
-    selectedProofMessageId,
     isAttachingProof,
-    proofFeedback,
     attachSelectedMessageAsProof,
     openInvoiceDrawer,
     sendInvoiceFromPanel,
@@ -96,7 +92,7 @@ export function InboxWorkspace() {
   const [mobilePane, setMobilePane] = useState<"list" | "chat">("list");
   const [isMobileCrmOpen, setIsMobileCrmOpen] = useState(false);
   const [isDesktopCrmOpen, setIsDesktopCrmOpen] = useState(true);
-  const [crmPanelWidth, setCrmPanelWidth] = useState(340);
+  const [crmPanelWidth, setCrmPanelWidth] = useState(320);
   const [isResizingCrm, setIsResizingCrm] = useState(false);
   const resizeOriginRef = useRef<{ startX: number; startWidth: number } | null>(null);
   const handledDeepLinkConversationIdRef = useRef<string | null>(null);
@@ -111,14 +107,13 @@ export function InboxWorkspace() {
     }
 
     handledDeepLinkConversationIdRef.current = deepLinkedConversationId;
-    setSelectedConversationId(deepLinkedConversationId);
-    void loadConversation(deepLinkedConversationId);
+    selectConversation(deepLinkedConversationId);
 
     const nextParams = new URLSearchParams(searchParams.toString());
     nextParams.delete("conversationId");
     const nextQueryString = nextParams.toString();
     router.replace(nextQueryString ? `${pathname}?${nextQueryString}` : pathname);
-  }, [loadConversation, orgId, pathname, router, searchParams, setSelectedConversationId]);
+  }, [orgId, pathname, router, searchParams, selectConversation]);
 
   useEffect(() => {
     if (selectedConversationId) {
@@ -139,7 +134,7 @@ export function InboxWorkspace() {
     if (saved) {
       const nextWidth = Number(saved);
       if (Number.isFinite(nextWidth)) {
-        setCrmPanelWidth(Math.min(520, Math.max(300, nextWidth)));
+        setCrmPanelWidth(Math.min(480, Math.max(260, nextWidth)));
       }
     }
   }, []);
@@ -155,7 +150,7 @@ export function InboxWorkspace() {
       }
 
       const delta = resizeOriginRef.current.startX - event.clientX;
-      const nextWidth = Math.min(520, Math.max(300, resizeOriginRef.current.startWidth + delta));
+      const nextWidth = Math.min(480, Math.max(260, resizeOriginRef.current.startWidth + delta));
       setCrmPanelWidth(nextWidth);
     }
 
@@ -177,12 +172,12 @@ export function InboxWorkspace() {
   }, [crmPanelWidth]);
 
   const gridLayoutClass = isDesktopCrmOpen
-    ? "grid h-full min-h-0 gap-3 lg:grid-cols-[340px_minmax(0,1fr)_minmax(300px,var(--crm-panel-width))]"
-    : "grid h-full min-h-0 gap-3 lg:grid-cols-[340px_minmax(0,1fr)]";
+    ? "grid h-full min-h-0 gap-2 lg:gap-3 lg:grid-cols-[var(--inbox-list-panel-width,340px)_minmax(0,1fr)_minmax(260px,var(--crm-panel-width))]"
+    : "grid h-full min-h-0 gap-2 lg:gap-3 lg:grid-cols-[var(--inbox-list-panel-width,340px)_minmax(0,1fr)]";
 
   return (
     <section className="flex h-full min-h-0 flex-1 overflow-hidden">
-      {!orgId ? (
+      {!orgId && hasLoadedOrganizations && !error ? (
         <EmptyStatePanel
           title="No Business Found"
           message="No business is linked to this account yet."
@@ -233,9 +228,8 @@ export function InboxWorkspace() {
                 onFilterChange={(nextFilter) => setFilter(nextFilter)}
                 onStatusChange={(nextStatus) => setStatusFilter(nextStatus)}
                 onSelectConversation={(conversationId) => {
-                  setSelectedConversationId(conversationId);
+                  selectConversation(conversationId);
                   setMobilePane("chat");
-                  void loadConversation(conversationId);
                 }}
                 onRefresh={() => {
                   void loadConversations();
@@ -267,16 +261,22 @@ export function InboxWorkspace() {
                 messages={messages}
                 isLoading={isLoadingMessages}
                 isConversationSelected={Boolean(selectedConversationId)}
+                isCustomerTyping={Boolean(selectedConversationId && typingConversationId === selectedConversationId)}
                 error={messageError}
                 onSendText={sendTextMessage}
                 onSendAttachment={sendAttachmentMessage}
                 isCrmPanelOpen={isDesktopCrmOpen}
                 onToggleCrmPanel={() => setIsDesktopCrmOpen((current) => !current)}
                 onToggleConversationStatus={toggleSelectedConversationStatus}
+                onDeleteConversation={deleteSelectedConversation}
                 onRetryOutboundMessage={retryOutboundMessage}
                 onSelectProofMessage={(messageId) => {
                   setSelectedProofMessageId(messageId);
                   setProofFeedback(null);
+                  setIsProofShortcutModalOpen(true);
+                }}
+                onUnselectConversation={() => {
+                  clearSelectedConversation();
                 }}
               />
             </div>
@@ -292,8 +292,8 @@ export function InboxWorkspace() {
                     setIsResizingCrm(true);
                   }}
                 />
-                <div className="flex h-full min-h-0 max-h-full flex-col overflow-hidden rounded-[24px] border border-border/70 bg-card/95 p-3 shadow-sm shadow-black/5">
-                  <div className="inbox-scroll min-h-0 flex-1 overflow-y-auto overscroll-contain pr-1">
+                <div className="flex h-full min-h-0 max-h-full flex-col overflow-hidden">
+                  <div className="inbox-scroll min-h-0 flex-1 overflow-y-auto overscroll-contain">
                   <CrmContextPanel
                     conversation={selectedConversation}
                     messages={messages}
@@ -301,28 +301,17 @@ export function InboxWorkspace() {
                     isLoading={isLoadingConversation}
                     isAssigning={isAssigning}
                     assignError={assignError}
-                    tags={tags}
-                    notes={notes}
                     invoices={crmInvoices}
                     activity={crmActivity}
                     isLoadingCrm={isLoadingCrm}
                     crmError={crmError}
-                    onCreateTag={createTagForCustomer}
-                    onAssignTag={assignTagForCustomer}
-                    onCreateNote={createCustomerNoteEntry}
-                    onUpdateNote={updateCustomerNoteEntry}
-                    onDeleteNote={deleteCustomerNoteEntry}
-                    selectedProofMessageId={selectedProofMessageId}
-                    isAttachingProof={isAttachingProof}
-                    proofFeedback={proofFeedback}
-                    onAttachProof={attachSelectedMessageAsProof}
                     onOpenInvoiceDrawer={openInvoiceDrawer}
                     onSendInvoice={sendInvoiceFromPanel}
                     onMarkInvoicePaid={markInvoicePaidFromPanel}
                     onRefreshConversation={async () => {
                       if (selectedConversationId) {
                         await loadConversation(selectedConversationId);
-                        await loadConversations();
+                        await loadConversations({ background: true });
                       }
                     }}
                     isSendingInvoice={isSendingInvoice}
@@ -345,28 +334,17 @@ export function InboxWorkspace() {
             isLoadingConversation={isLoadingConversation}
             isAssigning={isAssigning}
             assignError={assignError}
-            tags={tags}
-            notes={notes}
             invoices={crmInvoices}
             activity={crmActivity}
             isLoadingCrm={isLoadingCrm}
             crmError={crmError}
-            onCreateTag={createTagForCustomer}
-            onAssignTag={assignTagForCustomer}
-            onCreateNote={createCustomerNoteEntry}
-            onUpdateNote={updateCustomerNoteEntry}
-            onDeleteNote={deleteCustomerNoteEntry}
-            selectedProofMessageId={selectedProofMessageId}
-            isAttachingProof={isAttachingProof}
-            proofFeedback={proofFeedback}
-            onAttachProof={attachSelectedMessageAsProof}
             onOpenInvoiceDrawer={openInvoiceDrawer}
             onSendInvoice={sendInvoiceFromPanel}
             onMarkInvoicePaid={markInvoicePaidFromPanel}
             onRefreshConversation={async () => {
               if (selectedConversationId) {
                 await loadConversation(selectedConversationId);
-                await loadConversations();
+                await loadConversations({ background: true });
               }
             }}
             isSendingInvoice={isSendingInvoice}
@@ -391,6 +369,7 @@ export function InboxWorkspace() {
       <AttachProofShortcutModal
         open={isProofShortcutModalOpen}
         isSubmitting={isAttachingProof}
+        invoices={crmInvoices}
         onClose={() => setIsProofShortcutModalOpen(false)}
         onSubmit={async (invoiceId, milestoneType) => {
           await attachSelectedMessageAsProof(invoiceId, milestoneType);

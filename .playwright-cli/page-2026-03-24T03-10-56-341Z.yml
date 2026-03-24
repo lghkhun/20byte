@@ -1,0 +1,114 @@
+- generic [active] [ref=e1]:
+  - generic [ref=e22]:
+    - generic [ref=e25]:
+      - list [ref=e27]:
+        - listitem [ref=e28]:
+          - link "20 20byte Chat-first CRM" [ref=e29] [cursor=pointer]:
+            - /url: /inbox
+            - generic [ref=e31]: "20"
+            - generic [ref=e32]:
+              - generic [ref=e33]: 20byte
+              - generic [ref=e34]: Chat-first CRM
+      - generic [ref=e36]:
+        - generic [ref=e37]: Platform
+        - list [ref=e38]:
+          - listitem [ref=e39]:
+            - link "Dashboard" [ref=e40] [cursor=pointer]:
+              - /url: /dashboard
+              - img [ref=e41]
+              - generic [ref=e46]: Dashboard
+          - listitem [ref=e47]:
+            - link "Inbox" [ref=e48] [cursor=pointer]:
+              - /url: /inbox
+              - img [ref=e49]
+              - generic [ref=e51]: Inbox
+          - listitem [ref=e52]:
+            - link "Customers" [ref=e53] [cursor=pointer]:
+              - /url: /customers
+              - img [ref=e54]
+              - generic [ref=e59]: Customers
+          - listitem [ref=e60]:
+            - link "Invoices" [ref=e61] [cursor=pointer]:
+              - /url: /invoices
+              - img [ref=e62]
+              - generic [ref=e65]: Invoices
+          - listitem [ref=e66]:
+            - link "Shortlink" [ref=e67] [cursor=pointer]:
+              - /url: /shortlinks
+              - img [ref=e68]
+              - generic [ref=e71]: Shortlink
+          - listitem [ref=e72]:
+            - link "CRM Pipeline" [ref=e73] [cursor=pointer]:
+              - /url: /crm/pipelines
+              - img [ref=e74]
+              - generic [ref=e78]: CRM Pipeline
+          - listitem [ref=e79]:
+            - link "Billing" [ref=e80] [cursor=pointer]:
+              - /url: /billing
+              - img [ref=e81]
+              - generic [ref=e83]: Billing
+          - listitem [ref=e84]:
+            - link "Superadmin" [ref=e85] [cursor=pointer]:
+              - /url: /sa
+              - img [ref=e86]
+              - generic [ref=e88]: Superadmin
+      - list [ref=e90]:
+        - listitem [ref=e91]:
+          - button "PS PW SA 1774321676 pw.sa.1774321676@example.com" [ref=e92] [cursor=pointer]:
+            - generic [ref=e94]: PS
+            - generic [ref=e95]:
+              - generic [ref=e96]: PW SA 1774321676
+              - generic [ref=e97]: pw.sa.1774321676@example.com
+            - img [ref=e98]
+      - button "Toggle Sidebar" [ref=e101] [cursor=pointer]:
+        - img [ref=e102]
+        - generic [ref=e104]: Close sidebar
+    - main [ref=e105]:
+      - main [ref=e106]:
+        - generic [ref=e190]:
+          - generic [ref=e191]:
+            - heading "Billing" [level=1] [ref=e192]
+            - paragraph [ref=e193]: Kelola status trial/langganan dan pembayaran subscription.
+          - generic [ref=e229]:
+            - generic [ref=e230]:
+              - paragraph [ref=e231]: Status subscription
+              - generic [ref=e232]: TRIALING
+            - generic [ref=e233]:
+              - generic [ref=e234]:
+                - paragraph [ref=e235]: Trial berakhir
+                - paragraph [ref=e236]: 07 Apr 2026, 10.07
+              - generic [ref=e237]:
+                - paragraph [ref=e238]: Grace berakhir
+                - paragraph [ref=e239]: 10 Apr 2026, 10.07
+              - generic [ref=e240]:
+                - paragraph [ref=e241]: Periode aktif sampai
+                - paragraph [ref=e242]: "-"
+            - generic [ref=e243]:
+              - paragraph [ref=e244]: Nominal per siklus 28 hari
+              - paragraph [ref=e245]: "Base: Rp 99.000"
+              - paragraph [ref=e246]: "Fee gateway 2%: Rp 1.980"
+              - paragraph [ref=e247]: "Total: Rp 100.980"
+            - button "Bayar sekarang" [ref=e248] [cursor=pointer]
+          - generic [ref=e249]:
+            - heading "QR / Payment Number" [level=2] [ref=e250]
+            - paragraph [ref=e251]: THIS.IS.JUST.AN.EXAMPLE.FOR.SANDBOX.00020101021226610016ID.CO.SHOPEE.WWW01189360091800216005230208216005230303UME51440014ID.CO.QRIS.WWW.11111
+            - paragraph [ref=e252]: "Expired: 24 Mar 2026, 11.10"
+          - generic [ref=e215]:
+            - heading "Riwayat Tagihan" [level=2] [ref=e216]
+            - table [ref=e218]:
+              - rowgroup [ref=e219]:
+                - row "Order ID Status Total Dibuat Dibayar" [ref=e220]:
+                  - columnheader "Order ID" [ref=e221]
+                  - columnheader "Status" [ref=e222]
+                  - columnheader "Total" [ref=e223]
+                  - columnheader "Dibuat" [ref=e224]
+                  - columnheader "Dibayar" [ref=e225]
+              - rowgroup [ref=e226]:
+                - row "SUB-cmn41bcmy0017i0moz993ue87-1774321852295 PENDING Rp 100.980 24 Mar 2026, 10.10 -" [ref=e253]:
+                  - cell "SUB-cmn41bcmy0017i0moz993ue87-1774321852295" [ref=e254]
+                  - cell "PENDING" [ref=e255]
+                  - cell "Rp 100.980" [ref=e256]
+                  - cell "24 Mar 2026, 10.10" [ref=e257]
+                  - cell "-" [ref=e258]
+  - region "Notifications alt+T"
+  - alert [ref=e20]

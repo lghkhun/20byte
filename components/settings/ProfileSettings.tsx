@@ -8,12 +8,15 @@ import { Camera, UserCircle2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useSettingsHeaderAction } from "@/components/settings/settings-header-actions";
+import { fetchJsonCached } from "@/lib/client/fetchCache";
+import { invalidateLocalImageCache, useLocalImageCache } from "@/lib/client/localImageCache";
 
 type ProfileApiResponse = {
   data?: {
     user?: {
       id: string;
       email: string;
+      phoneE164: string | null;
       name: string | null;
       avatarUrl: string | null;
       createdAt: string;
@@ -30,13 +33,14 @@ function resolveError(payload: ProfileApiResponse | null, fallback: string) {
   return payload?.error?.message ?? fallback;
 }
 
-function dispatchProfileUpdated(detail: { email: string; name: string | null; avatarUrl: string | null }) {
+function dispatchProfileUpdated(detail: { email: string; name: string | null; avatarUrl: string | null; avatarVersion?: string }) {
   window.dispatchEvent(new CustomEvent("app-profile-updated", { detail }));
 }
 
 export function ProfileSettings() {
   const formId = "settings-profile-form";
   const [email, setEmail] = useState("");
+  const [phone, setPhone] = useState("");
   const [name, setName] = useState("");
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
   const [currentPassword, setCurrentPassword] = useState("");
@@ -46,7 +50,12 @@ export function ProfileSettings() {
   const [isUploadingAvatar, setIsUploadingAvatar] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
-  const canSubmit = Boolean(!isLoading && !isSaving && name.trim());
+  const cachedAvatarUrl = useLocalImageCache(avatarUrl, {
+    cacheKey: `profile-avatar:${email.toLowerCase()}`,
+    ttlMs: 24 * 60 * 60 * 1000,
+    maxBytes: 256 * 1024
+  });
+  const canSubmit = Boolean(!isLoading && !isSaving && name.trim() && phone.trim());
   const saveAction = useMemo(
     () => (
       <Button disabled={!canSubmit} type="submit" form={formId} className="h-10 rounded-xl">
@@ -66,9 +75,11 @@ export function ProfileSettings() {
         setIsLoading(true);
         setError(null);
 
-        const response = await fetch("/api/auth/profile", { cache: "no-store" });
-        const payload = (await response.json().catch(() => null)) as ProfileApiResponse | null;
-        if (!response.ok || !payload?.data?.user) {
+        const payload = await fetchJsonCached<ProfileApiResponse>("/api/auth/profile", {
+          ttlMs: 12_000,
+          init: { cache: "no-store" }
+        });
+        if (!payload?.data?.user) {
           throw new Error(resolveError(payload, "Failed to load profile."));
         }
 
@@ -77,12 +88,14 @@ export function ProfileSettings() {
         }
 
         setEmail(payload.data.user.email);
+        setPhone(payload.data.user.phoneE164 ?? "");
         setName(payload.data.user.name ?? "");
         setAvatarUrl(payload.data.user.avatarUrl ?? null);
         dispatchProfileUpdated({
           email: payload.data.user.email,
           name: payload.data.user.name ?? null,
-          avatarUrl: payload.data.user.avatarUrl ?? null
+          avatarUrl: payload.data.user.avatarUrl ?? null,
+          avatarVersion: payload.data.user.updatedAt
         });
       } catch (loadError) {
         if (mounted) {
@@ -116,6 +129,7 @@ export function ProfileSettings() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           name,
+          phone,
           currentPassword: currentPassword || undefined,
           newPassword: newPassword || undefined
         })
@@ -126,12 +140,16 @@ export function ProfileSettings() {
       }
 
       if (payload?.data?.user) {
+        invalidateLocalImageCache(`profile-avatar:${payload.data.user.email.toLowerCase()}`);
+        invalidateLocalImageCache(`user-avatar:${payload.data.user.email.toLowerCase()}`);
         setName(payload.data.user.name ?? "");
+        setPhone(payload.data.user.phoneE164 ?? "");
         setAvatarUrl(payload.data.user.avatarUrl ?? null);
         dispatchProfileUpdated({
           email: payload.data.user.email,
           name: payload.data.user.name ?? null,
-          avatarUrl: payload.data.user.avatarUrl ?? null
+          avatarUrl: payload.data.user.avatarUrl ?? null,
+          avatarVersion: payload.data.user.updatedAt
         });
       }
       setCurrentPassword("");
@@ -162,11 +180,14 @@ export function ProfileSettings() {
         throw new Error(resolveError(payload, "Failed to upload avatar."));
       }
 
+      invalidateLocalImageCache(`profile-avatar:${payload.data.user.email.toLowerCase()}`);
+      invalidateLocalImageCache(`user-avatar:${payload.data.user.email.toLowerCase()}`);
       setAvatarUrl(payload.data.user.avatarUrl ?? null);
       dispatchProfileUpdated({
         email: payload.data.user.email,
         name: payload.data.user.name ?? null,
-        avatarUrl: payload.data.user.avatarUrl ?? null
+        avatarUrl: payload.data.user.avatarUrl ?? null,
+        avatarVersion: payload.data.user.updatedAt
       });
       setSuccess("Avatar updated successfully.");
     } catch (uploadError) {
@@ -187,7 +208,7 @@ export function ProfileSettings() {
             <div className="flex flex-col gap-4 rounded-2xl border border-border/70 bg-background/40 p-4 sm:flex-row sm:items-center">
               <div className="relative flex h-20 w-20 shrink-0 items-center justify-center overflow-hidden rounded-2xl border border-border/70 bg-muted/50">
                 {avatarUrl ? (
-                  <Image src={avatarUrl} alt={name || email} fill unoptimized className="object-cover" />
+                  <Image src={cachedAvatarUrl ?? avatarUrl} alt={name || email} fill unoptimized className="object-cover" />
                 ) : (
                   <UserCircle2 className="h-10 w-10 text-muted-foreground" />
                 )}
@@ -237,6 +258,19 @@ export function ProfileSettings() {
               value={name}
               onChange={(event) => setName(event.target.value)}
               placeholder="Your name"
+            />
+          </div>
+
+          <div className="space-y-2">
+            <label className="text-sm font-medium text-foreground" htmlFor="profile-phone">
+              WhatsApp Number
+            </label>
+            <Input
+              id="profile-phone"
+              value={phone}
+              onChange={(event) => setPhone(event.target.value)}
+              placeholder="+628123456789 atau 08123456789"
+              required
             />
           </div>
 

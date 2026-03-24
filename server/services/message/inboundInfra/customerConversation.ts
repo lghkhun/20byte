@@ -3,6 +3,33 @@ import { ConversationStatus, type Prisma } from "@prisma/client";
 import type { ResolvedAttribution } from "@/server/services/message/messageTypes";
 import { ServiceError } from "@/server/services/serviceError";
 
+const MAX_WA_PROFILE_PIC_URL_LENGTH = 191;
+
+function sanitizeWaProfilePicUrl(rawValue?: string): string | undefined {
+  const value = (rawValue ?? "").trim();
+  if (!value) {
+    return undefined;
+  }
+
+  if (value.length <= MAX_WA_PROFILE_PIC_URL_LENGTH) {
+    return value;
+  }
+
+  try {
+    const parsed = new URL(value);
+    parsed.search = "";
+    parsed.hash = "";
+    const compact = parsed.toString();
+    if (compact.length <= MAX_WA_PROFILE_PIC_URL_LENGTH) {
+      return compact;
+    }
+  } catch {
+    // Ignore URL parsing failures and fall back to dropping the value.
+  }
+
+  return undefined;
+}
+
 export async function getOrCreateCustomer(
   tx: Prisma.TransactionClient,
   orgId: string,
@@ -11,6 +38,7 @@ export async function getOrCreateCustomer(
   customerAvatarUrl?: string,
   attribution?: ResolvedAttribution
 ) {
+  const safeCustomerAvatarUrl = sanitizeWaProfilePicUrl(customerAvatarUrl);
   const existing = await tx.customer.findUnique({
     where: {
       orgId_phoneE164: {
@@ -35,8 +63,8 @@ export async function getOrCreateCustomer(
       updateData.displayName = customerDisplayName;
     }
 
-    if (customerAvatarUrl) {
-      updateData.waProfilePicUrl = customerAvatarUrl;
+    if (safeCustomerAvatarUrl) {
+      updateData.waProfilePicUrl = safeCustomerAvatarUrl;
     }
 
     if (!existing.source) {
@@ -83,7 +111,7 @@ export async function getOrCreateCustomer(
       orgId,
       phoneE164: customerPhoneE164,
       displayName: customerDisplayName ?? null,
-      waProfilePicUrl: customerAvatarUrl ?? null,
+      waProfilePicUrl: safeCustomerAvatarUrl ?? null,
       source: attribution?.source ?? "organic",
       campaign: attribution?.campaign ?? null,
       adset: createdAdset,
@@ -110,15 +138,12 @@ export async function getOrCreateOpenConversation(
   customerId: string,
   attribution?: ResolvedAttribution
 ) {
-  const existingOpenConversation = await tx.conversation.findFirst({
+  const latestConversation = await tx.conversation.findFirst({
     where: {
       orgId,
-      customerId,
-      status: ConversationStatus.OPEN
+      customerId
     },
-    orderBy: {
-      updatedAt: "desc"
-    },
+    orderBy: [{ updatedAt: "desc" }, { lastMessageAt: "desc" }, { createdAt: "desc" }],
     select: {
       id: true,
       status: true,
@@ -131,31 +156,34 @@ export async function getOrCreateOpenConversation(
     }
   });
 
-  if (existingOpenConversation) {
+  if (latestConversation) {
     const updateData: Prisma.ConversationUpdateInput = {};
-    if (!existingOpenConversation.sourceCampaign && attribution?.campaign) {
+    if (!latestConversation.sourceCampaign && attribution?.campaign) {
       updateData.sourceCampaign = attribution.campaign;
     }
 
-    if (!existingOpenConversation.sourcePlatform && attribution?.platform) {
+    if (!latestConversation.sourcePlatform && attribution?.platform) {
       updateData.sourcePlatform = attribution.platform;
     }
 
-    if (!existingOpenConversation.sourceMedium && attribution?.medium) {
+    if (!latestConversation.sourceMedium && attribution?.medium) {
       updateData.sourceMedium = attribution.medium;
     }
 
-    if (!existingOpenConversation.shortlinkId && attribution?.shortlinkId) {
+    if (!latestConversation.shortlinkId && attribution?.shortlinkId) {
       updateData.shortlinkId = attribution.shortlinkId;
     }
-    if (!existingOpenConversation.trackingId && attribution?.trackingId) {
+    if (!latestConversation.trackingId && attribution?.trackingId) {
       updateData.trackingId = attribution.trackingId;
+    }
+    if (latestConversation.status !== ConversationStatus.OPEN) {
+      updateData.status = ConversationStatus.OPEN;
     }
 
     if (Object.keys(updateData).length > 0) {
       const updateResult = await tx.conversation.updateMany({
         where: {
-          id: existingOpenConversation.id,
+          id: latestConversation.id,
           orgId
         },
         data: updateData
@@ -167,7 +195,8 @@ export async function getOrCreateOpenConversation(
     }
 
     return {
-      ...existingOpenConversation,
+      ...latestConversation,
+      status: ConversationStatus.OPEN,
       created: false
     };
   }

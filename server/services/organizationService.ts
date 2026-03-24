@@ -2,8 +2,8 @@ import { Role } from "@prisma/client";
 
 import { prisma } from "@/lib/db/prisma";
 import { getProxyAssetUrl, getPublicObjectKeyFromUrl } from "@/lib/r2/client";
+import { assertOrgBillingAccess } from "@/server/services/billingService";
 import {
-  canAccessOrganizationSettings,
   canAssignOrganizationRole,
   canManageOrganizationMember,
   canViewOrganizationMembers
@@ -147,6 +147,8 @@ async function requireMembership(userId: string, orgId: string) {
     throw new ServiceError(403, "ORG_ACCESS_DENIED", "You do not have access to this organization.");
   }
 
+  await assertOrgBillingAccess(orgId, "write");
+
   return membership;
 }
 
@@ -272,7 +274,23 @@ export async function getPrimaryOrganizationForUser(userId: string): Promise<Org
 export async function resolvePrimaryOrganizationIdForUser(userId: string, candidateOrgId: string): Promise<string> {
   const normalizedCandidate = candidateOrgId.trim();
   if (normalizedCandidate) {
-    return normalizedCandidate;
+    const membership = await prisma.orgMember.findUnique({
+      where: {
+        orgId_userId: {
+          orgId: normalizedCandidate,
+          userId
+        }
+      },
+      select: {
+        orgId: true
+      }
+    });
+
+    if (!membership) {
+      throw new ServiceError(403, "ORG_ACCESS_DENIED", "You do not have access to this business.");
+    }
+
+    return membership.orgId;
   }
 
   const organization = await getPrimaryOrganizationForUser(userId);
@@ -288,7 +306,10 @@ export async function getOrganizationBusinessProfile(
   candidateOrgId = ""
 ): Promise<OrganizationBusinessProfile> {
   const orgId = await resolvePrimaryOrganizationIdForUser(actorUserId, candidateOrgId);
-  await requireMembership(actorUserId, orgId);
+  const membership = await requireMembership(actorUserId, orgId);
+  if (membership.role !== Role.OWNER) {
+    throw new ServiceError(403, "FORBIDDEN_OWNER_ONLY", "Only owner can access business settings.");
+  }
 
   const selectWithNpwp = {
     id: true,
@@ -363,8 +384,8 @@ export async function updateOrganizationBusinessProfile(input: {
 }): Promise<OrganizationBusinessProfile> {
   const orgId = await resolvePrimaryOrganizationIdForUser(input.actorUserId, input.orgId?.trim() ?? "");
   const membership = await requireMembership(input.actorUserId, orgId);
-  if (!canAccessOrganizationSettings(membership.role)) {
-    throw new ServiceError(403, "FORBIDDEN_SETTINGS_ACCESS", "Your role cannot access organization settings.");
+  if (membership.role !== Role.OWNER) {
+    throw new ServiceError(403, "FORBIDDEN_OWNER_ONLY", "Only owner can update business settings.");
   }
 
   const dataWithNpwp = {

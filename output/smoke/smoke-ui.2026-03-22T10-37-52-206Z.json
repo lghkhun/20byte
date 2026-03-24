@@ -1,0 +1,14 @@
+{
+  "suite": "smoke-ui",
+  "status": "passed",
+  "baseUrl": "http://localhost:3001",
+  "startedAt": "2026-03-22T10:37:31.755Z",
+  "endedAt": "2026-03-22T10:37:52.206Z",
+  "durationMs": 20451,
+  "failures": [],
+  "skippedReason": null,
+  "error": null,
+  "meta": {
+    "consoleErrorCount": 0
+  }
+}

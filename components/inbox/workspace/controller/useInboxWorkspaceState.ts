@@ -3,15 +3,17 @@
 import { useState } from "react";
 
 import type { ConversationItem, ConversationListFilter, ConversationStatusFilter, MessageItem } from "@/components/inbox/types";
-import type { CrmActivityItem, CrmInvoiceItem, CustomerNoteItem, CustomerTagItem, OrgSummary } from "@/components/inbox/workspace/types";
+import type { CrmActivityItem, CrmInvoiceItem, CustomerTagItem, OrgSummary } from "@/components/inbox/workspace/types";
 
 export function useInboxWorkspaceState() {
   const [organizations, setOrganizations] = useState<OrgSummary[]>([]);
+  const [hasLoadedOrganizations, setHasLoadedOrganizations] = useState(false);
   const [orgId, setOrgId] = useState<string | null>(null);
   const [filter, setFilter] = useState<ConversationListFilter>("UNASSIGNED");
   const [statusFilter, setStatusFilter] = useState<ConversationStatusFilter>("OPEN");
   const [conversations, setConversations] = useState<ConversationItem[]>([]);
   const [selectedConversationId, setSelectedConversationId] = useState<string | null>(null);
+  const [isConversationManuallyCleared, setIsConversationManuallyCleared] = useState(false);
   const [selectedConversation, setSelectedConversation] = useState<ConversationItem | null>(null);
   const [isLoadingList, setIsLoadingList] = useState(false);
   const [isLoadingConversation, setIsLoadingConversation] = useState(false);
@@ -36,14 +38,16 @@ export function useInboxWorkspaceState() {
   const [isQuickReplyModalOpen, setIsQuickReplyModalOpen] = useState(false);
   const [isShortcutHelpOpen, setIsShortcutHelpOpen] = useState(false);
   const [tags, setTags] = useState<CustomerTagItem[]>([]);
-  const [notes, setNotes] = useState<CustomerNoteItem[]>([]);
   const [crmInvoices, setCrmInvoices] = useState<CrmInvoiceItem[]>([]);
   const [crmActivity, setCrmActivity] = useState<CrmActivityItem[]>([]);
   const [metaTotal, setMetaTotal] = useState<number>(0);
+  const [typingConversationId, setTypingConversationId] = useState<string | null>(null);
 
   return {
     organizations,
     setOrganizations,
+    hasLoadedOrganizations,
+    setHasLoadedOrganizations,
     orgId,
     setOrgId,
     filter,
@@ -54,6 +58,8 @@ export function useInboxWorkspaceState() {
     setConversations,
     selectedConversationId,
     setSelectedConversationId,
+    isConversationManuallyCleared,
+    setIsConversationManuallyCleared,
     selectedConversation,
     setSelectedConversation,
     isLoadingList,
@@ -102,14 +108,14 @@ export function useInboxWorkspaceState() {
     setIsShortcutHelpOpen,
     tags,
     setTags,
-    notes,
-    setNotes,
     crmInvoices,
     setCrmInvoices,
     crmActivity,
     setCrmActivity,
     metaTotal,
-    setMetaTotal
+    setMetaTotal,
+    typingConversationId,
+    setTypingConversationId
   };
 }
 

@@ -2,7 +2,7 @@
 
 import { useCallback } from "react";
 
-import type { AssignConversationResponse, SendMessageResponse, UpdateConversationStatusResponse } from "@/components/inbox/workspace/types";
+import type { AssignConversationResponse, DeleteConversationResponse, SendMessageResponse, UpdateConversationStatusResponse } from "@/components/inbox/workspace/types";
 
 import { useInboxWorkspaceCrmInvoiceActions } from "./useInboxWorkspaceCrmInvoiceActions";
 import type { InboxWorkspaceLoaders } from "./useInboxWorkspaceLoaders";
@@ -22,11 +22,48 @@ export function useInboxWorkspaceActions(state: InboxWorkspaceState, loaders: In
     setIsAssigning,
     setIsUpdatingConversationStatus,
     setSelectedConversationId,
+    setSelectedConversation,
+    setMessages,
+    setSelectedProofMessageId,
+    setTags,
+    setCrmInvoices,
+    setCrmActivity,
+    setIsConversationManuallyCleared,
     setIsQuickReplyModalOpen,
     setIsShortcutHelpOpen
   } = state;
 
   const { loadConversation, loadConversations, loadMessages } = loaders;
+  const loadConversationsBackground = useCallback(() => loadConversations({ background: true }), [loadConversations]);
+
+  const selectConversation = useCallback(
+    (conversationId: string) => {
+      setIsConversationManuallyCleared(false);
+      setSelectedConversationId(conversationId);
+      void loadConversation(conversationId);
+    },
+    [loadConversation, setIsConversationManuallyCleared, setSelectedConversationId]
+  );
+
+  const clearSelectedConversation = useCallback(() => {
+    setIsConversationManuallyCleared(true);
+    setSelectedConversationId(null);
+    setSelectedConversation(null);
+    setMessages([]);
+    setSelectedProofMessageId(null);
+    setTags([]);
+    setCrmInvoices([]);
+    setCrmActivity([]);
+  }, [
+    setCrmActivity,
+    setCrmInvoices,
+    setIsConversationManuallyCleared,
+    setMessages,
+    setSelectedConversation,
+    setSelectedConversationId,
+    setSelectedProofMessageId,
+    setTags
+  ]);
 
   const sendTextMessage = useCallback(
     async (text: string) => {
@@ -44,13 +81,13 @@ export function useInboxWorkspaceActions(state: InboxWorkspaceState, loaders: In
       const payload = (await response.json().catch(() => null)) as SendMessageResponse | null;
       if (!response.ok) {
         setMessageError(payload?.error?.message ?? "Failed to send message.");
-        await Promise.all([loadMessages(selectedConversationId), loadConversations()]);
+        await Promise.all([loadMessages(selectedConversationId), loadConversationsBackground()]);
         return;
       }
 
-      await Promise.all([loadMessages(selectedConversationId), loadConversations()]);
+      await Promise.all([loadMessages(selectedConversationId), loadConversationsBackground()]);
     },
-    [loadConversations, loadMessages, orgId, selectedConversationId, setMessageError]
+    [loadConversationsBackground, loadMessages, orgId, selectedConversationId, setMessageError]
   );
 
   const createConversation = useCallback(
@@ -82,11 +119,12 @@ export function useInboxWorkspaceActions(state: InboxWorkspaceState, loaders: In
       await loadConversations();
       const createdConversationId = payload?.data?.conversation?.id;
       if (createdConversationId) {
+        setIsConversationManuallyCleared(false);
         setSelectedConversationId(createdConversationId);
         await loadConversation(createdConversationId);
       }
     },
-    [loadConversation, loadConversations, orgId, setSelectedConversationId]
+    [loadConversation, loadConversations, orgId, setIsConversationManuallyCleared, setSelectedConversationId]
   );
 
   const sendTemplateMessage = useCallback(
@@ -112,13 +150,13 @@ export function useInboxWorkspaceActions(state: InboxWorkspaceState, loaders: In
       const payload = (await response.json().catch(() => null)) as SendMessageResponse | null;
       if (!response.ok) {
         setMessageError(payload?.error?.message ?? "Failed to send template message.");
-        await Promise.all([loadMessages(selectedConversationId), loadConversations()]);
+        await Promise.all([loadMessages(selectedConversationId), loadConversationsBackground()]);
         return;
       }
 
-      await Promise.all([loadMessages(selectedConversationId), loadConversations()]);
+      await Promise.all([loadMessages(selectedConversationId), loadConversationsBackground()]);
     },
-    [loadConversations, loadMessages, orgId, selectedConversationId, setMessageError]
+    [loadConversationsBackground, loadMessages, orgId, selectedConversationId, setMessageError]
   );
 
   const sendAttachmentMessage = useCallback(
@@ -141,13 +179,13 @@ export function useInboxWorkspaceActions(state: InboxWorkspaceState, loaders: In
       const payload = (await response.json().catch(() => null)) as SendMessageResponse | null;
       if (!response.ok) {
         setMessageError(payload?.error?.message ?? "Failed to process attachment.");
-        await Promise.all([loadMessages(selectedConversationId), loadConversations()]);
+        await Promise.all([loadMessages(selectedConversationId), loadConversationsBackground()]);
         return;
       }
 
-      await Promise.all([loadMessages(selectedConversationId), loadConversations()]);
+      await Promise.all([loadMessages(selectedConversationId), loadConversationsBackground()]);
     },
-    [loadConversations, loadMessages, orgId, selectedConversationId, setMessageError]
+    [loadConversationsBackground, loadMessages, orgId, selectedConversationId, setMessageError]
   );
 
   const toggleSelectedConversationStatus = useCallback(async () => {
@@ -171,7 +209,7 @@ export function useInboxWorkspaceActions(state: InboxWorkspaceState, loaders: In
         return;
       }
 
-      await loadConversations();
+      await loadConversationsBackground();
     } catch {
       setAssignError("Network error while updating conversation status.");
     } finally {
@@ -179,13 +217,36 @@ export function useInboxWorkspaceActions(state: InboxWorkspaceState, loaders: In
     }
   }, [
     isUpdatingConversationStatus,
-    loadConversations,
+    loadConversationsBackground,
     orgId,
     selectedConversation,
     selectedConversationId,
     setAssignError,
     setIsUpdatingConversationStatus
   ]);
+
+  const deleteSelectedConversation = useCallback(async () => {
+    if (!orgId || !selectedConversationId) {
+      return;
+    }
+
+    setAssignError(null);
+    try {
+      const response = await fetch(`/api/conversations/${encodeURIComponent(selectedConversationId)}?orgId=${encodeURIComponent(orgId)}`, {
+        method: "DELETE"
+      });
+
+      const payload = (await response.json().catch(() => null)) as DeleteConversationResponse | null;
+      if (!response.ok) {
+        setAssignError(payload?.error?.message ?? "Failed to delete conversation.");
+        return;
+      }
+
+      await loadConversationsBackground();
+    } catch {
+      setAssignError("Network error while deleting conversation.");
+    }
+  }, [loadConversationsBackground, orgId, selectedConversationId, setAssignError]);
 
   const retryOutboundMessage = useCallback(
     async (messageId: string) => {
@@ -206,9 +267,9 @@ export function useInboxWorkspaceActions(state: InboxWorkspaceState, loaders: In
         return;
       }
 
-      await Promise.all([loadMessages(selectedConversationId), loadConversations()]);
+      await Promise.all([loadMessages(selectedConversationId), loadConversationsBackground()]);
     },
-    [loadConversations, loadMessages, orgId, selectedConversationId, setMessageError]
+    [loadConversationsBackground, loadMessages, orgId, selectedConversationId, setMessageError]
   );
 
   const assignSelectedConversationToMe = useCallback(async () => {
@@ -231,13 +292,13 @@ export function useInboxWorkspaceActions(state: InboxWorkspaceState, loaders: In
         return;
       }
 
-      await loadConversations();
+      await loadConversationsBackground();
     } catch {
       setAssignError("Network error while assigning conversation.");
     } finally {
       setIsAssigning(false);
     }
-  }, [isAssigning, loadConversations, orgId, selectedConversationId, setAssignError, setIsAssigning]);
+  }, [isAssigning, loadConversationsBackground, orgId, selectedConversationId, setAssignError, setIsAssigning]);
 
   const goToNextUnassignedConversation = useCallback(() => {
     const unassigned = conversations.filter((conversation) => !conversation.assignedToMemberId);
@@ -252,14 +313,14 @@ export function useInboxWorkspaceActions(state: InboxWorkspaceState, loaders: In
       return;
     }
 
-    setSelectedConversationId(nextConversation.id);
-    void loadConversation(nextConversation.id);
-  }, [conversations, loadConversation, selectedConversationId, setSelectedConversationId]);
+    selectConversation(nextConversation.id);
+  }, [conversations, selectConversation, selectedConversationId]);
 
   const crmInvoiceActions = useInboxWorkspaceCrmInvoiceActions(state, loaders, sendTextMessage);
 
   useInboxWorkspaceShortcuts({
     selectedConversationId,
+    clearSelectedConversation,
     setIsQuickReplyModalOpen,
     setIsShortcutHelpOpen,
     goToNextUnassignedConversation,
@@ -271,16 +332,16 @@ export function useInboxWorkspaceActions(state: InboxWorkspaceState, loaders: In
   return {
     sendTextMessage,
     createConversation,
+    selectConversation,
+    clearSelectedConversation,
     sendTemplateMessage,
     sendAttachmentMessage,
     toggleSelectedConversationStatus,
+    deleteSelectedConversation,
     retryOutboundMessage,
     assignSelectedConversationToMe,
     createTagForCustomer: crmInvoiceActions.createTagForCustomer,
     assignTagForCustomer: crmInvoiceActions.assignTagForCustomer,
-    createCustomerNoteEntry: crmInvoiceActions.createCustomerNoteEntry,
-    updateCustomerNoteEntry: crmInvoiceActions.updateCustomerNoteEntry,
-    deleteCustomerNoteEntry: crmInvoiceActions.deleteCustomerNoteEntry,
     attachSelectedMessageAsProof: crmInvoiceActions.attachSelectedMessageAsProof,
     openInvoiceDrawer: crmInvoiceActions.openInvoiceDrawer,
     sendInvoiceFromPanel: crmInvoiceActions.sendInvoiceFromPanel,

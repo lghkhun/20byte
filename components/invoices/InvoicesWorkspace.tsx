@@ -12,8 +12,8 @@ import {
   getSortedRowModel,
   useReactTable
 } from "@tanstack/react-table";
-import { ArrowUpDown, ArrowUpRight, Copy, ExternalLink, FileText, MoreHorizontal, Search, Trash2 } from "lucide-react";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { ArrowUpDown, Copy, ExternalLink, FileText, MoreHorizontal, Search, Trash2 } from "lucide-react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { InvoiceDrawer } from "@/components/invoices/InvoiceDrawer";
 import { InvoiceStatusBadge } from "@/components/invoices/InvoiceStatusBadge";
@@ -60,6 +60,19 @@ type CustomersResponse = {
     message?: string;
   };
 };
+
+type CustomerOptionsCacheEntry = {
+  rows: CustomerOption[];
+  cachedAt: number;
+};
+
+const CUSTOMER_PICKER_CACHE_TTL_MS = 60_000;
+const INVOICES_DATE_FORMATTER = new Intl.DateTimeFormat("id-ID", {
+  day: "2-digit",
+  month: "2-digit",
+  year: "numeric"
+});
+const INVOICES_MONEY_FORMATTERS = new Map<string, Intl.NumberFormat>();
 
 type InvoiceDetail = {
   id: string;
@@ -111,11 +124,16 @@ type InvoiceDetailResponse = {
 };
 
 function formatMoney(amountCents: number, currency: string): string {
-  return new Intl.NumberFormat("id-ID", {
-    style: "currency",
-    currency,
-    maximumFractionDigits: 0
-  }).format(amountCents / 100);
+  let formatter = INVOICES_MONEY_FORMATTERS.get(currency);
+  if (!formatter) {
+    formatter = new Intl.NumberFormat("id-ID", {
+      style: "currency",
+      currency,
+      maximumFractionDigits: 0
+    });
+    INVOICES_MONEY_FORMATTERS.set(currency, formatter);
+  }
+  return formatter.format(amountCents / 100);
 }
 
 function formatDateLabel(value: string | null): string {
@@ -128,11 +146,7 @@ function formatDateLabel(value: string | null): string {
     return "-";
   }
 
-  return new Intl.DateTimeFormat("id-ID", {
-    day: "2-digit",
-    month: "2-digit",
-    year: "numeric"
-  }).format(date);
+  return INVOICES_DATE_FORMATTER.format(date);
 }
 
 function toPublicInvoicePath(publicToken: string): string {
@@ -180,8 +194,25 @@ export function InvoicesWorkspace() {
   const [isLoadingCustomers, setIsLoadingCustomers] = useState(false);
   const [selectedCustomerId, setSelectedCustomerId] = useState<string>("");
   const [customerSearchText, setCustomerSearchText] = useState("");
+  const [customerSearchQuery, setCustomerSearchQuery] = useState("");
+  const [customerFetchError, setCustomerFetchError] = useState<string | null>(null);
   const [newCustomerName, setNewCustomerName] = useState("");
   const [newCustomerPhone, setNewCustomerPhone] = useState("");
+  const customerOptionsCacheRef = useRef<Map<string, CustomerOptionsCacheEntry>>(new Map());
+  const customerLoadRequestIdRef = useRef(0);
+  const isMountedRef = useRef(true);
+  const invoicesRequestIdRef = useRef(0);
+  const timelineRequestIdRef = useRef(0);
+  const detailRequestIdRef = useRef(0);
+  const invoicesInFlightRef = useRef<{
+    key: string;
+    promise: Promise<void>;
+  } | null>(null);
+  const invoicesAbortControllerRef = useRef<AbortController | null>(null);
+  const timelineAbortControllerRef = useRef<AbortController | null>(null);
+  const detailAbortControllerRef = useRef<AbortController | null>(null);
+  const customersAbortControllerRef = useRef<AbortController | null>(null);
+  const hasPrimedCustomerPickerRef = useRef(false);
 
   const [isPreparingInvoiceDrawer, setIsPreparingInvoiceDrawer] = useState(false);
   const [invoiceDraftContext, setInvoiceDraftContext] = useState<{
@@ -222,7 +253,6 @@ export function InvoicesWorkspace() {
   }, []);
 
   const loadInvoices = useCallback(async () => {
-    setIsLoading(true);
     const params = new URLSearchParams({ page: String(page), limit: String(pageSize) });
     if (statusFilter !== "ALL") {
       params.set("status", statusFilter);
@@ -231,23 +261,62 @@ export function InvoicesWorkspace() {
       params.set("q", searchQuery.trim());
     }
 
-    try {
-      const response = await fetch(`/api/invoices?${params.toString()}`, { cache: "no-store" });
-      const payload = (await response.json()) as { data?: { invoices?: InvoiceItem[] }; meta?: { total?: number } } & ApiError;
-      if (!response.ok) {
-        throw new Error(payload.error?.message ?? "Failed to load invoices.");
-      }
-
-      const rows = payload.data?.invoices ?? [];
-      setInvoices(rows);
-      setTotalInvoices(payload.meta?.total ?? rows.length);
-      setSelectedInvoiceId((current) => (current && rows.some((row) => row.id === current) ? current : rows[0]?.id ?? null));
-      if (rows.length === 0) {
-        setTimeline(null);
-      }
-    } finally {
-      setIsLoading(false);
+    const requestId = ++invoicesRequestIdRef.current;
+    const requestKey = params.toString();
+    if (invoicesInFlightRef.current?.key === requestKey) {
+      await invoicesInFlightRef.current.promise;
+      return;
     }
+
+    if (isMountedRef.current) {
+      setIsLoading(true);
+    }
+
+    const fetchPromise = (async () => {
+      const abortController = new AbortController();
+      invoicesAbortControllerRef.current?.abort();
+      invoicesAbortControllerRef.current = abortController;
+      try {
+        const response = await fetch(`/api/invoices?${requestKey}`, { cache: "no-store", signal: abortController.signal });
+        const payload = (await response.json()) as { data?: { invoices?: InvoiceItem[] }; meta?: { total?: number } } & ApiError;
+        if (!response.ok) {
+          throw new Error(payload.error?.message ?? "Failed to load invoices.");
+        }
+        if (!isMountedRef.current || requestId !== invoicesRequestIdRef.current) {
+          return;
+        }
+
+        const rows = payload.data?.invoices ?? [];
+        setInvoices(rows);
+        setTotalInvoices(payload.meta?.total ?? rows.length);
+        setSelectedInvoiceId((current) => (current && rows.some((row) => row.id === current) ? current : rows[0]?.id ?? null));
+        if (rows.length === 0) {
+          setTimeline(null);
+        }
+      } catch (loadError) {
+        if (loadError instanceof DOMException && loadError.name === "AbortError") {
+          return;
+        }
+        throw loadError;
+      } finally {
+        if (invoicesAbortControllerRef.current === abortController) {
+          invoicesAbortControllerRef.current = null;
+        }
+        if (invoicesInFlightRef.current?.key === requestKey) {
+          invoicesInFlightRef.current = null;
+        }
+        if (!isMountedRef.current || requestId !== invoicesRequestIdRef.current) {
+          return;
+        }
+        setIsLoading(false);
+      }
+    })();
+
+    invoicesInFlightRef.current = {
+      key: requestKey,
+      promise: fetchPromise
+    };
+    await fetchPromise;
   }, [page, pageSize, searchQuery, statusFilter]);
 
   const loadTimeline = useCallback(async () => {
@@ -256,57 +325,141 @@ export function InvoicesWorkspace() {
       return;
     }
 
-    const response = await fetch(`/api/invoices/${encodeURIComponent(selectedInvoiceId)}/timeline`, { cache: "no-store" });
-    const payload = (await response.json()) as { data?: { timeline?: InvoiceTimeline } } & ApiError;
-    if (!response.ok) {
-      throw new Error(payload.error?.message ?? "Failed to load invoice timeline.");
-    }
+    const requestId = ++timelineRequestIdRef.current;
+    const abortController = new AbortController();
+    timelineAbortControllerRef.current?.abort();
+    timelineAbortControllerRef.current = abortController;
+    try {
+      const response = await fetch(`/api/invoices/${encodeURIComponent(selectedInvoiceId)}/timeline`, { cache: "no-store", signal: abortController.signal });
+      const payload = (await response.json()) as { data?: { timeline?: InvoiceTimeline } } & ApiError;
+      if (!response.ok) {
+        throw new Error(payload.error?.message ?? "Failed to load invoice timeline.");
+      }
+      if (!isMountedRef.current || requestId !== timelineRequestIdRef.current) {
+        return;
+      }
 
-    setTimeline(payload.data?.timeline ?? null);
+      setTimeline(payload.data?.timeline ?? null);
+    } finally {
+      if (timelineAbortControllerRef.current === abortController) {
+        timelineAbortControllerRef.current = null;
+      }
+    }
   }, [selectedInvoiceId]);
 
   const loadInvoiceDetail = useCallback(async (invoiceId: string) => {
-    setIsLoadingDetail(true);
+    const requestId = ++detailRequestIdRef.current;
+    const abortController = new AbortController();
+    if (isMountedRef.current) {
+      setIsLoadingDetail(true);
+    }
     try {
-      const response = await fetch(`/api/invoices/${encodeURIComponent(invoiceId)}`, { cache: "no-store" });
+      detailAbortControllerRef.current?.abort();
+      detailAbortControllerRef.current = abortController;
+      const response = await fetch(`/api/invoices/${encodeURIComponent(invoiceId)}`, { cache: "no-store", signal: abortController.signal });
       const payload = (await response.json().catch(() => null)) as InvoiceDetailResponse | null;
       if (!response.ok || !payload?.data?.invoice) {
         throw new Error(payload?.error?.message ?? "Failed to load invoice detail.");
       }
+      if (!isMountedRef.current || requestId !== detailRequestIdRef.current) {
+        return;
+      }
 
       setInvoiceDetail(payload.data.invoice);
     } catch (detailError) {
+      if (detailError instanceof DOMException && detailError.name === "AbortError") {
+        return;
+      }
+      if (!isMountedRef.current || requestId !== detailRequestIdRef.current) {
+        return;
+      }
       setError(toErrorMessage(detailError, "Failed to load invoice detail."));
     } finally {
+      if (detailAbortControllerRef.current === abortController) {
+        detailAbortControllerRef.current = null;
+      }
+      if (!isMountedRef.current || requestId !== detailRequestIdRef.current) {
+        return;
+      }
       setIsLoadingDetail(false);
     }
   }, []);
 
-  const loadCustomers = useCallback(async () => {
-    setIsLoadingCustomers(true);
-    try {
-      const params = new URLSearchParams({
-        page: "1",
-        limit: "20",
-        light: "1"
-      });
-      if (customerSearchText.trim()) {
-        params.set("q", customerSearchText.trim());
+  const loadCustomers = useCallback(
+    async (queryText: string, options?: { force?: boolean }) => {
+      if (!isMountedRef.current) {
+        return;
+      }
+      const query = queryText.trim();
+      setCustomerFetchError(null);
+      const requestId = ++customerLoadRequestIdRef.current;
+
+      const cached = customerOptionsCacheRef.current.get(query);
+      const isCacheFresh = Boolean(cached && Date.now() - cached.cachedAt < CUSTOMER_PICKER_CACHE_TTL_MS);
+      if (cached?.rows) {
+        setCustomerOptions(cached.rows);
+      }
+      if (!options?.force && isCacheFresh) {
+        return;
       }
 
-      const response = await fetch(`/api/customers?${params.toString()}`, { cache: "no-store" });
-      const payload = (await response.json().catch(() => null)) as CustomersResponse | null;
-      if (!response.ok) {
-        throw new Error(payload?.error?.message ?? "Failed to load customers.");
-      }
+      setIsLoadingCustomers(true);
+      const abortController = new AbortController();
+      customersAbortControllerRef.current?.abort();
+      customersAbortControllerRef.current = abortController;
+      try {
+        const params = new URLSearchParams({
+          page: "1",
+          limit: "20",
+          picker: "1"
+        });
+        if (query) {
+          params.set("q", query);
+        }
 
-      setCustomerOptions(payload?.data?.customers ?? []);
-    } catch (loadError) {
-      setError(toErrorMessage(loadError, "Failed to load customers."));
-    } finally {
-      setIsLoadingCustomers(false);
+        const response = await fetch(`/api/customers?${params.toString()}`, { cache: "no-store", signal: abortController.signal });
+        const payload = (await response.json().catch(() => null)) as CustomersResponse | null;
+        if (!isMountedRef.current || requestId !== customerLoadRequestIdRef.current) {
+          return;
+        }
+        if (!response.ok) {
+          throw new Error(payload?.error?.message ?? "Failed to load customers.");
+        }
+
+        const rows = payload?.data?.customers ?? [];
+        customerOptionsCacheRef.current.set(query, {
+          rows,
+          cachedAt: Date.now()
+        });
+        setCustomerOptions(rows);
+      } catch (loadError) {
+        if (loadError instanceof DOMException && loadError.name === "AbortError") {
+          return;
+        }
+        if (!isMountedRef.current || requestId !== customerLoadRequestIdRef.current) {
+          return;
+        }
+        setCustomerFetchError(toErrorMessage(loadError, "Failed to load customers."));
+      } finally {
+        if (customersAbortControllerRef.current === abortController) {
+          customersAbortControllerRef.current = null;
+        }
+        if (!isMountedRef.current || requestId !== customerLoadRequestIdRef.current) {
+          return;
+        }
+        setIsLoadingCustomers(false);
+      }
+    },
+    []
+  );
+
+  const primeCustomerPicker = useCallback(async () => {
+    if (hasPrimedCustomerPickerRef.current) {
+      return;
     }
-  }, [customerSearchText]);
+    hasPrimedCustomerPickerRef.current = true;
+    await loadCustomers("");
+  }, [loadCustomers]);
 
   const sendInvoiceById = useCallback(
     async (invoiceId: string) => {
@@ -444,23 +597,92 @@ export function InvoicesWorkspace() {
 
   useEffect(() => {
     void loadInvoices().catch((err) => {
+      if (!isMountedRef.current) {
+        return;
+      }
       setError(toErrorMessage(err, "Failed to refresh invoices."));
     });
   }, [loadInvoices]);
 
   useEffect(() => {
     void loadTimeline().catch((err) => {
+      if (err instanceof DOMException && err.name === "AbortError") {
+        return;
+      }
+      if (!isMountedRef.current) {
+        return;
+      }
       setError(toErrorMessage(err, "Failed to refresh invoice timeline."));
     });
   }, [loadTimeline]);
 
   useEffect(() => {
-    if (!isCreateInvoiceModalOpen || isLoadingCustomers) {
+    if (!isCreateInvoiceModalOpen) {
       return;
     }
 
-    void loadCustomers();
-  }, [isCreateInvoiceModalOpen, isLoadingCustomers, loadCustomers]);
+    const timer = window.setTimeout(() => {
+      setCustomerSearchQuery(customerSearchText.trim());
+    }, 220);
+
+    return () => {
+      window.clearTimeout(timer);
+    };
+  }, [customerSearchText, isCreateInvoiceModalOpen]);
+
+  useEffect(() => {
+    if (!isCreateInvoiceModalOpen) {
+      return;
+    }
+
+    void loadCustomers(customerSearchQuery);
+  }, [customerSearchQuery, isCreateInvoiceModalOpen, loadCustomers]);
+
+  useEffect(() => {
+    if (isCreateInvoiceModalOpen) {
+      setCustomerSearchQuery(customerSearchText.trim());
+      return;
+    }
+  }, [customerSearchText, isCreateInvoiceModalOpen]);
+
+  useEffect(() => {
+    isMountedRef.current = true;
+    return () => {
+      isMountedRef.current = false;
+      invoicesAbortControllerRef.current?.abort();
+      timelineAbortControllerRef.current?.abort();
+      detailAbortControllerRef.current?.abort();
+      customersAbortControllerRef.current?.abort();
+    };
+  }, []);
+
+  useEffect(() => {
+    if (hasPrimedCustomerPickerRef.current) {
+      return;
+    }
+
+    let timeoutId: ReturnType<typeof setTimeout> | null = null;
+    let idleId: number | null = null;
+
+    const runPrefetch = () => {
+      void primeCustomerPicker();
+    };
+
+    if (typeof window !== "undefined" && "requestIdleCallback" in window) {
+      idleId = window.requestIdleCallback(runPrefetch, { timeout: 1200 });
+    } else {
+      timeoutId = globalThis.setTimeout(runPrefetch, 600);
+    }
+
+    return () => {
+      if (idleId !== null && typeof window !== "undefined" && "cancelIdleCallback" in window) {
+        window.cancelIdleCallback(idleId);
+      }
+      if (timeoutId !== null) {
+        globalThis.clearTimeout(timeoutId);
+      }
+    };
+  }, [primeCustomerPicker]);
 
   useEffect(() => {
     const timer = window.setTimeout(() => {
@@ -489,8 +711,8 @@ export function InvoicesWorkspace() {
         id: "select",
         header: ({ table }) => (
           <Checkbox
-            checked={table.getIsAllPageRowsSelected() || (table.getIsSomePageRowsSelected() && "indeterminate")}
-            onCheckedChange={(value) => table.toggleAllPageRowsSelected(Boolean(value))}
+            checked={table.getIsAllRowsSelected() || (table.getIsSomeRowsSelected() && "indeterminate")}
+            onCheckedChange={(value) => table.toggleAllRowsSelected(Boolean(value))}
             aria-label="Select all"
           />
         ),
@@ -640,6 +862,8 @@ export function InvoicesWorkspace() {
       columnVisibility,
       rowSelection
     },
+    autoResetAll: false,
+    autoResetPageIndex: false,
     initialState: {
       columnVisibility: {}
     }
@@ -860,23 +1084,28 @@ export function InvoicesWorkspace() {
 
   return (
     <section className="flex h-full min-h-0 flex-1 flex-col space-y-3 p-3 md:space-y-4 md:p-5">
-      <div className="rounded-2xl border border-border/70 bg-card/95 shadow-sm">
-        <div className="flex flex-wrap items-center gap-3 px-4 py-4 md:gap-4 md:px-6 md:py-5">
-          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-orange-50 text-orange-500 md:h-11 md:w-11 md:rounded-2xl">
-            <FileText className="h-5 w-5" />
+      <div className="space-y-3 px-1 py-1 md:space-y-4">
+        <div className="flex flex-wrap items-center justify-between gap-3 md:gap-4">
+          <div className="flex flex-wrap items-center gap-3 md:gap-4">
+            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-orange-50 text-orange-500 md:h-11 md:w-11 md:rounded-2xl">
+              <FileText className="h-5 w-5" />
+            </div>
+            <div>
+              <h1 className="text-xl font-semibold tracking-tight text-foreground md:text-3xl">Invoice System</h1>
+              <p className="text-xs text-muted-foreground md:text-sm">Kelola invoice, pengiriman, pelunasan, dan sinkronisasi stage CRM dari satu workspace.</p>
+            </div>
           </div>
-          <div>
-            <h1 className="text-xl font-semibold tracking-tight text-foreground md:text-3xl">Invoice System</h1>
-            <p className="text-xs text-muted-foreground md:text-sm">Kelola invoice, pengiriman, pelunasan, dan sinkronisasi stage CRM dari satu workspace.</p>
-          </div>
-        </div>
-        <div className="flex flex-wrap items-center gap-2 border-t border-border/70 px-4 py-3 text-xs md:px-6 md:py-4 md:text-sm">
-          <span className="rounded-full border border-primary/30 bg-primary/10 px-3 py-1 text-primary">All Invoices</span>
           <Button
             type="button"
-            variant="secondary"
-            className="h-8 rounded-full border border-border/80 bg-background px-3"
+            className="h-9 rounded-xl bg-emerald-600 px-4 text-white hover:bg-emerald-700"
+            onMouseEnter={() => {
+              void primeCustomerPicker();
+            }}
+            onFocus={() => {
+              void primeCustomerPicker();
+            }}
             onClick={() => {
+              void primeCustomerPicker();
               setSelectedCustomerId("");
               setCustomerSearchText("");
               setNewCustomerName("");
@@ -886,10 +1115,6 @@ export function InvoicesWorkspace() {
           >
             Create Invoice
           </Button>
-          <Link href="/inbox" prefetch={false} className="inline-flex items-center gap-1 rounded-full border border-border bg-background px-3 py-1 text-muted-foreground hover:text-foreground">
-            Buka Inbox CRM
-            <ArrowUpRight className="h-3.5 w-3.5" />
-          </Link>
         </div>
       </div>
 
@@ -1306,9 +1531,24 @@ export function InvoicesWorkspace() {
                 placeholder="Search customer name or WhatsApp..."
                 className="h-10"
               />
+              {isLoadingCustomers ? <p className="text-xs text-muted-foreground">Searching customers...</p> : null}
               <div className="max-h-52 overflow-auto rounded-xl border border-border/70">
-                {isLoadingCustomers ? (
-                  <p className="px-3 py-3 text-sm text-muted-foreground">Loading customers...</p>
+                {customerFetchError ? (
+                  <div className="space-y-2 px-3 py-3">
+                    <p className="text-sm text-destructive">{customerFetchError}</p>
+                    <Button type="button" size="sm" variant="secondary" className="h-8" onClick={() => void loadCustomers(customerSearchQuery, { force: true })}>
+                      Retry
+                    </Button>
+                  </div>
+                ) : isLoadingCustomers && customerOptions.length === 0 ? (
+                  <div className="space-y-2 px-3 py-3">
+                    {Array.from({ length: 5 }).map((_, index) => (
+                      <div key={`customer-skeleton-${index}`} className="animate-pulse rounded-lg border border-border/60 px-3 py-2">
+                        <div className="h-3.5 w-40 rounded bg-muted" />
+                        <div className="mt-2 h-3 w-28 rounded bg-muted/80" />
+                      </div>
+                    ))}
+                  </div>
                 ) : customerOptions.length === 0 ? (
                   <p className="px-3 py-3 text-sm text-muted-foreground">No customer found.</p>
                 ) : (

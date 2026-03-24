@@ -37,6 +37,52 @@ type MessageBubbleProps = {
   onRetryOutboundMessage?: (messageId: string) => void;
 };
 
+function resolveDeliveryIndicator(
+  message: MessageItem
+): { icon: string; className: string; title: string } | null {
+  if (message.direction !== "OUTBOUND") {
+    return null;
+  }
+
+  if (message.sendStatus === "FAILED") {
+    return {
+      icon: "!",
+      className: "text-destructive",
+      title: "Gagal terkirim"
+    };
+  }
+
+  if (message.sendStatus !== "SENT") {
+    return {
+      icon: "○",
+      className: "text-muted-foreground",
+      title: "Sedang mengirim"
+    };
+  }
+
+  if (message.deliveryStatus === "READ") {
+    return {
+      icon: "✓✓",
+      className: "text-sky-500",
+      title: "Sudah dibaca customer"
+    };
+  }
+
+  if (message.deliveryStatus === "DELIVERED") {
+    return {
+      icon: "✓✓",
+      className: "text-muted-foreground",
+      title: "Terkirim ke perangkat customer"
+    };
+  }
+
+  return {
+    icon: "✓",
+    className: "text-muted-foreground",
+    title: "Terkirim ke server WhatsApp"
+  };
+}
+
 export function MessageBubble({
   density = "comfy",
   isEmphasized = false,
@@ -48,6 +94,7 @@ export function MessageBubble({
   const mediaLabel = renderMediaLabel(message);
   const canUseAsProof =
     !isOutbound && (message.type === "IMAGE" || message.type === "DOCUMENT") && Boolean(message.mediaUrl) && Boolean(onSelectProofMessage);
+  const deliveryIndicator = resolveDeliveryIndicator(message);
 
   return (
     <div className={isOutbound ? "flex justify-end" : "flex justify-start"}>
@@ -126,7 +173,11 @@ export function MessageBubble({
 
         <div className="mt-1 flex items-center justify-end gap-1 text-[11px] text-muted-foreground">
           <span>{formatTime(message.createdAt)}</span>
-          {isOutbound ? <span className="font-semibold text-emerald-500">✓✓</span> : null}
+          {deliveryIndicator ? (
+            <span className={`font-semibold ${deliveryIndicator.className}`} title={deliveryIndicator.title}>
+              {deliveryIndicator.icon}
+            </span>
+          ) : null}
         </div>
       </article>
     </div>

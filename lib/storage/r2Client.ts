@@ -136,7 +136,12 @@ export function getPublicObjectKeyFromUrl(fileUrl: string): string | null {
 }
 
 export function getProxyAssetUrl(objectKey: string): string {
-  return `/api/storage/public/${encodeURIComponent(objectKey)}`;
+  const normalized = objectKey
+    .split("/")
+    .map((segment) => encodeURIComponent(segment))
+    .join("/");
+
+  return `/api/storage/public/${normalized}`;
 }
 
 export async function getObjectFromR2(objectKeyInput: string): Promise<{

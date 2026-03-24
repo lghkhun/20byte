@@ -1,39 +1,26 @@
 "use client";
 
-import { type FormEvent, useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import Image from "next/image";
 import { ChevronDown, FileText, ImageIcon, Link2, NotebookPen, Workflow } from "lucide-react";
 
 import { ActivityTimelineSection } from "@/components/inbox/crm/ActivityTimelineSection";
+import { IndicatorLegend } from "@/components/inbox/IndicatorLegend";
 import { InvoicesSection } from "@/components/inbox/crm/InvoicesSection";
 import type { CrmActivityItem, CrmInvoiceItem, CrmTimelineItem } from "@/components/inbox/crm/types";
 import { normalizeRuntimeUrl } from "@/components/inbox/bubble/utils";
 import type { ConversationItem, MessageItem } from "@/components/inbox/types";
 import { useModalAccessibility } from "@/lib/a11y/useModalAccessibility";
-import { BUSINESS_CATEGORY_OPTIONS, FOLLOW_UP_OPTIONS, LEAD_STATUS_OPTIONS, formatLeadSettingLabel } from "@/lib/crm/leadSettingsConfig";
-import { Badge } from "@/components/ui/badge";
+import { useLocalImageCache } from "@/lib/client/localImageCache";
+import { BUSINESS_CATEGORY_OPTIONS, LEAD_STATUS_OPTIONS, formatLeadSettingLabel } from "@/lib/crm/leadSettingsConfig";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 
-type CustomerTagItem = {
-  id: string;
-  name: string;
-  color: string;
-  isAssigned: boolean;
-};
-
-type CustomerNoteItem = {
-  id: string;
-  content: string;
-  authorUserId: string;
-  createdAt: string;
-};
-
 type CustomerLeadSettings = {
   leadStatus: string;
-  followUpStatus: string | null;
   businessCategory: string | null;
   crmStageId: string | null;
+  notes: string | null;
 };
 
 type PipelineStageOption = {
@@ -50,21 +37,10 @@ type CrmContextPanelProps = {
   isLoading: boolean;
   isAssigning: boolean;
   assignError: string | null;
-  tags: CustomerTagItem[];
-  notes: CustomerNoteItem[];
   invoices: CrmInvoiceItem[];
   activity: CrmActivityItem[];
   isLoadingCrm: boolean;
   crmError: string | null;
-  onCreateTag: (name: string, color: string) => Promise<void>;
-  onAssignTag: (tagId: string) => Promise<void>;
-  onCreateNote: (content: string) => Promise<void>;
-  onUpdateNote: (noteId: string, content: string) => Promise<void>;
-  onDeleteNote: (noteId: string) => Promise<void>;
-  selectedProofMessageId: string | null;
-  isAttachingProof: boolean;
-  proofFeedback: string | null;
-  onAttachProof: (invoiceId: string, milestoneType?: "FULL" | "DP" | "FINAL") => Promise<void>;
   onOpenInvoiceDrawer: () => void;
   onSendInvoice: (invoiceId: string) => Promise<void>;
   onMarkInvoicePaid: (invoiceId: string, milestoneType?: "FULL" | "DP" | "FINAL") => Promise<void>;
@@ -97,48 +73,25 @@ function formatLabel(value: string): string {
   return formatLeadSettingLabel(value);
 }
 
-function renderLeadToneBadge(value: string, kind: "status" | "followup" | "hotness") {
-  if (kind === "hotness") {
-    const normalized = value.toUpperCase();
-    if (normalized === "HOT") return <Badge className="rounded-full bg-orange-500 text-white hover:bg-orange-500">Hot</Badge>;
-    if (normalized === "WARM") return <Badge className="rounded-full bg-amber-400 text-white hover:bg-amber-400">Warm</Badge>;
-    return <Badge className="rounded-full bg-blue-600 text-white hover:bg-blue-600">Cold</Badge>;
+function resolveSafeMediaUrl(value: string | null | undefined): string | null {
+  if (!value || !value.trim()) {
+    return null;
   }
 
-  if (kind === "followup") {
-    const normalized = value.toUpperCase();
-    if (normalized === "CHAT") return <Badge className="rounded-full bg-amber-400 text-white hover:bg-amber-400">Chat</Badge>;
-    if (normalized === "CALL") return <Badge className="rounded-full bg-violet-500 text-white hover:bg-violet-500">Call</Badge>;
-    if (normalized === "MEETING") return <Badge className="rounded-full bg-orange-500 text-white hover:bg-orange-500">Meeting</Badge>;
-    if (normalized === "PENAWARAN") return <Badge className="rounded-full bg-cyan-500 text-white hover:bg-cyan-500">Penawaran</Badge>;
-    if (normalized === "DEALING") return <Badge className="rounded-full bg-emerald-600 text-white hover:bg-emerald-600">Dealing</Badge>;
-    if (normalized === "BLUEPRINT") return <Badge className="rounded-full bg-pink-500 text-white hover:bg-pink-500">Blueprint</Badge>;
-    return <Badge className="rounded-full bg-blue-500 text-white hover:bg-blue-500">Wait Respon</Badge>;
+  const normalized = value.trim();
+  try {
+    const parsed = new URL(normalized, typeof window !== "undefined" ? window.location.origin : "http://localhost");
+    const hostname = parsed.hostname.toLowerCase();
+    if (hostname === "example.com" || hostname.endsWith(".example.com")) {
+      return null;
+    }
+    if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
+      return null;
+    }
+    return parsed.toString();
+  } catch {
+    return null;
   }
-
-  const normalized = value.toUpperCase();
-  if (normalized === "PROSPECT") return <Badge className="rounded-full bg-red-500 text-white hover:bg-red-500">Prospect</Badge>;
-  if (normalized === "ACTIVE_CLIENT") return <Badge className="rounded-full bg-lime-500 text-white hover:bg-lime-500">Active Client</Badge>;
-  if (normalized === "UNQUALIFIED") return <Badge className="rounded-full bg-slate-600 text-white hover:bg-slate-600">Unqualified</Badge>;
-  if (normalized === "REMARKETING") return <Badge className="rounded-full bg-fuchsia-500 text-white hover:bg-fuchsia-500">Remarketing</Badge>;
-  if (normalized === "OLD_CLIENT") return <Badge className="rounded-full bg-amber-700 text-white hover:bg-amber-700">Old Client</Badge>;
-  if (normalized === "PARTNERSHIP") return <Badge className="rounded-full bg-rose-300 text-slate-800 hover:bg-rose-300">Partnership</Badge>;
-  if (normalized === "OTHER") return <Badge className="rounded-full bg-zinc-500 text-white hover:bg-zinc-500">Other</Badge>;
-  return <Badge className="rounded-full bg-blue-400 text-white hover:bg-blue-400">New Lead</Badge>;
-}
-
-const PIPELINE_STAGE_COLOR_CLASS: Record<string, string> = {
-  emerald: "bg-emerald-500 text-white hover:bg-emerald-500",
-  amber: "bg-amber-500 text-white hover:bg-amber-500",
-  sky: "bg-sky-500 text-white hover:bg-sky-500",
-  violet: "bg-violet-500 text-white hover:bg-violet-500",
-  rose: "bg-rose-500 text-white hover:bg-rose-500",
-  slate: "bg-slate-600 text-white hover:bg-slate-600"
-};
-
-function renderPipelineStageBadge(name: string, color: string) {
-  const tone = PIPELINE_STAGE_COLOR_CLASS[color] ?? "bg-slate-500 text-white hover:bg-slate-500";
-  return <Badge className={`rounded-full ${tone}`}>{name}</Badge>;
 }
 
 function AccordionCard({
@@ -182,21 +135,10 @@ export function CrmContextPanel({
   isLoading,
   isAssigning,
   assignError,
-  tags,
-  notes,
   invoices,
   activity,
   isLoadingCrm,
   crmError,
-  onCreateTag,
-  onAssignTag,
-  onCreateNote,
-  onUpdateNote,
-  onDeleteNote,
-  selectedProofMessageId,
-  isAttachingProof,
-  proofFeedback,
-  onAttachProof,
   onOpenInvoiceDrawer,
   onSendInvoice,
   onMarkInvoicePaid,
@@ -206,37 +148,37 @@ export function CrmContextPanel({
   invoiceActionError,
   invoiceActionSuccess
 }: CrmContextPanelProps) {
-  const [tagName, setTagName] = useState("");
-  const [tagColor, setTagColor] = useState("emerald");
   const [noteContent, setNoteContent] = useState("");
-  const [proofInvoiceId, setProofInvoiceId] = useState("");
-  const [proofMilestoneType, setProofMilestoneType] = useState<"" | "FULL" | "DP" | "FINAL">("");
-  const [isSubmittingTag, setIsSubmittingTag] = useState(false);
-  const [isSubmittingNote, setIsSubmittingNote] = useState(false);
+  const [isSavingNotes, setIsSavingNotes] = useState(false);
   const [isAssignModalOpen, setIsAssignModalOpen] = useState(false);
   const [assignMembers, setAssignMembers] = useState<Array<{ userId: string; name: string | null; email: string; role: string }>>([]);
   const [selectedAssignee, setSelectedAssignee] = useState("");
   const [isSavingAssignment, setIsSavingAssignment] = useState(false);
   const [assignModalError, setAssignModalError] = useState<string | null>(null);
-  const [editingNote, setEditingNote] = useState<CustomerNoteItem | null>(null);
-  const [editingNoteContent, setEditingNoteContent] = useState("");
-  const [isSavingEditedNote, setIsSavingEditedNote] = useState(false);
   const [leadSettings, setLeadSettings] = useState<CustomerLeadSettings>({
     leadStatus: "NEW_LEAD",
-    followUpStatus: "WAIT_RESPON",
     businessCategory: null,
-    crmStageId: null
+    crmStageId: null,
+    notes: null
   });
+  const [newBusinessCategory, setNewBusinessCategory] = useState("");
+  const [customBusinessCategories, setCustomBusinessCategories] = useState<string[]>([]);
+  const [activeMediaTab, setActiveMediaTab] = useState<"media" | "documents" | "links">("media");
+  const [previewMediaUrl, setPreviewMediaUrl] = useState<string | null>(null);
+  const [previewMediaType, setPreviewMediaType] = useState<"IMAGE" | "VIDEO" | "DOCUMENT" | "LINK" | null>(null);
+  const [previewMediaTitle, setPreviewMediaTitle] = useState<string>("");
   const [pipelineId, setPipelineId] = useState<string | null>(null);
   const [pipelineStages, setPipelineStages] = useState<PipelineStageOption[]>([]);
   const [isLoadingLeadSettings, setIsLoadingLeadSettings] = useState(false);
   const [leadSettingsError, setLeadSettingsError] = useState<string | null>(null);
   const [isSavingLeadSettings, setIsSavingLeadSettings] = useState(false);
-  const [isSavingTags, setIsSavingTags] = useState(false);
   const assignModalContainerRef = useRef<HTMLDivElement | null>(null);
   const assignModalCloseButtonRef = useRef<HTMLButtonElement | null>(null);
-  const editNoteModalContainerRef = useRef<HTMLDivElement | null>(null);
-  const editNoteModalCloseButtonRef = useRef<HTMLButtonElement | null>(null);
+  const cachedCustomerAvatarUrl = useLocalImageCache(conversation?.customerAvatarUrl, {
+    cacheKey: `crm-avatar:${conversation?.id ?? "none"}`,
+    ttlMs: 24 * 60 * 60 * 1000,
+    maxBytes: 180 * 1024
+  });
 
   useModalAccessibility({
     open: isAssignModalOpen,
@@ -245,17 +187,24 @@ export function CrmContextPanel({
     initialFocusRef: assignModalCloseButtonRef
   });
 
-  useModalAccessibility({
-    open: Boolean(editingNote),
-    onClose: () => setEditingNote(null),
-    containerRef: editNoteModalContainerRef,
-    initialFocusRef: editNoteModalCloseButtonRef
-  });
   const canOperateInvoice = activeOrgRole === "OWNER" || activeOrgRole === "ADMIN" || activeOrgRole === "CS";
-  const labelColorPresets = ["emerald", "amber", "sky", "violet", "rose", "slate"];
+  const activityTimestamp = conversation?.lastMessageAt ?? conversation?.updatedAt ?? null;
+  const avatarPresenceActive =
+    conversation?.status === "OPEN" &&
+    Boolean(activityTimestamp) &&
+    new Date(activityTimestamp ?? 0).getTime() >= Date.now() - 5 * 60 * 1000;
+  const isLatestMessageProofReady =
+    conversation?.lastMessageDirection === "INBOUND" &&
+    (conversation.lastMessageType === "IMAGE" || conversation.lastMessageType === "DOCUMENT");
   const leadStatusOptions = LEAD_STATUS_OPTIONS;
-  const followUpOptions = FOLLOW_UP_OPTIONS;
   const businessCategoryOptions = BUSINESS_CATEGORY_OPTIONS;
+  const businessCategorySelectOptions = useMemo(() => {
+    const options = [...businessCategoryOptions, ...customBusinessCategories];
+    if (leadSettings.businessCategory) {
+      options.push(leadSettings.businessCategory);
+    }
+    return Array.from(new Set(options));
+  }, [businessCategoryOptions, customBusinessCategories, leadSettings.businessCategory]);
 
   useEffect(() => {
     let ignore = false;
@@ -273,9 +222,9 @@ export function CrmContextPanel({
           data?: {
             customer?: {
               leadStatus?: string;
-              followUpStatus?: string | null;
               businessCategory?: string | null;
               crmStageId?: string | null;
+              remarks?: string | null;
             };
           };
           error?: { message?: string };
@@ -291,10 +240,11 @@ export function CrmContextPanel({
         if (!ignore && customer) {
           setLeadSettings({
             leadStatus: customer.leadStatus ?? "NEW_LEAD",
-            followUpStatus: customer.followUpStatus ?? "WAIT_RESPON",
             businessCategory: customer.businessCategory ?? null,
-            crmStageId: customer.crmStageId ?? conversation.crmStageId ?? null
+            crmStageId: customer.crmStageId ?? conversation.crmStageId ?? null,
+            notes: customer.remarks ?? null
           });
+          setNoteContent(customer.remarks ?? "");
         }
       } catch {
         if (!ignore) {
@@ -394,21 +344,24 @@ export function CrmContextPanel({
       });
     }
 
-    for (const note of notes) {
-      items.push({ id: `note-${note.id}`, label: "Internal note added", time: note.createdAt });
-    }
-
     for (const event of activity) {
       items.push({ id: `crm-${event.id}`, label: event.label, time: event.time });
     }
 
     return items.sort((left, right) => new Date(right.time ?? 0).getTime() - new Date(left.time ?? 0).getTime());
-  }, [activity, conversation, notes]);
+  }, [activity, conversation]);
 
-  const mediaItems = useMemo(
-    () => messages.filter((message) => ["IMAGE", "VIDEO", "DOCUMENT"].includes(message.type) && Boolean(message.mediaUrl)),
-    [messages]
-  );
+  const mediaItems = useMemo(() => {
+    return messages
+      .filter((message) => ["IMAGE", "VIDEO", "DOCUMENT"].includes(message.type))
+      .map((message) => ({
+        ...message,
+        safeMediaUrl: resolveSafeMediaUrl(message.mediaUrl)
+      }))
+      .filter((message) => Boolean(message.safeMediaUrl));
+  }, [messages]);
+  const mediaOnlyItems = useMemo(() => mediaItems.filter((item) => item.type === "IMAGE" || item.type === "VIDEO"), [mediaItems]);
+  const documentItems = useMemo(() => mediaItems.filter((item) => item.type === "DOCUMENT"), [mediaItems]);
 
   const links = useMemo(() => {
     const regex = /(https?:\/\/[^\s]+)/gi;
@@ -424,34 +377,47 @@ export function CrmContextPanel({
     );
   }, [messages]);
 
-  async function handleCreateTag(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    if (!tagName.trim() || isSubmittingTag) {
+  async function handleSaveNotes() {
+    if (!conversation || isSavingNotes) {
       return;
     }
 
-    setIsSubmittingTag(true);
+    setIsSavingNotes(true);
+    setLeadSettingsError(null);
     try {
-      await onCreateTag(tagName.trim(), tagColor.trim() || "emerald");
-      setTagName("");
+      const response = await fetch(`/api/customers/${encodeURIComponent(conversation.customerId)}`, {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          remarks: noteContent.trim() || null
+        })
+      });
+      const payload = (await response.json().catch(() => null)) as { error?: { message?: string } } | null;
+      if (!response.ok) {
+        setLeadSettingsError(payload?.error?.message ?? "Failed to save notes.");
+        return;
+      }
+
+      setLeadSettings((current) => ({ ...current, notes: noteContent.trim() || null }));
+      await onRefreshConversation();
+    } catch {
+      setLeadSettingsError("Network error while saving notes.");
     } finally {
-      setIsSubmittingTag(false);
+      setIsSavingNotes(false);
     }
   }
 
-  async function handleCreateNote(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    if (!noteContent.trim() || isSubmittingNote) {
+  function handleAddBusinessCategory() {
+    const value = newBusinessCategory.trim();
+    if (!value) {
       return;
     }
 
-    setIsSubmittingNote(true);
-    try {
-      await onCreateNote(noteContent.trim());
-      setNoteContent("");
-    } finally {
-      setIsSubmittingNote(false);
-    }
+    setCustomBusinessCategories((current) => (current.includes(value) ? current : [...current, value]));
+    setLeadSettings((current) => ({ ...current, businessCategory: value }));
+    setNewBusinessCategory("");
   }
 
   async function openAssignModal() {
@@ -532,7 +498,6 @@ export function CrmContextPanel({
         },
         body: JSON.stringify({
           leadStatus: leadSettings.leadStatus,
-          followUpStatus: leadSettings.followUpStatus,
           businessCategory: leadSettings.businessCategory
         })
       });
@@ -568,42 +533,6 @@ export function CrmContextPanel({
     }
   }
 
-  async function handleToggleTag(tagId: string) {
-    if (!conversation || isSavingTags) {
-      return;
-    }
-
-    setIsSavingTags(true);
-    setLeadSettingsError(null);
-    try {
-      const currentlyAssignedIds = tags.filter((item) => item.isAssigned).map((item) => item.id);
-      const nextTagIds = currentlyAssignedIds.includes(tagId)
-        ? currentlyAssignedIds.filter((id) => id !== tagId)
-        : Array.from(new Set([...currentlyAssignedIds, tagId]));
-
-      const response = await fetch(`/api/customers/${encodeURIComponent(conversation.customerId)}/tags`, {
-        method: "PUT",
-        headers: {
-          "Content-Type": "application/json"
-        },
-        body: JSON.stringify({
-          tagIds: nextTagIds
-        })
-      });
-      const payload = (await response.json().catch(() => null)) as { error?: { message?: string } } | null;
-      if (!response.ok) {
-        setLeadSettingsError(payload?.error?.message ?? "Failed to update tags.");
-        return;
-      }
-
-      await onRefreshConversation();
-    } catch {
-      setLeadSettingsError("Network error while updating tags.");
-    } finally {
-      setIsSavingTags(false);
-    }
-  }
-
   if (isLoading) {
     return (
       <aside className="inbox-scroll h-full min-h-0 overflow-y-auto overscroll-contain rounded-[20px] border border-border/80 bg-card/95 p-4 shadow-sm">
@@ -625,25 +554,58 @@ export function CrmContextPanel({
 
   return (
     <aside className="inbox-scroll h-full min-h-0 space-y-3 overflow-y-auto overscroll-contain pb-3">
-      <section className="rounded-[24px] border border-border/80 bg-card/95 shadow-sm">
+      <section id="crm-profile" className="rounded-[24px] border border-border/80 bg-card/95 shadow-sm">
         <div className="flex items-start gap-3 px-4 py-4">
           {conversation.customerAvatarUrl ? (
             <div className="relative h-16 w-16 overflow-hidden rounded-full border border-border/70">
-              <Image src={conversation.customerAvatarUrl} alt={conversation.customerDisplayName ?? conversation.customerPhoneE164} fill unoptimized className="object-cover" />
+              <Image src={cachedCustomerAvatarUrl ?? conversation.customerAvatarUrl} alt={conversation.customerDisplayName ?? conversation.customerPhoneE164} fill unoptimized className="object-cover" />
+              <span
+                className={`absolute -bottom-0.5 -right-0.5 h-3.5 w-3.5 rounded-full border-2 border-card ${
+                  avatarPresenceActive ? "bg-emerald-500" : "bg-slate-300"
+                }`}
+                title={avatarPresenceActive ? "Active recently" : "No recent activity"}
+              />
             </div>
           ) : (
-            <div className="flex h-16 w-16 items-center justify-center rounded-full bg-primary/10 text-lg font-semibold text-primary">
+            <div className="relative flex h-16 w-16 items-center justify-center rounded-full bg-primary/10 text-lg font-semibold text-primary">
               {(conversation.customerDisplayName?.trim() || conversation.customerPhoneE164).slice(0, 2).toUpperCase()}
+              <span
+                className={`absolute -bottom-0.5 -right-0.5 h-3.5 w-3.5 rounded-full border-2 border-card ${
+                  avatarPresenceActive ? "bg-emerald-500" : "bg-slate-300"
+                }`}
+                title={avatarPresenceActive ? "Active recently" : "No recent activity"}
+              />
             </div>
           )}
           <div className="min-w-0 flex-1">
             <h2 className="truncate text-lg font-semibold text-foreground">{conversation.customerDisplayName?.trim() || conversation.customerPhoneE164}</h2>
             <p className="truncate text-sm text-muted-foreground">{conversation.customerPhoneE164}</p>
             <div className="mt-2 flex flex-wrap items-center gap-2">
-              <span className={`rounded-full border px-2 py-0.5 text-[11px] ${conversation.status === "OPEN" ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-600" : "border-amber-500/30 bg-amber-500/10 text-amber-600"}`}>{conversation.status}</span>
-              {conversation.crmStageName ? <span className="rounded-full border border-primary/20 bg-primary/10 px-2 py-0.5 text-[11px] text-primary">{conversation.crmStageName}</span> : null}
+              <span
+                className={`rounded-full border px-2 py-0.5 text-[11px] ${conversation.status === "OPEN" ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-600" : "border-amber-500/30 bg-amber-500/10 text-amber-600"}`}
+                title={conversation.status === "OPEN" ? "Conversation is open" : "Conversation is closed"}
+              >
+                {conversation.status}
+              </span>
+              {isLatestMessageProofReady ? (
+                <span
+                  className="rounded-full border border-emerald-500/30 bg-emerald-500/10 px-2 py-0.5 text-[11px] text-emerald-600"
+                  title="Latest inbound media/document can be used as payment proof"
+                >
+                  Proof ready
+                </span>
+              ) : null}
+              {conversation.crmStageName ? (
+                <span
+                  className="rounded-full border border-primary/20 bg-primary/10 px-2 py-0.5 text-[11px] text-primary"
+                  title="Current pipeline stage"
+                >
+                  {conversation.crmStageName}
+                </span>
+              ) : null}
             </div>
           </div>
+          <IndicatorLegend compact />
         </div>
         <div className="border-t border-border/70 px-4 py-4">
           <div className="space-y-2 text-sm">
@@ -689,26 +651,6 @@ export function CrmContextPanel({
                   </option>
                 ))}
               </select>
-              <div className="mt-2">
-                {renderLeadToneBadge(leadSettings.leadStatus, "status")}
-              </div>
-            </div>
-            <div>
-              <p className="mb-1 text-xs text-muted-foreground">Follow-up</p>
-              <select
-                value={leadSettings.followUpStatus ?? "WAIT_RESPON"}
-                onChange={(event) => setLeadSettings((current) => ({ ...current, followUpStatus: event.target.value }))}
-                className="h-11 w-full rounded-xl border border-border bg-background px-3 text-sm"
-              >
-                {followUpOptions.map((option) => (
-                  <option key={option} value={option}>
-                    {formatLabel(option)}
-                  </option>
-                ))}
-              </select>
-              <div className="mt-2">
-                {renderLeadToneBadge(leadSettings.followUpStatus ?? "WAIT_RESPON", "followup")}
-              </div>
             </div>
             <div>
               <p className="mb-1 text-xs text-muted-foreground">Pipeline Stage</p>
@@ -729,84 +671,38 @@ export function CrmContextPanel({
                   </option>
                 ))}
               </select>
-              <div className="mt-2">
-                {leadSettings.crmStageId ? (
-                  (() => {
-                    const selectedStage = pipelineStages.find((stage) => stage.stageId === leadSettings.crmStageId);
-                    if (!selectedStage) {
-                      return <Badge variant="outline">Stage selected</Badge>;
-                    }
-                    return renderPipelineStageBadge(selectedStage.stageName, selectedStage.stageColor);
-                  })()
-                ) : (
-                  <Badge variant="outline" className="rounded-full">
-                    Unassigned
-                  </Badge>
-                )}
-              </div>
             </div>
             <div>
               <p className="mb-1 text-xs text-muted-foreground">Business Category</p>
-              <Input
-                list="crm-business-category-options"
+              <select
                 value={leadSettings.businessCategory ?? ""}
-                onChange={(event) => setLeadSettings((current) => ({ ...current, businessCategory: event.target.value.trim() || null }))}
-                placeholder="Set category"
-                className="h-11 rounded-xl"
-              />
-              <datalist id="crm-business-category-options">
-                {businessCategoryOptions.map((option) => (
-                  <option key={option} value={option} />
+                onChange={(event) => setLeadSettings((current) => ({ ...current, businessCategory: event.target.value || null }))}
+                className="h-11 w-full rounded-xl border border-border bg-background px-3 text-sm"
+              >
+                <option value="">Set category</option>
+                {businessCategorySelectOptions.map((option) => (
+                  <option key={option} value={option}>
+                    {option}
+                  </option>
                 ))}
-              </datalist>
-              {leadSettings.businessCategory ? (
-                <div className="mt-2">
-                  <Badge className="max-w-[220px] truncate rounded-full bg-violet-200 text-violet-700 hover:bg-violet-200" title={leadSettings.businessCategory}>
-                    {leadSettings.businessCategory}
-                  </Badge>
-                </div>
-              ) : null}
-            </div>
-            <div>
-              <p className="mb-1 text-xs text-muted-foreground">Tags</p>
-              <div className="flex flex-wrap gap-2">
-                {tags.map((tag) => (
-                  <button
-                    key={tag.id}
-                    type="button"
-                    onClick={() => void handleToggleTag(tag.id)}
-                    disabled={isSavingTags}
-                    className={
-                      tag.isAssigned
-                        ? "rounded-full border border-blue-500 bg-blue-500 px-2.5 py-1 text-[11px] text-white"
-                        : "rounded-full border border-border px-2.5 py-1 text-[11px] text-foreground hover:bg-accent"
-                    }
-                  >
-                    {tag.name}
-                  </button>
-                ))}
-                {!isLoadingCrm && tags.length === 0 ? <p className="text-xs text-muted-foreground">Belum ada tag.</p> : null}
-              </div>
-            </div>
-            <div className="space-y-2">
-              <p className="text-xs text-muted-foreground">Create New Tag</p>
-              <form className="flex gap-2" onSubmit={handleCreateTag}>
-                <Input value={tagName} onChange={(event) => setTagName(event.target.value)} placeholder="New tag" className="h-10 rounded-xl" />
-                <Button type="submit" disabled={isSubmittingTag} size="sm" variant="secondary" className="h-10 rounded-xl border border-border/80 bg-background">
-                  {isSubmittingTag ? "..." : "Add"}
+              </select>
+              <div className="mt-2 flex gap-2">
+                <Input
+                  value={newBusinessCategory}
+                  onChange={(event) => setNewBusinessCategory(event.target.value)}
+                  placeholder="Add new category"
+                  className="h-10 rounded-xl"
+                />
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="secondary"
+                  className="h-10 rounded-xl border border-border/80 bg-background"
+                  onClick={handleAddBusinessCategory}
+                  disabled={!newBusinessCategory.trim()}
+                >
+                  Add
                 </Button>
-              </form>
-              <div className="flex flex-wrap gap-2">
-                {labelColorPresets.map((preset) => (
-                  <button
-                    key={preset}
-                    type="button"
-                    onClick={() => setTagColor(preset)}
-                    className={tagColor === preset ? "rounded-full border border-primary/30 bg-primary/10 px-2.5 py-1 text-[11px] capitalize text-primary" : "rounded-full border border-border px-2.5 py-1 text-[11px] capitalize text-muted-foreground"}
-                  >
-                    {preset}
-                  </button>
-                ))}
               </div>
             </div>
             <Button type="submit" disabled={isSavingLeadSettings || isLoadingLeadSettings} className="h-10 w-full rounded-xl">
@@ -820,7 +716,7 @@ export function CrmContextPanel({
       </AccordionCard>
 
       <AccordionCard id="crm-notes" title="Catatan Internal" icon={NotebookPen}>
-        <form className="space-y-3" onSubmit={handleCreateNote}>
+        <div className="space-y-3">
           <textarea
             value={noteContent}
             onChange={(event) => setNoteContent(event.target.value)}
@@ -828,88 +724,129 @@ export function CrmContextPanel({
             className="min-h-[112px] w-full rounded-2xl border border-amber-200 bg-amber-50/40 px-3 py-3 text-sm text-foreground outline-none transition focus:border-amber-300 focus:ring-2 focus:ring-amber-200/60"
           />
           <div className="flex justify-end">
-            <Button type="submit" disabled={isSubmittingNote || !noteContent.trim()} size="sm" className="h-9 rounded-lg">
-              {isSubmittingNote ? "Saving..." : "Simpan Catatan"}
+            <Button type="button" disabled={isSavingNotes} size="sm" className="h-9 rounded-lg" onClick={() => void handleSaveNotes()}>
+              {isSavingNotes ? "Saving..." : "Simpan Catatan"}
             </Button>
           </div>
-        </form>
-        <div className="mt-4 space-y-2">
-          {isLoadingCrm ? <p className="text-xs text-muted-foreground">Loading notes...</p> : null}
-          {!isLoadingCrm && notes.length === 0 ? <p className="text-xs text-muted-foreground">Belum ada catatan internal.</p> : null}
-          {!isLoadingCrm &&
-            notes.map((note) => (
-              <article key={note.id} className="rounded-xl border border-border/80 bg-background/70 p-3">
-                <p className="text-sm text-foreground">{note.content}</p>
-                <p className="mt-1 text-[11px] text-muted-foreground">{formatDateTime(note.createdAt)}</p>
-                <div className="mt-2 flex gap-2">
-                  <Button
-                    type="button"
-                    size="sm"
-                    variant="secondary"
-                    className="h-7 rounded-lg border border-border/80 bg-background px-2 text-[11px]"
-                    onClick={() => {
-                      setEditingNote(note);
-                      setEditingNoteContent(note.content);
-                    }}
-                  >
-                    Open
-                  </Button>
-                  <Button
-                    type="button"
-                    size="sm"
-                    variant="secondary"
-                    className="h-7 rounded-lg border border-destructive/30 bg-destructive/10 px-2 text-[11px] text-destructive"
-                    onClick={() => void onDeleteNote(note.id)}
-                  >
-                    Delete
-                  </Button>
-                </div>
-              </article>
-            ))}
+          <p className="text-xs text-muted-foreground">Terhubung langsung ke field Notes pada data customer.</p>
           {crmError ? <p className="text-xs text-destructive">{crmError}</p> : null}
         </div>
       </AccordionCard>
 
       <AccordionCard id="crm-media" title="Media, Dokumen & Tautan" icon={ImageIcon}>
         <div className="space-y-4">
-          <div>
-            <p className="mb-2 text-xs font-semibold uppercase tracking-[0.22em] text-muted-foreground">Media & Dokumen</p>
-            {mediaItems.length === 0 ? (
-              <div className="rounded-2xl border border-dashed border-border/80 bg-background/50 px-4 py-6 text-center text-xs text-muted-foreground">Tidak ada riwayat media</div>
-            ) : (
-              <div className="grid gap-2">
-                {mediaItems.slice(0, 12).map((item) => (
-                  <a key={item.id} href={item.mediaUrl ?? "#"} target="_blank" rel="noreferrer" className="flex items-center gap-3 rounded-xl border border-border/80 bg-background/70 px-3 py-3 hover:bg-accent/40">
-                    <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-muted/70 text-muted-foreground">
-                      {item.type === "DOCUMENT" ? <FileText className="h-4 w-4" /> : <ImageIcon className="h-4 w-4" />}
-                    </div>
-                    <div className="min-w-0">
-                      <p className="truncate text-sm font-medium text-foreground">{item.fileName ?? `${item.type} attachment`}</p>
-                      <p className="text-xs text-muted-foreground">{formatDateTime(item.createdAt)}</p>
-                    </div>
-                  </a>
-                ))}
-              </div>
-            )}
+          <div className="grid grid-cols-3 gap-2 rounded-xl border border-border/70 bg-background/40 p-1">
+            <button
+              type="button"
+              className={`h-8 rounded-lg text-xs font-medium transition ${activeMediaTab === "media" ? "bg-primary/12 text-primary" : "text-muted-foreground hover:bg-accent"}`}
+              onClick={() => setActiveMediaTab("media")}
+            >
+              Media
+            </button>
+            <button
+              type="button"
+              className={`h-8 rounded-lg text-xs font-medium transition ${activeMediaTab === "documents" ? "bg-primary/12 text-primary" : "text-muted-foreground hover:bg-accent"}`}
+              onClick={() => setActiveMediaTab("documents")}
+            >
+              Dokumen
+            </button>
+            <button
+              type="button"
+              className={`h-8 rounded-lg text-xs font-medium transition ${activeMediaTab === "links" ? "bg-primary/12 text-primary" : "text-muted-foreground hover:bg-accent"}`}
+              onClick={() => setActiveMediaTab("links")}
+            >
+              Tautan
+            </button>
           </div>
 
-          <div>
-            <p className="mb-2 text-xs font-semibold uppercase tracking-[0.22em] text-muted-foreground">Tautan</p>
-            {links.length === 0 ? (
-              <div className="rounded-2xl border border-dashed border-border/80 bg-background/50 px-4 py-6 text-center text-xs text-muted-foreground">Tidak ada tautan di percakapan ini</div>
+          {activeMediaTab === "media" ? (
+            mediaOnlyItems.length === 0 ? (
+              <div className="rounded-2xl border border-dashed border-border/80 bg-background/50 px-4 py-6 text-center text-xs text-muted-foreground">Tidak ada media.</div>
             ) : (
-              <div className="space-y-2">
-                {links.map((link) => (
-                  <a key={link} href={link} target="_blank" rel="noreferrer" className="flex items-start gap-3 rounded-xl border border-border/80 bg-background/70 px-3 py-3 hover:bg-accent/40">
-                    <div className="mt-0.5 flex h-8 w-8 items-center justify-center rounded-lg bg-muted/70 text-muted-foreground">
-                      <Link2 className="h-4 w-4" />
+              <div className="grid grid-cols-2 gap-2">
+                {mediaOnlyItems.map((item) => (
+                  <button
+                    key={item.id}
+                    type="button"
+                    className="group overflow-hidden rounded-xl border border-border/80 bg-background text-left hover:bg-accent/30"
+                    onClick={() => {
+                      setPreviewMediaUrl(item.safeMediaUrl ?? null);
+                      setPreviewMediaType(item.type === "VIDEO" ? "VIDEO" : "IMAGE");
+                      setPreviewMediaTitle(item.fileName ?? `${item.type} attachment`);
+                    }}
+                  >
+                    <div className="relative aspect-[4/3] bg-muted/40">
+                      {item.type === "IMAGE" ? (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img src={item.safeMediaUrl ?? ""} alt={item.fileName ?? "media"} className="h-full w-full object-cover transition group-hover:scale-[1.02]" />
+                      ) : (
+                        <video src={item.safeMediaUrl ?? ""} className="h-full w-full object-cover" muted />
+                      )}
                     </div>
-                    <span className="break-all text-sm text-primary underline underline-offset-2">{link}</span>
-                  </a>
+                    <div className="p-2">
+                      <p className="truncate text-xs font-medium text-foreground">{item.fileName ?? `${item.type} attachment`}</p>
+                      <p className="text-[11px] text-muted-foreground">{formatDateTime(item.createdAt)}</p>
+                    </div>
+                  </button>
                 ))}
               </div>
-            )}
-          </div>
+            )
+          ) : null}
+
+          {activeMediaTab === "documents" ? (
+            documentItems.length === 0 ? (
+              <div className="rounded-2xl border border-dashed border-border/80 bg-background/50 px-4 py-6 text-center text-xs text-muted-foreground">Tidak ada dokumen.</div>
+            ) : (
+              <div className="grid grid-cols-2 gap-2">
+                {documentItems.map((item) => (
+                  <button
+                    key={item.id}
+                    type="button"
+                    className="rounded-xl border border-border/80 bg-background p-3 text-left hover:bg-accent/30"
+                    onClick={() => {
+                      setPreviewMediaUrl(item.safeMediaUrl ?? null);
+                      setPreviewMediaType("DOCUMENT");
+                      setPreviewMediaTitle(item.fileName ?? "Document");
+                    }}
+                  >
+                    <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-muted/70 text-muted-foreground">
+                      <FileText className="h-4 w-4" />
+                    </div>
+                    <p className="mt-2 line-clamp-2 text-xs font-medium text-foreground">{item.fileName ?? "Document"}</p>
+                    <p className="mt-1 text-[11px] text-muted-foreground">{formatDateTime(item.createdAt)}</p>
+                  </button>
+                ))}
+              </div>
+            )
+          ) : null}
+
+          {activeMediaTab === "links" ? (
+            links.length === 0 ? (
+              <div className="rounded-2xl border border-dashed border-border/80 bg-background/50 px-4 py-6 text-center text-xs text-muted-foreground">Tidak ada tautan.</div>
+            ) : (
+              <div className="grid grid-cols-1 gap-2">
+                {links.map((link) => (
+                  <button
+                    key={link}
+                    type="button"
+                    className="rounded-xl border border-border/80 bg-background px-3 py-3 text-left hover:bg-accent/30"
+                    onClick={() => {
+                      setPreviewMediaUrl(link);
+                      setPreviewMediaType("LINK");
+                      setPreviewMediaTitle(link);
+                    }}
+                  >
+                    <div className="flex items-start gap-2">
+                      <div className="mt-0.5 flex h-7 w-7 items-center justify-center rounded-lg bg-muted/70 text-muted-foreground">
+                        <Link2 className="h-4 w-4" />
+                      </div>
+                      <span className="break-all text-xs text-primary underline underline-offset-2">{link}</span>
+                    </div>
+                  </button>
+                ))}
+              </div>
+            )
+          ) : null}
         </div>
       </AccordionCard>
 
@@ -930,29 +867,6 @@ export function CrmContextPanel({
           />
         </AccordionCard>
       </div>
-
-      <AccordionCard id="crm-proof" title="Attach Payment Proof" icon={FileText} defaultOpen={false}>
-        <p className="text-xs text-muted-foreground">Selected message: {selectedProofMessageId ?? "None (use \"Use as payment proof\" in chat bubble)"}</p>
-        <div className="mt-3 grid gap-2 sm:grid-cols-2">
-          <Input value={proofInvoiceId} onChange={(event) => setProofInvoiceId(event.target.value)} placeholder="Invoice ID" className="h-10 rounded-xl" />
-          <select value={proofMilestoneType} onChange={(event) => setProofMilestoneType(event.target.value as "" | "FULL" | "DP" | "FINAL")} className="h-10 w-full rounded-xl border border-border bg-background px-3 text-sm">
-            <option value="">No milestone</option>
-            <option value="FULL">FULL</option>
-            <option value="DP">DP</option>
-            <option value="FINAL">FINAL</option>
-          </select>
-        </div>
-        <Button
-          type="button"
-          disabled={isAttachingProof || !selectedProofMessageId || !proofInvoiceId.trim()}
-          onClick={() => void onAttachProof(proofInvoiceId.trim(), proofMilestoneType || undefined)}
-          size="sm"
-          className="mt-3 h-9 w-full rounded-xl"
-        >
-          {isAttachingProof ? "Attaching..." : "Attach proof"}
-        </Button>
-        {proofFeedback ? <p className="mt-2 text-xs text-muted-foreground">{proofFeedback}</p> : null}
-      </AccordionCard>
 
       <div id="crm-timeline">
         <AccordionCard id="crm-timeline-panel" title="Timeline" icon={Workflow} defaultOpen={false}>
@@ -994,65 +908,47 @@ export function CrmContextPanel({
         </div>
       ) : null}
 
-      {editingNote ? (
-        <div
-          className="fixed inset-0 z-[70] flex items-center justify-center bg-black/45 p-4 backdrop-blur-sm"
-          role="dialog"
-          aria-modal="true"
-          aria-label="Detail catatan"
-        >
-          <div ref={editNoteModalContainerRef} className="w-full max-w-2xl rounded-[28px] border border-border/80 bg-card p-5 shadow-2xl">
-            <div className="flex items-center justify-between">
-              <div>
-                <h3 className="text-lg font-semibold text-foreground">Detail catatan</h3>
-                <p className="text-sm text-muted-foreground">{formatDateTime(editingNote.createdAt)}</p>
-              </div>
-              <Button ref={editNoteModalCloseButtonRef} type="button" variant="ghost" onClick={() => setEditingNote(null)}>
+      {previewMediaUrl && previewMediaType ? (
+        <div className="fixed inset-0 z-[75] flex items-center justify-center bg-black/65 p-4 backdrop-blur-sm" role="dialog" aria-modal="true" aria-label="Preview media">
+          <div className="w-full max-w-4xl rounded-2xl border border-border/80 bg-card p-4 shadow-2xl">
+            <div className="mb-3 flex items-center justify-between gap-3">
+              <p className="truncate text-sm font-medium text-foreground">{previewMediaTitle}</p>
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                onClick={() => {
+                  setPreviewMediaUrl(null);
+                  setPreviewMediaType(null);
+                }}
+              >
                 Close
               </Button>
             </div>
-            <textarea
-              value={editingNoteContent}
-              onChange={(event) => setEditingNoteContent(event.target.value)}
-              className="mt-4 min-h-[220px] w-full rounded-2xl border border-border bg-background px-4 py-3 text-sm text-foreground outline-none transition focus:border-primary"
-              placeholder="Tulis detail catatan untuk seluruh tim CS..."
-            />
-            <div className="mt-5 flex justify-between gap-2">
-              <Button
-                type="button"
-                variant="secondary"
-                className="border border-destructive/30 bg-destructive/10 text-destructive"
-                onClick={async () => {
-                  await onDeleteNote(editingNote.id);
-                  setEditingNote(null);
-                }}
-              >
-                Delete
-              </Button>
-              <div className="flex gap-2">
-                <Button type="button" variant="ghost" onClick={() => setEditingNote(null)}>
-                  Cancel
-                </Button>
-                <Button
-                  type="button"
-                  disabled={isSavingEditedNote || !editingNoteContent.trim()}
-                  onClick={async () => {
-                    setIsSavingEditedNote(true);
-                    try {
-                      await onUpdateNote(editingNote.id, editingNoteContent.trim());
-                      setEditingNote(null);
-                    } finally {
-                      setIsSavingEditedNote(false);
-                    }
-                  }}
-                >
-                  {isSavingEditedNote ? "Saving..." : "Save note"}
-                </Button>
-              </div>
+            <div className="rounded-xl border border-border/70 bg-background/50 p-3">
+              {previewMediaType === "IMAGE" ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={previewMediaUrl} alt={previewMediaTitle} className="mx-auto max-h-[70vh] w-auto max-w-full rounded-lg object-contain" />
+              ) : null}
+              {previewMediaType === "VIDEO" ? (
+                <video src={previewMediaUrl} controls className="mx-auto max-h-[70vh] w-auto max-w-full rounded-lg" />
+              ) : null}
+              {previewMediaType === "DOCUMENT" ? (
+                <iframe src={previewMediaUrl} className="h-[70vh] w-full rounded-lg border border-border/70" title={previewMediaTitle} />
+              ) : null}
+              {previewMediaType === "LINK" ? (
+                <div className="space-y-3 p-2">
+                  <p className="break-all text-sm text-foreground">{previewMediaUrl}</p>
+                  <a href={previewMediaUrl} target="_blank" rel="noreferrer" className="inline-flex rounded-lg border border-border px-3 py-1.5 text-xs font-medium text-primary hover:bg-accent">
+                    Open link
+                  </a>
+                </div>
+              ) : null}
             </div>
           </div>
         </div>
       ) : null}
+
     </aside>
   );
 }

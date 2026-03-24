@@ -29,6 +29,7 @@ export function toConversationSummary(input: {
     displayName: string | null;
     waProfilePicUrl: string | null;
     source: string | null;
+    leadStatus: string | null;
   };
 }): ConversationSummary {
   return {
@@ -38,6 +39,7 @@ export function toConversationSummary(input: {
     phoneE164: input.customer.phoneE164,
     customerDisplayName: input.customer.displayName,
     customerAvatarUrl: input.customer.waProfilePicUrl,
+    customerLeadStatus: input.customer.leadStatus,
     crmPipelineId: input.conversation.crmPipelineId,
     crmPipelineName: input.conversation.crmPipeline?.name ?? null,
     crmStageId: input.conversation.crmStageId,
@@ -74,6 +76,7 @@ export function toConversationListItem(row: {
     displayName: string | null;
     waProfilePicUrl: string | null;
     source: string | null;
+    leadStatus: string | null;
   };
   crmPipeline?: {
     name: string;
@@ -84,6 +87,7 @@ export function toConversationListItem(row: {
   messages?: Array<{
     text: string | null;
     type: string;
+    direction: "INBOUND" | "OUTBOUND";
     fileName: string | null;
   }>;
 }): ConversationListItem {
@@ -96,6 +100,7 @@ export function toConversationListItem(row: {
     customerPhoneE164: row.customer.phoneE164,
     customerDisplayName: row.customer.displayName,
     customerAvatarUrl: row.customer.waProfilePicUrl,
+    customerLeadStatus: row.customer.leadStatus,
     crmPipelineId: row.crmPipelineId,
     crmPipelineName: row.crmPipeline?.name ?? null,
     crmStageId: row.crmStageId,
@@ -107,6 +112,8 @@ export function toConversationListItem(row: {
           fileName: firstMessage.fileName
         })
       : null,
+    lastMessageType: firstMessage?.type ?? null,
+    lastMessageDirection: firstMessage?.direction ?? null,
     source: row.customer.source,
     sourceCampaign: row.sourceCampaign,
     sourceAdset: row.sourcePlatform,

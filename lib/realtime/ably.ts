@@ -4,6 +4,7 @@ import {
   type BaseEventPayload,
   type InvoiceEventStatus,
   buildAssignmentChangedEventPayload,
+  buildConversationTypingEventPayload,
   buildConversationUpdatedEventPayload,
   buildCustomerUpdatedEventPayload,
   buildInvoiceEventPayload,
@@ -74,6 +75,21 @@ export async function publishConversationUpdatedEvent(input: {
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unknown realtime publish error";
     console.error(`[realtime] failed to publish conversation.updated: ${message}`);
+  }
+}
+
+export async function publishConversationTypingEvent(input: {
+  orgId: string;
+  conversationId: string;
+  isTyping: boolean;
+}): Promise<void> {
+  const payload = buildConversationTypingEventPayload(input);
+
+  try {
+    await publishOrgEvent(payload);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Unknown realtime publish error";
+    console.error(`[realtime] failed to publish conversation.typing: ${message}`);
   }
 }
 

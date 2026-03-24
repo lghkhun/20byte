@@ -1,9 +1,9 @@
 "use client";
 
 import Link from "next/link";
-import { useRouter } from "next/navigation";
-import { BadgeCheck, ChevronsUpDown, LogOut, Settings, UserCircle } from "lucide-react";
-import { useEffect, useState } from "react";
+import { usePathname, useRouter } from "next/navigation";
+import { BadgeCheck, ChevronsUpDown, LogOut, ReceiptText, Settings, UserCircle } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
 
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import {
@@ -17,12 +17,16 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { SidebarMenu, SidebarMenuButton, SidebarMenuItem, useSidebar } from "@/components/ui/sidebar";
 import { ThemeToggle } from "@/components/ui/theme-toggle";
+import { useLocalImageCache } from "@/lib/client/localImageCache";
+import { invalidateOrganizationsCache } from "@/lib/client/orgsCache";
+import { dismissNotify, notifyLoading } from "@/lib/ui/notify";
 
 type NavUserProps = {
   user: {
     email: string;
     name: string | null;
     avatarUrl?: string | null;
+    primaryOrgRole?: "OWNER" | "ADMIN" | "CS" | "ADVERTISER" | null;
   } | null;
   onMenuOpenChange?: (open: boolean) => void;
 };
@@ -30,6 +34,7 @@ type ProfileUpdateDetail = {
   avatarUrl?: string | null;
   name?: string | null;
   email?: string;
+  avatarVersion?: string;
 };
 
 function toInitials(name: string | null, email: string): string {
@@ -52,18 +57,59 @@ function toInitials(name: string | null, email: string): string {
 
 export function NavUser({ user, onMenuOpenChange }: NavUserProps) {
   const router = useRouter();
+  const pathname = usePathname();
   const { isMobile } = useSidebar();
   const [avatarUrl, setAvatarUrl] = useState<string | null>(user?.avatarUrl ?? null);
   const [displayName, setDisplayName] = useState(user?.name ?? null);
   const [displayEmail, setDisplayEmail] = useState(user?.email ?? "");
+  const [avatarVersion, setAvatarVersion] = useState<string | null>(null);
+  const loadingToastIdRef = useRef<string | number | null>(null);
+  const loadingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const initials = user ? toInitials(displayName, displayEmail) : "";
   const sidebarEmail = displayEmail;
+  const isOwner = user?.primaryOrgRole === "OWNER";
+  const cachedAvatarUrl = useLocalImageCache(avatarUrl, {
+    cacheKey: `user-avatar:${displayEmail.toLowerCase()}:${avatarVersion ?? "v0"}`,
+    ttlMs: 24 * 60 * 60 * 1000,
+    maxBytes: 256 * 1024
+  });
+
+  function startMenuLoading(message: string) {
+    if (loadingToastIdRef.current !== null) {
+      dismissNotify(loadingToastIdRef.current);
+      loadingToastIdRef.current = null;
+    }
+    if (loadingTimeoutRef.current) {
+      clearTimeout(loadingTimeoutRef.current);
+      loadingTimeoutRef.current = null;
+    }
+
+    loadingToastIdRef.current = notifyLoading(message);
+    loadingTimeoutRef.current = setTimeout(() => {
+      if (loadingToastIdRef.current !== null) {
+        dismissNotify(loadingToastIdRef.current);
+        loadingToastIdRef.current = null;
+      }
+    }, 8000);
+  }
 
   useEffect(() => {
     setAvatarUrl(user?.avatarUrl ?? null);
     setDisplayName(user?.name ?? null);
     setDisplayEmail(user?.email ?? "");
+    setAvatarVersion(null);
   }, [user?.avatarUrl, user?.email, user?.name]);
+
+  useEffect(() => {
+    if (loadingToastIdRef.current !== null) {
+      dismissNotify(loadingToastIdRef.current);
+      loadingToastIdRef.current = null;
+    }
+    if (loadingTimeoutRef.current) {
+      clearTimeout(loadingTimeoutRef.current);
+      loadingTimeoutRef.current = null;
+    }
+  }, [pathname]);
 
   useEffect(() => {
     if (!user) {
@@ -78,6 +124,9 @@ export function NavUser({ user, onMenuOpenChange }: NavUserProps) {
 
       if ("avatarUrl" in detail) {
         setAvatarUrl(detail.avatarUrl ?? null);
+      }
+      if ("avatarVersion" in detail) {
+        setAvatarVersion(detail.avatarVersion ?? null);
       }
       if ("name" in detail) {
         setDisplayName(detail.name ?? null);
@@ -118,7 +167,7 @@ export function NavUser({ user, onMenuOpenChange }: NavUserProps) {
               className="data-[state=open]:bg-sidebar-accent data-[state=open]:text-sidebar-accent-foreground"
             >
                 <Avatar className="h-8 w-8 rounded-lg">
-                  <AvatarImage src={avatarUrl ?? undefined} alt={displayName ?? displayEmail} className="object-cover" />
+                  <AvatarImage src={cachedAvatarUrl} alt={displayName ?? displayEmail} className="object-cover" />
                   <AvatarFallback className="rounded-lg bg-sidebar-primary/15 text-sidebar-primary">{initials}</AvatarFallback>
                 </Avatar>
               <div className="grid flex-1 text-left text-sm leading-tight">
@@ -137,7 +186,7 @@ export function NavUser({ user, onMenuOpenChange }: NavUserProps) {
             <DropdownMenuLabel className="p-0 font-normal">
               <div className="flex items-center gap-2 px-2 py-2 text-left text-sm">
                 <Avatar className="h-8 w-8 rounded-lg">
-                  <AvatarImage src={avatarUrl ?? undefined} alt={displayName ?? displayEmail} className="object-cover" />
+                  <AvatarImage src={cachedAvatarUrl} alt={displayName ?? displayEmail} className="object-cover" />
                   <AvatarFallback className="rounded-lg bg-sidebar-primary/15 text-sidebar-primary">{initials}</AvatarFallback>
                 </Avatar>
                 <div className="grid flex-1 text-left text-sm leading-tight">
@@ -150,20 +199,35 @@ export function NavUser({ user, onMenuOpenChange }: NavUserProps) {
             <DropdownMenuGroup>
               <DropdownMenuItem
                 onSelect={() => {
+                  startMenuLoading("Membuka Profile Settings...");
                   router.push("/settings/profile");
                 }}
               >
                 <BadgeCheck />
                 Profile Settings
               </DropdownMenuItem>
-              <DropdownMenuItem
-                onSelect={() => {
-                  router.push("/settings?tab=business");
-                }}
-              >
-                <Settings />
-                Business Settings
-              </DropdownMenuItem>
+              {isOwner ? (
+                <DropdownMenuItem
+                  onSelect={() => {
+                    startMenuLoading("Membuka Business Settings...");
+                    router.push("/settings?tab=business");
+                  }}
+                >
+                  <Settings />
+                  Business Settings
+                </DropdownMenuItem>
+              ) : null}
+              {isOwner ? (
+                <DropdownMenuItem
+                  onSelect={() => {
+                    startMenuLoading("Membuka Billing...");
+                    router.push("/billing");
+                  }}
+                >
+                  <ReceiptText />
+                  Billing
+                </DropdownMenuItem>
+              ) : null}
               <div className="flex items-center justify-between rounded-md px-2 py-1.5 text-sm">
                 <span className="text-foreground">Appearance</span>
                 <ThemeToggle className="h-8 w-8 rounded-md border border-border/70" />
@@ -172,7 +236,9 @@ export function NavUser({ user, onMenuOpenChange }: NavUserProps) {
             <DropdownMenuSeparator />
             <DropdownMenuItem
               onClick={async () => {
+                startMenuLoading("Memproses logout...");
                 await fetch("/api/auth/logout", { method: "POST" });
+                invalidateOrganizationsCache();
                 router.push("/login");
                 router.refresh();
               }}

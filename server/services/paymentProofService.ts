@@ -3,6 +3,7 @@ import { type PaymentMilestoneType, ProofType } from "@prisma/client";
 import { prisma } from "@/lib/db/prisma";
 import { canAccessInbox } from "@/lib/permissions/orgPermissions";
 import { publishProofAttachedEvent } from "@/lib/ably/publisher";
+import { assertOrgBillingAccess } from "@/server/services/billingService";
 import { ServiceError } from "@/server/services/serviceError";
 
 type AttachPaymentProofInput = {
@@ -50,6 +51,8 @@ async function requireProofAccess(actorUserId: string, orgId: string): Promise<v
   if (!canAccessInbox(membership.role)) {
     throw new ServiceError(403, "FORBIDDEN_INVOICE_ACCESS", "Your role cannot attach payment proof.");
   }
+
+  await assertOrgBillingAccess(orgId, "write");
 }
 
 export async function attachPaymentProofFromMessage(input: AttachPaymentProofInput): Promise<AttachPaymentProofResult> {

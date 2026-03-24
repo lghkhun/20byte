@@ -76,3 +76,17 @@ export async function dequeueWhatsAppMediaDownloadJob(timeoutSeconds = 5): Promi
   return parseJobPayload(response[1]);
 }
 
+export async function getWhatsAppMediaQueueSize(): Promise<number> {
+  const response = await sendRedisCommand(getRedisUrl(), ["LLEN", MEDIA_QUEUE_KEY]);
+  if (typeof response === "number") {
+    return response;
+  }
+  if (typeof response === "string") {
+    const parsed = Number.parseInt(response, 10);
+    if (Number.isFinite(parsed) && parsed >= 0) {
+      return parsed;
+    }
+  }
+
+  throw new Error("Invalid LLEN response for media queue.");
+}

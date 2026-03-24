@@ -36,7 +36,6 @@ export function MessageInput({ density = "comfy", disabled, onSendText, onSendAt
   } | null>(null);
   const [attachmentError, setAttachmentError] = useState<string | null>(null);
   const [isSendingAttachment, setIsSendingAttachment] = useState(false);
-  const [inputHint, setInputHint] = useState<string | null>(null);
   const [isEmojiOpen, setIsEmojiOpen] = useState(false);
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
@@ -97,7 +96,6 @@ export function MessageInput({ density = "comfy", disabled, onSendText, onSendAt
             className="h-8 w-8 rounded-md text-muted-foreground"
             title="Insert emoji"
             onClick={() => {
-              setInputHint(null);
               setIsEmojiOpen((current) => !current);
             }}
           >
@@ -165,12 +163,6 @@ export function MessageInput({ density = "comfy", disabled, onSendText, onSendAt
       ) : null}
 
       {attachmentError ? <p className="text-xs text-destructive">{attachmentError}</p> : null}
-      {inputHint ? <p className="text-xs text-muted-foreground">{inputHint}</p> : null}
-
-      <p className="text-[11px] text-muted-foreground/90">
-        Tip: use <span className="font-medium text-foreground/90">/</span> for quick reply,{" "}
-        <span className="font-medium text-foreground/90">I</span> for invoice drawer, and attach file with the paperclip icon.
-      </p>
     </form>
   );
 }

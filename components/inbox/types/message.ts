@@ -12,8 +12,11 @@ export type MessageItem = {
   templateLanguageCode: string | null;
   isAutomated: boolean;
   sendStatus: "PENDING" | "SENT" | "FAILED" | null;
+  deliveryStatus: "SENT" | "DELIVERED" | "READ" | null;
   sendError: string | null;
   retryable: boolean;
   sendAttemptCount: number;
+  deliveredAt: string | null;
+  readAt: string | null;
   createdAt: string;
 };

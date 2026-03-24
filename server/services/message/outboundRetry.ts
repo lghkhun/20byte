@@ -107,6 +107,7 @@ export async function retryOutboundMessage(input: RetryOutboundMessageInput): Pr
       waMessageId,
       type: message.type as "TEXT" | "TEMPLATE" | "SYSTEM",
       sendStatus: "SENT",
+      deliveryStatus: "SENT",
       sendError: null,
       retryable: false,
       sendAttemptCount: message.sendAttemptCount + 1,

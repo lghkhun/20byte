@@ -1,0 +1,85 @@
+{
+  "generatedAt": "2026-03-22T10:40:10.884Z",
+  "totals": {
+    "suites": 6,
+    "passed": 5,
+    "failed": 0,
+    "skipped": 1
+  },
+  "reports": [
+    {
+      "suite": "smoke-ui",
+      "status": "passed",
+      "baseUrl": "http://localhost:3001",
+      "startedAt": "2026-03-22T10:39:13.606Z",
+      "endedAt": "2026-03-22T10:39:25.610Z",
+      "durationMs": 12004,
+      "failures": [],
+      "skippedReason": null,
+      "error": null,
+      "meta": {
+        "consoleErrorCount": 0
+      }
+    },
+    {
+      "suite": "smoke-ui-customers-deep",
+      "status": "passed",
+      "baseUrl": "http://localhost:3001",
+      "startedAt": "2026-03-22T10:39:26.986Z",
+      "endedAt": "2026-03-22T10:39:32.715Z",
+      "durationMs": 5729,
+      "failures": [],
+      "skippedReason": null,
+      "error": null,
+      "meta": {}
+    },
+    {
+      "suite": "smoke-ui-inbox-deep",
+      "status": "passed",
+      "baseUrl": "http://localhost:3001",
+      "startedAt": "2026-03-22T10:39:33.829Z",
+      "endedAt": "2026-03-22T10:39:46.523Z",
+      "durationMs": 12694,
+      "failures": [],
+      "skippedReason": null,
+      "error": null,
+      "meta": {}
+    },
+    {
+      "suite": "smoke-ui-invoices-deep",
+      "status": "passed",
+      "baseUrl": "http://localhost:3001",
+      "startedAt": "2026-03-22T10:39:55.282Z",
+      "endedAt": "2026-03-22T10:39:59.532Z",
+      "durationMs": 4250,
+      "failures": [],
+      "skippedReason": null,
+      "error": null,
+      "meta": {}
+    },
+    {
+      "suite": "smoke-ui-pipeline-deep",
+      "status": "passed",
+      "baseUrl": "http://localhost:3001",
+      "startedAt": "2026-03-22T10:39:50.755Z",
+      "endedAt": "2026-03-22T10:39:54.021Z",
+      "durationMs": 3266,
+      "failures": [],
+      "skippedReason": null,
+      "error": null,
+      "meta": {}
+    },
+    {
+      "suite": "smoke-ui-shortlinks-deep",
+      "status": "skipped",
+      "baseUrl": "http://localhost:3001",
+      "startedAt": "2026-03-22T10:39:47.862Z",
+      "endedAt": "2026-03-22T10:39:49.613Z",
+      "durationMs": 1751,
+      "failures": [],
+      "skippedReason": "Baileys connected number is unavailable, create flow skipped.",
+      "error": null,
+      "meta": {}
+    }
+  ]
+}

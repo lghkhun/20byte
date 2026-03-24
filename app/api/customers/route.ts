@@ -26,6 +26,11 @@ type CreateCustomerRequest = {
   tagIds?: unknown;
 };
 
+type CustomersResponsePayload = Record<string, unknown>;
+const CUSTOMERS_CACHE_TTL_MS = 8_000;
+const customersCache = new Map<string, { expiresAt: number; payload: CustomersResponsePayload }>();
+const customersInflight = new Map<string, Promise<CustomersResponsePayload>>();
+
 function errorResponse(status: number, code: string, message: string) {
   return NextResponse.json(
     {
@@ -38,6 +43,49 @@ function errorResponse(status: number, code: string, message: string) {
   );
 }
 
+function withServerTiming<T>(response: T, startedAt: number, cacheStatus?: "HIT" | "MISS"): T {
+  const durationMs = Number((performance.now() - startedAt).toFixed(1));
+  if (response instanceof Response) {
+    response.headers.set("Server-Timing", `app;dur=${durationMs}`);
+    if (cacheStatus) {
+      response.headers.set("X-Cache", cacheStatus);
+    }
+  }
+  return response;
+}
+
+async function getCachedCustomersPayload(
+  cacheKey: string,
+  loader: () => Promise<CustomersResponsePayload>
+): Promise<{ payload: CustomersResponsePayload; fromCache: boolean }> {
+  const now = Date.now();
+  const cached = customersCache.get(cacheKey);
+  if (cached && cached.expiresAt > now) {
+    return { payload: cached.payload, fromCache: true };
+  }
+
+  const inflight = customersInflight.get(cacheKey);
+  if (inflight) {
+    return { payload: await inflight, fromCache: true };
+  }
+
+  const request = (async () => {
+    const payload = await loader();
+    customersCache.set(cacheKey, {
+      expiresAt: Date.now() + CUSTOMERS_CACHE_TTL_MS,
+      payload
+    });
+    return payload;
+  })();
+
+  customersInflight.set(cacheKey, request);
+  try {
+    return { payload: await request, fromCache: false };
+  } finally {
+    customersInflight.delete(cacheKey);
+  }
+}
+
 function parseNumber(value: string | null, fallback: number): number {
   if (!value) {
     return fallback;
@@ -48,6 +96,14 @@ function parseNumber(value: string | null, fallback: number): number {
     return fallback;
   }
 
+  return parsed;
+}
+
+function parsePositiveInt(value: string | null, fallback: number): number {
+  const parsed = parseNumber(value, fallback);
+  if (!Number.isInteger(parsed) || parsed < 1) {
+    return fallback;
+  }
   return parsed;
 }
 
@@ -201,9 +257,10 @@ function mapCustomerRow(
 }
 
 export async function GET(request: NextRequest) {
+  const startedAt = performance.now();
   const auth = requireApiSession(request);
   if (auth.response) {
-    return auth.response;
+    return withServerTiming(auth.response, startedAt);
   }
 
   try {
@@ -213,77 +270,154 @@ export async function GET(request: NextRequest) {
     );
     await requireCustomerDirectoryAccess(auth.session.userId, orgId);
 
-    const page = parseNumber(request.nextUrl.searchParams.get("page"), 1);
+    const page = parsePositiveInt(request.nextUrl.searchParams.get("page"), 1);
     const lightweight = parseBooleanFlag(request.nextUrl.searchParams.get("light"));
+    const picker = parseBooleanFlag(request.nextUrl.searchParams.get("picker"));
+    const includeTags = parseBooleanFlag(request.nextUrl.searchParams.get("includeTags"));
     const maxLimit = lightweight ? 300 : 100;
-    const limit = Math.min(maxLimit, parseNumber(request.nextUrl.searchParams.get("limit"), 30));
+    const limit = Math.min(maxLimit, parsePositiveInt(request.nextUrl.searchParams.get("limit"), 30));
     const query = request.nextUrl.searchParams.get("q")?.trim() ?? "";
     const tagId = request.nextUrl.searchParams.get("tagId")?.trim() ?? "";
     const leadStatus = request.nextUrl.searchParams.get("leadStatus")?.trim() ?? "";
     const source = request.nextUrl.searchParams.get("source")?.trim() ?? "";
     const hotness = request.nextUrl.searchParams.get("hotness")?.trim() ?? "";
     const assignedToMemberId = request.nextUrl.searchParams.get("assignedToMemberId")?.trim() ?? "";
+    const crmStageId = request.nextUrl.searchParams.get("crmStageId")?.trim() ?? "";
+    const crmStageUnassigned = parseBooleanFlag(request.nextUrl.searchParams.get("crmStageUnassigned"));
 
-    const where: Prisma.CustomerWhereInput = {
-      orgId,
-      ...(query
-        ? {
-            OR: [
-              { displayName: { contains: query } },
-              { phoneE164: { contains: query } },
-              { leadStatus: { contains: query } },
-              { followUpStatus: { contains: query } },
-              { businessCategory: { contains: query } },
-              { detail: { contains: query } },
-              { source: { contains: query } },
-              { hotness: { contains: query } },
-              { packageName: { contains: query } },
-              { remarks: { contains: query } },
-              {
-                tagLinks: {
-                  some: {
-                    tag: {
-                      name: { contains: query }
-                    }
-                  }
-                }
-              }
-            ]
-          }
-        : {}),
-      ...(tagId
-        ? {
+    const andConditions: Prisma.CustomerWhereInput[] = [{ orgId }];
+    if (query) {
+      andConditions.push({
+        OR: [
+          { displayName: { contains: query } },
+          { phoneE164: { contains: query } },
+          { leadStatus: { contains: query } },
+          { followUpStatus: { contains: query } },
+          { businessCategory: { contains: query } },
+          { detail: { contains: query } },
+          { source: { contains: query } },
+          { hotness: { contains: query } },
+          { packageName: { contains: query } },
+          { remarks: { contains: query } },
+          {
             tagLinks: {
               some: {
-                tagId
+                tag: {
+                  name: { contains: query }
+                }
               }
             }
           }
-        : {}),
-      ...(leadStatus
-        ? {
-            leadStatus
+        ]
+      });
+    }
+    if (tagId) {
+      andConditions.push({
+        tagLinks: {
+          some: {
+            tagId
           }
-        : {}),
-      ...(source
-        ? {
-            source
+        }
+      });
+    }
+    if (leadStatus) {
+      andConditions.push({ leadStatus });
+    }
+    if (source) {
+      andConditions.push({ source });
+    }
+    if (hotness) {
+      andConditions.push({ hotness });
+    }
+    if (assignedToMemberId) {
+      andConditions.push({ assignedToMemberId });
+    }
+    if (crmStageId) {
+      andConditions.push({
+        conversations: {
+          some: {
+            crmStageId
           }
-        : {}),
-      ...(hotness
-        ? {
-            hotness
+        }
+      });
+    } else if (crmStageUnassigned) {
+      andConditions.push({
+        OR: [
+          {
+            conversations: {
+              none: {}
+            }
+          },
+          {
+            conversations: {
+              every: {
+                crmStageId: null
+              }
+            }
           }
-        : {}),
-      ...(assignedToMemberId
-        ? {
-            assignedToMemberId
-          }
-        : {})
-    };
+        ]
+      });
+    }
 
-    const [members, tags] = await prisma.$transaction([
-      prisma.orgMember.findMany({
+    const where: Prisma.CustomerWhereInput = {
+      AND: andConditions
+    };
+    const cacheKey = `${auth.session.userId}:${orgId}:${request.nextUrl.searchParams.toString()}`;
+    const { payload, fromCache } = await getCachedCustomersPayload(cacheKey, async () => {
+      if (picker) {
+        const pickerLimit = Math.min(50, Math.max(1, limit));
+        const normalizedQuery = query.replace(/\s+/g, " ").trim();
+        const pickerWhere: Prisma.CustomerWhereInput = {
+          orgId,
+          ...(normalizedQuery
+            ? {
+                OR: [
+                  { displayName: { startsWith: normalizedQuery } },
+                  { phoneE164: { startsWith: normalizedQuery } }
+                ]
+              }
+            : {})
+        };
+
+        const customers = await prisma.customer.findMany({
+          where: pickerWhere,
+          orderBy: [{ updatedAt: "desc" }, { createdAt: "desc" }],
+          skip: (page - 1) * pickerLimit,
+          take: pickerLimit + 1,
+          select: {
+            id: true,
+            displayName: true,
+            phoneE164: true,
+            conversations: {
+              orderBy: [{ updatedAt: "desc" }, { createdAt: "desc" }],
+              take: 1,
+              select: {
+                id: true
+              }
+            }
+          }
+        });
+        const hasMore = customers.length > pickerLimit;
+        const rows = hasMore ? customers.slice(0, pickerLimit) : customers;
+
+        return {
+          data: {
+            customers: rows.map((customer) => ({
+              id: customer.id,
+              displayName: customer.displayName,
+              phoneE164: customer.phoneE164,
+              latestConversationId: customer.conversations[0]?.id ?? null
+            }))
+          },
+          meta: {
+            page,
+            limit: pickerLimit,
+            hasMore
+          }
+        };
+      }
+
+      const membersPromise = prisma.orgMember.findMany({
         where: {
           orgId
         },
@@ -301,25 +435,115 @@ export async function GET(request: NextRequest) {
             }
           }
         }
-      }),
-      prisma.tag.findMany({
-        where: { orgId },
-        orderBy: { name: "asc" },
-        select: {
-          id: true,
-          name: true,
-          color: true,
-          _count: {
+      });
+      const tagsPromise = includeTags
+        ? prisma.tag.findMany({
+            where: { orgId },
+            orderBy: { name: "asc" },
             select: {
-              customerLinks: true
+              id: true,
+              name: true,
+              color: true,
+              _count: {
+                select: {
+                  customerLinks: true
+                }
+              }
             }
-          }
-        }
-      })
-    ]);
-    const assigneeMap = new Map(members.map((member) => [member.id, member.user.name?.trim() || member.user.email]));
+          })
+        : Promise.resolve([] as Array<{ id: string; name: string; color: string; _count: { customerLinks: number } }>);
+      const [members, tags] = await Promise.all([membersPromise, tagsPromise]);
+      const assigneeMap = new Map(members.map((member) => [member.id, member.user.name?.trim() || member.user.email]));
 
-    if (lightweight) {
+      if (lightweight) {
+        const [total, customers] = await prisma.$transaction([
+          prisma.customer.count({ where }),
+          prisma.customer.findMany({
+            where,
+            orderBy: [{ firstContactAt: "desc" }, { createdAt: "desc" }],
+            skip: (page - 1) * limit,
+            take: limit,
+            select: {
+              id: true,
+              displayName: true,
+              phoneE164: true,
+              waProfilePicUrl: true,
+              createdAt: true,
+              updatedAt: true,
+              firstContactAt: true,
+              source: true,
+              leadStatus: true,
+              followUpStatus: true,
+              followUpAt: true,
+              businessCategory: true,
+              detail: true,
+              hotness: true,
+              packageName: true,
+              projectValueCents: true,
+              remarks: true,
+              assignedToMemberId: true,
+              tagLinks: {
+                select: {
+                  tag: {
+                    select: {
+                      id: true,
+                      name: true,
+                      color: true
+                    }
+                  }
+                }
+              },
+              conversations: {
+                orderBy: [{ updatedAt: "desc" }, { createdAt: "desc" }],
+                take: 1,
+                select: {
+                  id: true,
+                  crmStageId: true,
+                  crmStage: {
+                    select: {
+                      id: true,
+                      name: true
+                    }
+                  }
+                }
+              },
+              invoices: {
+                orderBy: {
+                  createdAt: "desc"
+                },
+                take: 1,
+                select: {
+                  totalCents: true
+                }
+              }
+            }
+          })
+        ]);
+
+        return {
+          data: {
+            customers: customers.map((customer) => mapCustomerRow(customer, customer.assignedToMemberId ? (assigneeMap.get(customer.assignedToMemberId) ?? null) : null)),
+            tags: tags.map((tag) => ({
+              id: tag.id,
+              name: tag.name,
+              color: tag.color,
+              customerCount: tag._count.customerLinks
+            })),
+            assignees: members.map((member) => ({
+              memberId: member.id,
+              userId: member.user.id,
+              name: member.user.name?.trim() || member.user.email,
+              role: member.role
+            }))
+          },
+          meta: {
+            page,
+            limit,
+            total
+          }
+        };
+      }
+
       const [total, customers] = await prisma.$transaction([
         prisma.customer.count({ where }),
         prisma.customer.findMany({
@@ -346,6 +570,11 @@ export async function GET(request: NextRequest) {
             projectValueCents: true,
             remarks: true,
             assignedToMemberId: true,
+            _count: {
+              select: {
+                conversations: true
+              }
+            },
             tagLinks: {
               select: {
                 tag: {
@@ -384,7 +613,7 @@ export async function GET(request: NextRequest) {
         })
       ]);
 
-      return NextResponse.json({
+      return {
         data: {
           customers: customers.map((customer) => mapCustomerRow(customer, customer.assignedToMemberId ? (assigneeMap.get(customer.assignedToMemberId) ?? null) : null)),
           tags: tags.map((tag) => ({
@@ -405,106 +634,16 @@ export async function GET(request: NextRequest) {
           limit,
           total
         }
-      });
-    }
-
-    const [total, customers] = await prisma.$transaction([
-      prisma.customer.count({ where }),
-      prisma.customer.findMany({
-        where,
-        orderBy: [{ firstContactAt: "desc" }, { createdAt: "desc" }],
-        skip: (page - 1) * limit,
-        take: limit,
-        select: {
-          id: true,
-          displayName: true,
-          phoneE164: true,
-          waProfilePicUrl: true,
-          createdAt: true,
-          updatedAt: true,
-          firstContactAt: true,
-          source: true,
-          leadStatus: true,
-          followUpStatus: true,
-          followUpAt: true,
-          businessCategory: true,
-          detail: true,
-          hotness: true,
-          packageName: true,
-          projectValueCents: true,
-          remarks: true,
-          assignedToMemberId: true,
-          _count: {
-            select: {
-              conversations: true
-            }
-          },
-          tagLinks: {
-            select: {
-              tag: {
-                select: {
-                  id: true,
-                  name: true,
-                  color: true
-                }
-              }
-            }
-          },
-          conversations: {
-            orderBy: [{ updatedAt: "desc" }, { createdAt: "desc" }],
-            take: 1,
-            select: {
-              id: true,
-              crmStageId: true,
-              crmStage: {
-                select: {
-                  id: true,
-                  name: true
-                }
-              }
-            }
-          },
-          invoices: {
-            orderBy: {
-              createdAt: "desc"
-            },
-            take: 1,
-            select: {
-              totalCents: true
-            }
-          }
-        }
-      })
-    ]);
-
-    return NextResponse.json({
-      data: {
-        customers: customers.map((customer) => mapCustomerRow(customer, customer.assignedToMemberId ? (assigneeMap.get(customer.assignedToMemberId) ?? null) : null)),
-        tags: tags.map((tag) => ({
-          id: tag.id,
-          name: tag.name,
-          color: tag.color,
-          customerCount: tag._count.customerLinks
-        })),
-        assignees: members.map((member) => ({
-          memberId: member.id,
-          userId: member.user.id,
-          name: member.user.name?.trim() || member.user.email,
-          role: member.role
-        }))
-      },
-      meta: {
-        page,
-        limit,
-        total
-      }
+      };
     });
+
+    return withServerTiming(NextResponse.json(payload), startedAt, fromCache ? "HIT" : "MISS");
   } catch (error) {
     if (error instanceof ServiceError) {
-      return errorResponse(error.status, error.code, error.message);
+      return withServerTiming(errorResponse(error.status, error.code, error.message), startedAt);
     }
 
-    return errorResponse(500, "CUSTOMER_LIST_FAILED", "Failed to load customers.");
+    return withServerTiming(errorResponse(500, "CUSTOMER_LIST_FAILED", "Failed to load customers."), startedAt);
   }
 }
 
@@ -657,6 +796,18 @@ export async function POST(request: NextRequest) {
 
       return upserted;
     });
+
+    const cachePrefix = `${auth.session.userId}:${orgId}:`;
+    for (const key of customersCache.keys()) {
+      if (key.startsWith(cachePrefix)) {
+        customersCache.delete(key);
+      }
+    }
+    for (const key of customersInflight.keys()) {
+      if (key.startsWith(cachePrefix)) {
+        customersInflight.delete(key);
+      }
+    }
 
     return NextResponse.json(
       {

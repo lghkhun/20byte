@@ -14,7 +14,7 @@ type AddMemberRequest = {
   role?: unknown;
 };
 
-const ASSIGNABLE_MEMBER_ROLES = new Set<Role>([Role.ADMIN, Role.CS, Role.ADVERTISER]);
+const ASSIGNABLE_MEMBER_ROLES = new Set<Role>([Role.CS, Role.ADVERTISER]);
 
 function errorResponse(status: number, code: string, message: string) {
   return NextResponse.json(
@@ -90,7 +90,7 @@ export async function POST(request: NextRequest) {
   }
 
   if (!role) {
-    return errorResponse(400, "INVALID_ROLE", "role must be one of: ADMIN, CS, ADVERTISER.");
+    return errorResponse(400, "INVALID_ROLE", "role must be one of: CS, ADVERTISER.");
   }
 
   try {

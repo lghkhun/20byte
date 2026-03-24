@@ -122,6 +122,7 @@ export async function sendOutboundMessage(input: SendOutboundMessageInput): Prom
       ...pending,
       waMessageId,
       sendStatus: "SENT",
+      deliveryStatus: "SENT",
       sendError: null,
       retryable: false,
       sendAttemptCount: pending.sendAttemptCount + 1
@@ -199,6 +200,7 @@ export async function sendOutboundMessage(input: SendOutboundMessageInput): Prom
       ...pending,
       waMessageId,
       sendStatus: "SENT",
+      deliveryStatus: "SENT",
       sendError: null,
       retryable: false,
       sendAttemptCount: pending.sendAttemptCount + 1
@@ -278,6 +280,7 @@ export async function sendOutboundMessage(input: SendOutboundMessageInput): Prom
     ...pending,
     waMessageId,
     sendStatus: "SENT",
+    deliveryStatus: "SENT",
     sendError: null,
     retryable: false,
     sendAttemptCount: pending.sendAttemptCount + 1

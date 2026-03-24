@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/db/prisma";
 import { canAccessCustomerDirectory } from "@/lib/permissions/orgPermissions";
 import { publishCustomerUpdatedEvent } from "@/lib/ably/publisher";
+import { assertOrgBillingAccess } from "@/server/services/billingService";
 import { ServiceError } from "@/server/services/serviceError";
 
 type CustomerTagItem = {
@@ -65,6 +66,8 @@ async function requireCustomerAccess(actorUserId: string, orgId: string, custome
     throw new ServiceError(403, "FORBIDDEN_CUSTOMER_ACCESS", "Your role cannot access customer database.");
   }
 
+  await assertOrgBillingAccess(orgId, "write");
+
   const customer = await prisma.customer.findFirst({
     where: {
       id: customerId,
@@ -111,6 +114,8 @@ export async function createTag(actorUserId: string, orgIdInput: string, nameInp
   if (!canAccessCustomerDirectory(membership.role)) {
     throw new ServiceError(403, "FORBIDDEN_CUSTOMER_ACCESS", "Your role cannot access customer database.");
   }
+
+  await assertOrgBillingAccess(orgId, "write");
 
   const existing = await prisma.tag.findFirst({
     where: {

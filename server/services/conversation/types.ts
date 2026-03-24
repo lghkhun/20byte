@@ -21,6 +21,7 @@ export type ConversationSummary = {
   phoneE164: string;
   customerDisplayName: string | null;
   customerAvatarUrl: string | null;
+  customerLeadStatus: string | null;
   crmPipelineId: string | null;
   crmPipelineName: string | null;
   crmStageId: string | null;
@@ -53,6 +54,18 @@ export type UpdateConversationStatusInput = {
   status: ConversationStatus;
 };
 
+export type MarkConversationAsReadInput = {
+  actorUserId: string;
+  orgId: string;
+  conversationId: string;
+};
+
+export type DeleteConversationInput = {
+  actorUserId: string;
+  orgId: string;
+  conversationId: string;
+};
+
 export type ConversationListFilter = "UNASSIGNED" | "MY" | "ALL";
 
 export type ListConversationsInput = {
@@ -71,11 +84,14 @@ export type ConversationListItem = {
   customerPhoneE164: string;
   customerDisplayName: string | null;
   customerAvatarUrl: string | null;
+  customerLeadStatus: string | null;
   crmPipelineId: string | null;
   crmPipelineName: string | null;
   crmStageId: string | null;
   crmStageName: string | null;
   lastMessagePreview: string | null;
+  lastMessageType: string | null;
+  lastMessageDirection: "INBOUND" | "OUTBOUND" | null;
   source: string | null;
   sourceCampaign: string | null;
   sourceAdset: string | null;

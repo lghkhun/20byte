@@ -2,6 +2,7 @@ import { Rest } from "ably";
 
 import { prisma } from "@/lib/db/prisma";
 import { canAccessInbox } from "@/lib/permissions/orgPermissions";
+import { assertOrgBillingAccess } from "@/server/services/billingService";
 import { getPrimaryOrganizationForUser } from "@/server/services/organizationService";
 import { ServiceError } from "@/server/services/serviceError";
 
@@ -48,6 +49,8 @@ async function requireInboxMembership(actorUserId: string, orgId: string): Promi
   if (!canAccessInbox(membership.role)) {
     throw new ServiceError(403, "FORBIDDEN_INBOX_ACCESS", "Your role cannot access inbox conversations.");
   }
+
+  await assertOrgBillingAccess(orgId, "write");
 
   return membership;
 }

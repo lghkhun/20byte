@@ -2,6 +2,7 @@ import { Role } from "@prisma/client";
 
 import { prisma } from "@/lib/db/prisma";
 import { normalizeAndValidateBankAccount } from "@/lib/validation/formValidation";
+import { assertOrgBillingAccess } from "@/server/services/billingService";
 import { ServiceError } from "@/server/services/serviceError";
 
 type BankAccountItem = {
@@ -54,9 +55,11 @@ async function requireSettingsRole(actorUserId: string, orgId: string): Promise<
     throw new ServiceError(403, "ORG_ACCESS_DENIED", "You do not have access to this organization.");
   }
 
-  if (membership.role !== Role.OWNER && membership.role !== Role.ADMIN) {
-    throw new ServiceError(403, "FORBIDDEN_BANK_ACCOUNT_ACCESS", "Your role cannot manage bank accounts.");
+  if (membership.role !== Role.OWNER) {
+    throw new ServiceError(403, "FORBIDDEN_OWNER_ONLY", "Only owner can manage bank accounts.");
   }
+
+  await assertOrgBillingAccess(orgId, "write");
 
   return membership.role;
 }

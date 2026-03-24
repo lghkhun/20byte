@@ -3,16 +3,26 @@
 import { useEffect, useState } from "react";
 import { useRef } from "react";
 
+import type { CrmInvoiceItem } from "@/components/inbox/workspace/types";
 import { useModalAccessibility } from "@/lib/a11y/useModalAccessibility";
 
 type AttachProofShortcutModalProps = {
   open: boolean;
   isSubmitting: boolean;
+  invoices: CrmInvoiceItem[];
   onClose: () => void;
   onSubmit: (invoiceId: string, milestoneType?: "FULL" | "DP" | "FINAL") => Promise<void>;
 };
 
-export function AttachProofShortcutModal({ open, isSubmitting, onClose, onSubmit }: AttachProofShortcutModalProps) {
+function formatMoney(amountCents: number, currency: string): string {
+  return new Intl.NumberFormat("id-ID", {
+    style: "currency",
+    currency,
+    maximumFractionDigits: 0
+  }).format(amountCents / 100);
+}
+
+export function AttachProofShortcutModal({ open, isSubmitting, invoices, onClose, onSubmit }: AttachProofShortcutModalProps) {
   const [invoiceId, setInvoiceId] = useState("");
   const [milestoneType, setMilestoneType] = useState<"" | "FULL" | "DP" | "FINAL">("");
   const containerRef = useRef<HTMLDivElement | null>(null);
@@ -28,8 +38,10 @@ export function AttachProofShortcutModal({ open, isSubmitting, onClose, onSubmit
     if (!open) {
       setInvoiceId("");
       setMilestoneType("");
+      return;
     }
-  }, [open]);
+    setInvoiceId((current) => current || invoices[0]?.id || "");
+  }, [open, invoices]);
 
   if (!open) {
     return null;
@@ -51,12 +63,18 @@ export function AttachProofShortcutModal({ open, isSubmitting, onClose, onSubmit
         </div>
 
         <div className="space-y-3">
-          <input
+          <select
             value={invoiceId}
             onChange={(event) => setInvoiceId(event.target.value)}
-            placeholder="Invoice ID"
             className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground"
-          />
+          >
+            {invoices.length === 0 ? <option value="">No invoice found for this customer</option> : null}
+            {invoices.map((invoice) => (
+              <option key={invoice.id} value={invoice.id}>
+                {invoice.invoiceNo} - {invoice.status} - {formatMoney(invoice.totalCents, invoice.currency)}
+              </option>
+            ))}
+          </select>
           <select
             value={milestoneType}
             onChange={(event) => setMilestoneType(event.target.value as "" | "FULL" | "DP" | "FINAL")}
@@ -69,7 +87,7 @@ export function AttachProofShortcutModal({ open, isSubmitting, onClose, onSubmit
           </select>
           <button
             type="button"
-            disabled={isSubmitting || !invoiceId.trim()}
+            disabled={isSubmitting || !invoiceId.trim() || invoices.length === 0}
             onClick={() => {
               void onSubmit(invoiceId.trim(), milestoneType || undefined);
             }}
@@ -77,6 +95,7 @@ export function AttachProofShortcutModal({ open, isSubmitting, onClose, onSubmit
           >
             {isSubmitting ? "Attaching..." : "Attach Proof"}
           </button>
+          {invoices.length === 0 ? <p className="text-xs text-muted-foreground">Belum ada invoice yang terhubung ke customer ini.</p> : null}
         </div>
       </div>
     </div>

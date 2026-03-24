@@ -4,11 +4,8 @@ import { useCallback } from "react";
 
 import type {
   AttachProofResponse,
-  CreateNoteResponse,
   CreateTagResponse,
-  DeleteNoteResponse,
-  CustomerTagsResponse,
-  UpdateNoteResponse
+  CustomerTagsResponse
 } from "@/components/inbox/workspace/types";
 
 import type { InboxWorkspaceLoaders } from "./useInboxWorkspaceLoaders";
@@ -98,82 +95,6 @@ export function useInboxWorkspaceCrmInvoiceActions(
       const payload = (await response.json().catch(() => null)) as CustomerTagsResponse | null;
       if (!response.ok) {
         setCrmError(payload?.error?.message ?? "Failed to assign tag.");
-        return;
-      }
-
-      await loadCustomerCrmContext(selectedConversation.customerId);
-    },
-    [loadCustomerCrmContext, orgId, selectedConversation, setCrmError]
-  );
-
-  const createCustomerNoteEntry = useCallback(
-    async (content: string) => {
-      if (!orgId || !selectedConversation) {
-        return;
-      }
-
-      setCrmError(null);
-      const response = await fetch(`/api/customers/${encodeURIComponent(selectedConversation.customerId)}/notes`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ content })
-      });
-
-      const payload = (await response.json().catch(() => null)) as CreateNoteResponse | null;
-      if (!response.ok) {
-        setCrmError(payload?.error?.message ?? "Failed to create note.");
-        return;
-      }
-
-      await loadCustomerCrmContext(selectedConversation.customerId);
-    },
-    [loadCustomerCrmContext, orgId, selectedConversation, setCrmError]
-  );
-
-  const updateCustomerNoteEntry = useCallback(
-    async (noteId: string, content: string) => {
-      if (!orgId || !selectedConversation) {
-        return;
-      }
-
-      setCrmError(null);
-      const response = await fetch(
-        `/api/customers/${encodeURIComponent(selectedConversation.customerId)}/notes/${encodeURIComponent(noteId)}`,
-        {
-          method: "PATCH",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ content })
-        }
-      );
-
-      const payload = (await response.json().catch(() => null)) as UpdateNoteResponse | null;
-      if (!response.ok) {
-        setCrmError(payload?.error?.message ?? "Failed to update note.");
-        return;
-      }
-
-      await loadCustomerCrmContext(selectedConversation.customerId);
-    },
-    [loadCustomerCrmContext, orgId, selectedConversation, setCrmError]
-  );
-
-  const deleteCustomerNoteEntry = useCallback(
-    async (noteId: string) => {
-      if (!orgId || !selectedConversation) {
-        return;
-      }
-
-      setCrmError(null);
-      const response = await fetch(
-        `/api/customers/${encodeURIComponent(selectedConversation.customerId)}/notes/${encodeURIComponent(noteId)}`,
-        {
-          method: "DELETE"
-        }
-      );
-
-      const payload = (await response.json().catch(() => null)) as DeleteNoteResponse | null;
-      if (!response.ok) {
-        setCrmError(payload?.error?.message ?? "Failed to delete note.");
         return;
       }
 
@@ -334,9 +255,6 @@ export function useInboxWorkspaceCrmInvoiceActions(
   return {
     createTagForCustomer,
     assignTagForCustomer,
-    createCustomerNoteEntry,
-    updateCustomerNoteEntry,
-    deleteCustomerNoteEntry,
     attachSelectedMessageAsProof,
     sendInvoiceFromPanel,
     markInvoicePaidFromPanel,

@@ -135,6 +135,17 @@ SHORTLINK_BASE_URL=https://wa.20byte.com
 
 # Optional: keep platform runnable without a live paired device
 WHATSAPP_MOCK_MODE=true
+
+# Pakasir Billing (MVP Subscription)
+PAKASIR_PROJECT_SLUG=your-pakasir-project-slug
+PAKASIR_API_KEY=your-pakasir-api-key
+PAKASIR_BASE_URL=https://app.pakasir.com
+PAKASIR_DEFAULT_METHOD=qris
+PAKASIR_WEBHOOK_PATH=/api/billing/webhooks/pakasir
+PAKASIR_WEBHOOK_TOKEN=replace-with-random-webhook-token
+
+# Superadmin bootstrap (comma separated)
+SUPERADMIN_EMAILS=owner@yourdomain.com,admin@yourdomain.com
 ```
 
 With `WHATSAPP_MOCK_MODE=true`, inbox/onboarding message flows use dummy WhatsApp message IDs without requiring a live Baileys session.
@@ -569,3 +580,11 @@ The human operator only:
 - runs the dev server
 - provides API credentials
 - verifies UI behavior
+
+---
+
+# 21. Inbox Indicator Reference
+
+For CS/operator meaning of dots, badges, and labels in chat list/header/profile:
+
+`docs/INBOX_INDICATOR_GUIDE.md`

@@ -47,6 +47,25 @@ const CASES: ServiceGuardCase[] = [
     expectUpdateMany: true
   },
   {
+    label: "baileysService write-path",
+    file: "server/services/baileysService.ts",
+    strictNoDirectWrite: true,
+    expectDeleteMany: true
+  },
+  {
+    label: "crmPipelineService write-path",
+    file: "server/services/crmPipelineService.ts",
+    strictNoDirectWrite: true,
+    expectUpdateMany: true
+  },
+  {
+    label: "crmService write-path",
+    file: "server/services/crmService.ts",
+    strictNoDirectWrite: true,
+    expectUpdateMany: true,
+    expectDeleteMany: true
+  },
+  {
     label: "org bank account write-path",
     file: "server/services/orgBankAccountService.ts",
     strictNoDirectWrite: true,

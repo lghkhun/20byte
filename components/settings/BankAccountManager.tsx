@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { MoreHorizontal, Trash2 } from "lucide-react";
 
 import { fetchOrganizationsCached } from "@/lib/client/orgsCache";
+import { fetchJsonCached, invalidateFetchCache } from "@/lib/client/fetchCache";
 import { notifyError, notifySuccess } from "@/lib/ui/notify";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -94,11 +95,10 @@ export function BankAccountManager() {
   }, []);
 
   const loadBankAccounts = useCallback(async () => {
-    const response = await fetch("/api/orgs/bank-accounts", { cache: "no-store" });
-    const payload = (await response.json()) as { data?: { accounts?: BankAccountItem[] } } & ApiError;
-    if (!response.ok) {
-      throw new Error(payload.error?.message ?? "Failed to load bank accounts.");
-    }
+    const payload = await fetchJsonCached<{ data?: { accounts?: BankAccountItem[] } } & ApiError>("/api/orgs/bank-accounts", {
+      ttlMs: 15_000,
+      init: { cache: "no-store" }
+    });
 
     setAccounts(payload.data?.accounts ?? []);
   }, []);
@@ -197,6 +197,7 @@ export function BankAccountManager() {
       setAccountNumber("");
       setAccountHolder("");
       setIsCreateDialogOpen(false);
+      invalidateFetchCache("GET:/api/orgs/bank-accounts");
       await loadBankAccounts();
       setSuccess("Bank account added.");
     } catch (err) {
@@ -225,6 +226,7 @@ export function BankAccountManager() {
         throw new Error(payload.error?.message ?? "Failed to delete bank account.");
       }
 
+      invalidateFetchCache("GET:/api/orgs/bank-accounts");
       await loadBankAccounts();
       setSuccess("Bank account deleted.");
     } catch (err) {

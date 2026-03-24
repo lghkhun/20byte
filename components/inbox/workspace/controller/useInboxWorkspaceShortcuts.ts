@@ -4,6 +4,7 @@ import { useEffect } from "react";
 
 type UseInboxWorkspaceShortcutsInput = {
   selectedConversationId: string | null;
+  clearSelectedConversation: () => void;
   setIsQuickReplyModalOpen: (updater: boolean | ((current: boolean) => boolean)) => void;
   setIsShortcutHelpOpen: (updater: boolean | ((current: boolean) => boolean)) => void;
   goToNextUnassignedConversation: () => void;
@@ -15,6 +16,7 @@ type UseInboxWorkspaceShortcutsInput = {
 export function useInboxWorkspaceShortcuts(input: UseInboxWorkspaceShortcutsInput) {
   const {
     selectedConversationId,
+    clearSelectedConversation,
     setIsQuickReplyModalOpen,
     setIsShortcutHelpOpen,
     goToNextUnassignedConversation,
@@ -71,6 +73,12 @@ export function useInboxWorkspaceShortcuts(input: UseInboxWorkspaceShortcutsInpu
       if (!event.altKey && !event.metaKey && !event.ctrlKey && key === "p") {
         event.preventDefault();
         openAttachProofShortcut();
+        return;
+      }
+
+      if (!event.altKey && !event.metaKey && !event.ctrlKey && key === "escape" && selectedConversationId) {
+        event.preventDefault();
+        clearSelectedConversation();
       }
     };
 
@@ -80,6 +88,7 @@ export function useInboxWorkspaceShortcuts(input: UseInboxWorkspaceShortcutsInpu
     };
   }, [
     assignSelectedConversationToMe,
+    clearSelectedConversation,
     goToNextUnassignedConversation,
     openAttachProofShortcut,
     openInvoiceDrawer,

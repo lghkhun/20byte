@@ -22,9 +22,12 @@ function mockMessage(type: MessageItem["type"], fileName: string | null = null):
     templateLanguageCode: null,
     isAutomated: false,
     sendStatus: null,
+    deliveryStatus: null,
     sendError: null,
     retryable: false,
     sendAttemptCount: 0,
+    deliveredAt: null,
+    readAt: null,
     createdAt: "2026-03-06T10:00:00.000Z"
   };
 }

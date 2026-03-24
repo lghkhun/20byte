@@ -1,0 +1,14 @@
+{
+  "suite": "smoke-ui",
+  "status": "failed",
+  "baseUrl": "http://localhost:3001",
+  "startedAt": "2026-03-22T10:18:59.816Z",
+  "endedAt": "2026-03-22T10:20:08.072Z",
+  "durationMs": 68256,
+  "failures": [
+    "locator.waitFor: Timeout 20000ms exceeded.\nCall log:\n\u001b[2m  - waiting for getByPlaceholder('Enter message...').first() to be visible\u001b[22m\n\u001b[2m    44 × locator resolved to hidden <input disabled value=\"\" placeholder=\"Enter message...\" class=\"flex w-full rounded-md border-input transition-colors file:border-0 file:bg-transparent file:text-sm file:font-medium file:text-foreground focus-visible:outline-none focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50 md:text-sm h-8 border-0 bg-transparent p-0 text-sm shadow-none placeholder:text-muted-foreground/80 focus-visible:ring-0\"/>\u001b[22m\n"
+  ],
+  "skippedReason": null,
+  "error": "locator.waitFor: Timeout 20000ms exceeded.\nCall log:\n\u001b[2m  - waiting for getByPlaceholder('Enter message...').first() to be visible\u001b[22m\n\u001b[2m    44 × locator resolved to hidden <input disabled value=\"\" placeholder=\"Enter message...\" class=\"flex w-full rounded-md border-input transition-colors file:border-0 file:bg-transparent file:text-sm file:font-medium file:text-foreground focus-visible:outline-none focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50 md:text-sm h-8 border-0 bg-transparent p-0 text-sm shadow-none placeholder:text-muted-foreground/80 focus-visible:ring-0\"/>\u001b[22m\n",
+  "meta": {}
+}

@@ -1,6 +1,7 @@
 export type CoreEventType =
   | "message.new"
   | "conversation.updated"
+  | "conversation.typing"
   | "assignment.changed"
   | "invoice.created"
   | "invoice.updated"
@@ -28,6 +29,12 @@ export type ConversationUpdatedEventPayload = BaseEventPayload & {
   conversationId: string;
   assignedToMemberId: string | null;
   status: "OPEN" | "CLOSED";
+};
+
+export type ConversationTypingEventPayload = BaseEventPayload & {
+  type: "conversation.typing";
+  conversationId: string;
+  isTyping: boolean;
 };
 
 export type AssignmentChangedEventPayload = BaseEventPayload & {
@@ -112,6 +119,21 @@ export function buildConversationUpdatedEventPayload(input: {
     conversationId: requireTrimmed(input.conversationId, "conversationId"),
     assignedToMemberId: input.assignedToMemberId,
     status: input.status
+  };
+}
+
+export function buildConversationTypingEventPayload(input: {
+  orgId: string;
+  conversationId: string;
+  isTyping: boolean;
+}): ConversationTypingEventPayload {
+  return {
+    type: "conversation.typing",
+    orgId: requireTrimmed(input.orgId, "orgId"),
+    entityId: requireTrimmed(input.conversationId, "conversationId"),
+    timestamp: nowIso(),
+    conversationId: requireTrimmed(input.conversationId, "conversationId"),
+    isTyping: Boolean(input.isTyping)
   };
 }
 

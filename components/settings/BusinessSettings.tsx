@@ -8,6 +8,8 @@ import { Building2, Landmark, Upload } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useSettingsHeaderAction } from "@/components/settings/settings-header-actions";
+import { fetchJsonCached, invalidateFetchCache } from "@/lib/client/fetchCache";
+import { invalidateLocalImageCache, useLocalImageCache } from "@/lib/client/localImageCache";
 
 type BusinessProfile = {
   id: string;
@@ -57,6 +59,7 @@ function UploadAssetCard({
   title,
   description,
   imageUrl,
+  cacheKey,
   placeholderIcon,
   onUpload,
   isUploading
@@ -64,11 +67,17 @@ function UploadAssetCard({
   title: string;
   description: string;
   imageUrl: string | null;
+  cacheKey: string;
   placeholderIcon: ReactNode;
   onUpload: (file: File) => Promise<void>;
   isUploading: boolean;
 }) {
   const inputId = useId();
+  const cachedImageUrl = useLocalImageCache(imageUrl, {
+    cacheKey,
+    ttlMs: 3 * 24 * 60 * 60 * 1000,
+    maxBytes: 300 * 1024
+  });
 
   return (
     <div className="space-y-3 rounded-md border border-border bg-background p-4">
@@ -78,7 +87,7 @@ function UploadAssetCard({
       </div>
       <label htmlFor={inputId} className="flex h-48 cursor-pointer flex-col items-center justify-center gap-3 rounded-md border border-dashed border-sky-300 bg-sky-50/40 p-4 text-center">
         {imageUrl ? (
-          <Image src={imageUrl} alt={title} width={220} height={140} className="max-h-32 w-auto object-contain" unoptimized />
+          <Image src={cachedImageUrl ?? imageUrl} alt={title} width={220} height={140} className="max-h-32 w-auto object-contain" unoptimized />
         ) : (
           <>
             <div className="flex h-14 w-14 items-center justify-center rounded-md bg-sky-100 text-sky-700">{placeholderIcon}</div>
@@ -152,9 +161,11 @@ export function BusinessSettings() {
   }, []);
 
   const loadProfile = useCallback(async () => {
-    const response = await fetch("/api/orgs/business", { cache: "no-store" });
-    const payload = (await response.json().catch(() => null)) as BusinessProfileResponse | null;
-    if (!response.ok || !payload?.data?.profile) {
+    const payload = await fetchJsonCached<BusinessProfileResponse>("/api/orgs/business", {
+      ttlMs: 20_000,
+      init: { cache: "no-store" }
+    });
+    if (!payload?.data?.profile) {
       throw new Error(payload?.error?.message ?? "Failed to load business profile.");
     }
 
@@ -218,6 +229,7 @@ export function BusinessSettings() {
       }
 
       applyProfile(payload.data.profile);
+      invalidateFetchCache("GET:/api/orgs/business");
       setSuccess("Business profile updated.");
     } catch (submitError) {
       setError(submitError instanceof Error ? submitError.message : "Failed to update business profile.");
@@ -244,11 +256,13 @@ export function BusinessSettings() {
         throw new Error(payload?.error?.message ?? "Failed to upload asset.");
       }
 
+      invalidateLocalImageCache(`business-asset:${payload.data.profile.id}:${assetType}`);
       applyProfile(payload.data.profile);
       setSuccess(assetType === "logo" ? "Business logo updated." : "Invoice signature updated.");
     } catch (uploadError) {
       setError(uploadError instanceof Error ? uploadError.message : "Failed to upload asset.");
     } finally {
+      invalidateFetchCache("GET:/api/orgs/business");
       setUploadingAsset(null);
     }
   }
@@ -339,6 +353,7 @@ export function BusinessSettings() {
                 title="Logo Business"
                 description="Dipakai sebagai logo default invoice."
                 imageUrl={profile.logoUrl}
+                cacheKey={`business-asset:${profile.id}:logo`}
                 placeholderIcon={<Building2 className="h-7 w-7" />}
                 onUpload={(file) => handleAssetUpload("logo", file)}
                 isUploading={uploadingAsset === "logo"}
@@ -347,6 +362,7 @@ export function BusinessSettings() {
                 title="Tanda Tangan Invoice"
                 description="Dipakai sebagai tanda tangan default invoice."
                 imageUrl={profile.invoiceSignatureUrl}
+                cacheKey={`business-asset:${profile.id}:signature`}
                 placeholderIcon={<Landmark className="h-7 w-7" />}
                 onUpload={(file) => handleAssetUpload("signature", file)}
                 isUploading={uploadingAsset === "signature"}

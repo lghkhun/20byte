@@ -5,6 +5,7 @@ import { randomUUID } from "crypto";
 import makeWASocket, {
   Browsers,
   DisconnectReason,
+  WAMessageStatus,
   bindWaitForConnectionUpdate,
   downloadMediaMessage,
   fetchLatestWaWebVersion,
@@ -17,10 +18,13 @@ import makeWASocket, {
   type WAMessage
 } from "baileys";
 
+import { publishConversationTypingEvent, publishConversationUpdatedEvent } from "@/lib/ably/publisher";
 import { prisma } from "@/lib/db/prisma";
 import { canAccessOrganizationSettings } from "@/lib/permissions/orgPermissions";
 import { normalizePossibleE164 } from "@/lib/whatsapp/e164";
+import { assertOrgBillingAccess } from "@/server/services/billingService";
 import { storeInboundMessage } from "@/server/services/message/inbound";
+import { updateOutboundDeliveryStatusByWaMessageId } from "@/server/services/message/outboundInfra/persistence";
 import { ServiceError } from "@/server/services/serviceError";
 import { writeAuditLogSafe } from "@/server/services/auditLogService";
 
@@ -87,12 +91,18 @@ type SessionEntry = {
   pairingCodeExpiresAt: Date | null;
   initPromise: Promise<WASocket> | null;
   allowReconnect: boolean;
+  reconnectAttempts: number;
+  reconnectTimer: ReturnType<typeof setTimeout> | null;
 };
 
 const BAILEYS_PAIRING_TTL_MS = 3 * 60 * 1000;
 const BAILEYS_QR_TTL_MS = 60 * 1000;
 const BAILEYS_QR_GENERATION_TIMEOUT_MS = 30 * 1000;
 const BAILEYS_VERSION_CACHE_TTL_MS = 6 * 60 * 60 * 1000;
+const BAILEYS_RECONNECT_BASE_DELAY_MS = 1_000;
+const BAILEYS_RECONNECT_MAX_DELAY_MS = 30_000;
+const BAILEYS_TYPING_EVENT_TTL_MS = 6_000;
+const DEBUG_BAILEYS_INBOUND = process.env.DEBUG_BAILEYS_INBOUND === "1";
 const BAILEYS_RUNTIME_DIR = path.join(process.cwd(), ".runtime");
 const BAILEYS_AUTH_DIR = path.join(BAILEYS_RUNTIME_DIR, "baileys-auth");
 const BAILEYS_MEDIA_DIR = path.join(BAILEYS_RUNTIME_DIR, "baileys-media");
@@ -105,6 +115,23 @@ declare global {
         expiresAt: number;
       }
     | undefined;
+  var __twentyByteBaileysBootstrapStarted: boolean | undefined;
+  var __twentyByteBaileysTypingCache: Map<string, { isTyping: boolean; expiresAt: number }> | undefined;
+  var __twentyByteBaileysConversationByPhoneCache: Map<string, { conversationId: string; expiresAt: number }> | undefined;
+}
+
+function getTypingCache(): Map<string, { isTyping: boolean; expiresAt: number }> {
+  if (!globalThis.__twentyByteBaileysTypingCache) {
+    globalThis.__twentyByteBaileysTypingCache = new Map();
+  }
+  return globalThis.__twentyByteBaileysTypingCache;
+}
+
+function getConversationByPhoneCache(): Map<string, { conversationId: string; expiresAt: number }> {
+  if (!globalThis.__twentyByteBaileysConversationByPhoneCache) {
+    globalThis.__twentyByteBaileysConversationByPhoneCache = new Map();
+  }
+  return globalThis.__twentyByteBaileysConversationByPhoneCache;
 }
 
 function getSessionsStore(): Map<string, SessionEntry> {
@@ -136,10 +163,56 @@ function getSessionEntry(orgId: string): SessionEntry {
     pairingCode: null,
     pairingCodeExpiresAt: null,
     initPromise: null,
-    allowReconnect: true
+    allowReconnect: true,
+    reconnectAttempts: 0,
+    reconnectTimer: null
   };
   sessions.set(orgId, created);
   return created;
+}
+
+function clearReconnectTimer(entry: SessionEntry): void {
+  if (!entry.reconnectTimer) {
+    return;
+  }
+
+  clearTimeout(entry.reconnectTimer);
+  entry.reconnectTimer = null;
+}
+
+function scheduleReconnect(orgId: string, reason: string): void {
+  const entry = getSessionEntry(orgId);
+  if (!entry.allowReconnect) {
+    return;
+  }
+
+  if (entry.reconnectTimer) {
+    return;
+  }
+
+  const nextAttempt = Math.min(entry.reconnectAttempts + 1, 8);
+  const delayMs = Math.min(BAILEYS_RECONNECT_BASE_DELAY_MS * 2 ** (nextAttempt - 1), BAILEYS_RECONNECT_MAX_DELAY_MS);
+  entry.reconnectAttempts = nextAttempt;
+
+  entry.reconnectTimer = setTimeout(() => {
+    entry.reconnectTimer = null;
+    if (!entry.allowReconnect) {
+      return;
+    }
+
+    void ensureBaileysSocket(orgId, true)
+      .then(() => {
+        const latest = getSessionEntry(orgId);
+        latest.reconnectAttempts = 0;
+      })
+      .catch((error) => {
+        const latest = getSessionEntry(orgId);
+        latest.lastError = error instanceof Error ? error.message : "Failed to reconnect WhatsApp session.";
+        scheduleReconnect(orgId, "retry-after-failure");
+      });
+  }, delayMs);
+
+  entry.lastError = `Reconnecting WhatsApp session (${reason}) in ${Math.round(delayMs / 1000)}s.`;
 }
 
 function getAuthFolder(orgId: string): string {
@@ -200,6 +273,8 @@ async function requireSettingsAccess(userId: string, orgId: string): Promise<voi
   if (!canAccessOrganizationSettings(membership.role)) {
     throw new ServiceError(403, "FORBIDDEN_SETTINGS_ACCESS", "Your role cannot manage WhatsApp settings.");
   }
+
+  await assertOrgBillingAccess(orgId, "write");
 }
 
 async function getConnectedAccount(orgId: string): Promise<ConnectedAccountSummary | null> {
@@ -217,6 +292,38 @@ async function getConnectedAccount(orgId: string): Promise<ConnectedAccountSumma
       connectedAt: true
     }
   });
+}
+
+async function bootstrapConnectedBaileysSessions(): Promise<void> {
+  if (globalThis.__twentyByteBaileysBootstrapStarted) {
+    return;
+  }
+  globalThis.__twentyByteBaileysBootstrapStarted = true;
+
+  try {
+    const accounts = await prisma.waAccount.findMany({
+      where: {
+        metaBusinessId: "baileys",
+        wabaId: "baileys"
+      },
+      select: {
+        orgId: true
+      }
+    });
+
+    const uniqueOrgIds = Array.from(new Set(accounts.map((item) => item.orgId).filter(Boolean)));
+    uniqueOrgIds.forEach((orgId, index) => {
+      setTimeout(() => {
+        void ensureBaileysSocket(orgId).catch((error) => {
+          const entry = getSessionEntry(orgId);
+          entry.lastError = error instanceof Error ? error.message : "Failed to bootstrap WhatsApp session.";
+          scheduleReconnect(orgId, "bootstrap-failed");
+        });
+      }, index * 500);
+    });
+  } catch {
+    // Ignore bootstrap failure; runtime operations can still trigger reconnect lazily.
+  }
 }
 
 function extractDigits(raw: string | undefined): string {
@@ -467,6 +574,8 @@ async function clearRuntimeFiles(orgId: string): Promise<void> {
 async function resetBaileysLinkState(orgId: string): Promise<void> {
   const entry = getSessionEntry(orgId);
   entry.allowReconnect = false;
+  clearReconnectTimer(entry);
+  entry.reconnectAttempts = 0;
   if (entry.socket) {
     try {
       entry.socket.end(undefined);
@@ -498,9 +607,16 @@ async function processInboundMessage(orgId: string, message: WAMessage, socket: 
     return;
   }
 
-  const phoneDigits = extractDigits(remoteJid.split("@")[0]);
+  const remoteLocalPart = remoteJid.split("@")[0] ?? "";
+  const remotePhoneCandidate = remoteLocalPart.split(":")[0] ?? remoteLocalPart;
+  const phoneDigits = extractDigits(remotePhoneCandidate);
   const customerPhoneE164 = normalizePossibleE164(phoneDigits);
   if (!customerPhoneE164) {
+    if (DEBUG_BAILEYS_INBOUND) {
+      console.info(
+        `[baileys] inbound ignored-invalid-phone org=${orgId} remoteJid=${remoteJid} localPart=${remoteLocalPart} candidate=${remotePhoneCandidate}`
+      );
+    }
     return;
   }
 
@@ -529,7 +645,7 @@ async function processInboundMessage(orgId: string, message: WAMessage, socket: 
     }
   }
 
-  await storeInboundMessage({
+  const inboundResult = await storeInboundMessage({
     orgId,
     customerPhoneE164,
     customerDisplayName: normalize(message.pushName ?? undefined),
@@ -543,6 +659,157 @@ async function processInboundMessage(orgId: string, message: WAMessage, socket: 
     fileName: kind.fileName,
     fileSize: kind.fileLength,
     durationSec: kind.durationSec
+  });
+
+  if (DEBUG_BAILEYS_INBOUND && !inboundResult.stored) {
+    const reason = inboundResult.duplicate ? "duplicate" : "ignored";
+    console.info(`[baileys] inbound ${reason} org=${orgId} waMessageId=${normalize(message.key.id ?? undefined) || "-"} remoteJid=${remoteJid}`);
+  }
+}
+
+function mapBaileysStatusToDeliveryStatus(
+  status: number | null | undefined
+): "SENT" | "DELIVERED" | "READ" | null {
+  if (typeof status !== "number") {
+    return null;
+  }
+
+  if (status >= WAMessageStatus.READ) {
+    return "READ";
+  }
+  if (status >= WAMessageStatus.DELIVERY_ACK) {
+    return "DELIVERED";
+  }
+  if (status >= WAMessageStatus.SERVER_ACK) {
+    return "SENT";
+  }
+
+  return null;
+}
+
+async function processOutboundStatusUpdate(
+  orgId: string,
+  update: {
+    key?: {
+      id?: string | null;
+      fromMe?: boolean | null;
+    } | null;
+    update?: {
+      status?: number | null;
+    } | null;
+  }
+): Promise<void> {
+  if (!update?.key?.fromMe) {
+    return;
+  }
+
+  const waMessageId = normalize(update.key?.id ?? undefined);
+  if (!waMessageId) {
+    return;
+  }
+
+  const deliveryStatus = mapBaileysStatusToDeliveryStatus(update.update?.status ?? null);
+  if (!deliveryStatus) {
+    return;
+  }
+
+  const updated = await updateOutboundDeliveryStatusByWaMessageId({
+    orgId,
+    waMessageId,
+    deliveryStatus
+  });
+
+  if (!updated) {
+    return;
+  }
+
+  void publishConversationUpdatedEvent({
+    orgId,
+    conversationId: updated.conversationId,
+    assignedToMemberId: updated.assignedToMemberId,
+    status: updated.conversationStatus
+  });
+}
+
+async function resolveOpenConversationIdByCustomerPhone(orgId: string, customerPhoneE164: string): Promise<string | null> {
+  const cache = getConversationByPhoneCache();
+  const cacheKey = `${orgId}:${customerPhoneE164}`;
+  const cached = cache.get(cacheKey);
+  if (cached && cached.expiresAt > Date.now()) {
+    return cached.conversationId;
+  }
+
+  const conversation = await prisma.conversation.findFirst({
+    where: {
+      orgId,
+      status: "OPEN",
+      customer: {
+        phoneE164: customerPhoneE164
+      }
+    },
+    orderBy: [{ updatedAt: "desc" }, { lastMessageAt: "desc" }, { createdAt: "desc" }],
+    select: {
+      id: true
+    }
+  });
+
+  if (!conversation) {
+    return null;
+  }
+
+  cache.set(cacheKey, {
+    conversationId: conversation.id,
+    expiresAt: Date.now() + 60_000
+  });
+  return conversation.id;
+}
+
+async function processPresenceUpdate(
+  orgId: string,
+  update: {
+    id: string;
+    presences: Record<string, { lastKnownPresence: "unavailable" | "available" | "composing" | "recording" | "paused" }>;
+  }
+): Promise<void> {
+  const remoteJid = jidNormalizedUser(update.id ?? undefined);
+  if (!remoteJid || isJidGroup(remoteJid) || isJidStatusBroadcast(remoteJid)) {
+    return;
+  }
+
+  const remoteLocalPart = remoteJid.split("@")[0] ?? "";
+  const remotePhoneCandidate = remoteLocalPart.split(":")[0] ?? remoteLocalPart;
+  const phoneDigits = extractDigits(remotePhoneCandidate);
+  const customerPhoneE164 = normalizePossibleE164(phoneDigits);
+  if (!customerPhoneE164) {
+    return;
+  }
+
+  const isTyping = Object.values(update.presences ?? {}).some((presence) => {
+    const state = presence?.lastKnownPresence;
+    return state === "composing" || state === "recording";
+  });
+
+  const conversationId = await resolveOpenConversationIdByCustomerPhone(orgId, customerPhoneE164);
+  if (!conversationId) {
+    return;
+  }
+
+  const typingCache = getTypingCache();
+  const cacheKey = `${orgId}:${conversationId}`;
+  const cached = typingCache.get(cacheKey);
+  const now = Date.now();
+  const nextExpiresAt = now + BAILEYS_TYPING_EVENT_TTL_MS;
+
+  if (cached && cached.isTyping === isTyping && cached.expiresAt > now) {
+    return;
+  }
+
+  typingCache.set(cacheKey, { isTyping, expiresAt: nextExpiresAt });
+
+  void publishConversationTypingEvent({
+    orgId,
+    conversationId,
+    isTyping
   });
 }
 
@@ -593,6 +860,8 @@ async function createSocketForOrg(orgId: string, entry: SessionEntry): Promise<W
     if (connection === "open") {
       entry.status = "CONNECTED";
       entry.lastError = null;
+      clearReconnectTimer(entry);
+      entry.reconnectAttempts = 0;
       entry.qrCode = null;
       entry.qrCodeExpiresAt = null;
       entry.pairingCode = null;
@@ -613,37 +882,53 @@ async function createSocketForOrg(orgId: string, entry: SessionEntry): Promise<W
         entry.qrCodeExpiresAt = null;
         entry.pairingCode = null;
         entry.pairingCodeExpiresAt = null;
+        clearReconnectTimer(entry);
+        entry.reconnectAttempts = 0;
         void clearConnectedAccount(orgId);
         void clearRuntimeFiles(orgId);
         return;
       }
 
-      if (statusCode === DisconnectReason.restartRequired) {
-        entry.status = state.creds.registered ? "CONNECTING" : "PAIRING";
-        entry.lastError = null;
-        entry.qrCode = null;
-        entry.qrCodeExpiresAt = null;
-        entry.pairingCode = null;
-        entry.pairingCodeExpiresAt = null;
-
-        setTimeout(() => {
-          void ensureBaileysSocket(orgId, true).catch(() => {
-            const latestEntry = getSessionEntry(orgId);
-            latestEntry.status = "DISCONNECTED";
-            latestEntry.lastError = "Failed to restart WhatsApp session.";
-          });
-        }, 250);
-        return;
-      }
-
       entry.status = "DISCONNECTED";
       entry.lastError = statusCode ? `Connection closed (${statusCode}).` : "Connection closed.";
+      entry.qrCode = null;
+      entry.qrCodeExpiresAt = null;
+      entry.pairingCode = null;
+      entry.pairingCodeExpiresAt = null;
+      if (entry.allowReconnect) {
+        scheduleReconnect(orgId, statusCode === DisconnectReason.restartRequired ? "restart-required" : "socket-closed");
+      }
     }
   });
 
   socket.ev.on("messages.upsert", async (event) => {
     for (const message of event.messages ?? []) {
-      await processInboundMessage(orgId, message, socket);
+      try {
+        await processInboundMessage(orgId, message, socket);
+      } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : "Unknown inbound processing error";
+        console.error(`[baileys] inbound processing failed for org ${orgId}: ${errorMessage}`);
+      }
+    }
+  });
+
+  socket.ev.on("messages.update", async (updates) => {
+    for (const update of updates ?? []) {
+      try {
+        await processOutboundStatusUpdate(orgId, update);
+      } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : "Unknown outbound status processing error";
+        console.error(`[baileys] outbound status processing failed for org ${orgId}: ${errorMessage}`);
+      }
+    }
+  });
+
+  socket.ev.on("presence.update", async (presenceUpdate) => {
+    try {
+      await processPresenceUpdate(orgId, presenceUpdate);
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : "Unknown presence processing error";
+      console.error(`[baileys] presence update processing failed for org ${orgId}: ${errorMessage}`);
     }
   });
 
@@ -857,6 +1142,8 @@ export async function disconnectBaileysSession(input: {
   await requireSettingsAccess(input.actorUserId, orgId);
   const entry = getSessionEntry(orgId);
   entry.allowReconnect = false;
+  clearReconnectTimer(entry);
+  entry.reconnectAttempts = 0;
   if (entry.socket) {
     try {
       entry.socket.end(undefined);
@@ -1242,4 +1529,8 @@ export async function writeBaileysAuditLog(actorUserId: string, orgId: string, a
     entityId,
     meta
   });
+}
+
+if (process.env.NODE_ENV !== "test") {
+  void bootstrapConnectedBaileysSessions();
 }

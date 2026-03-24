@@ -1,0 +1,14 @@
+{
+  "suite": "smoke-ui",
+  "status": "failed",
+  "baseUrl": "http://localhost:3001",
+  "startedAt": "2026-03-22T10:13:08.466Z",
+  "endedAt": "2026-03-22T10:13:08.917Z",
+  "durationMs": 451,
+  "failures": [
+    "apiRequestContext.post: connect ECONNREFUSED ::1:3001\nCall log:\n\u001b[2m  - → POST http://localhost:3001/api/auth/login\u001b[22m\n\u001b[2m    - user-agent: Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/145.0.7632.6 Safari/537.36\u001b[22m\n\u001b[2m    - accept: */*\u001b[22m\n\u001b[2m    - accept-encoding: gzip,deflate,br\u001b[22m\n\u001b[2m    - content-type: application/json\u001b[22m\n\u001b[2m    - content-length: 61\u001b[22m\n"
+  ],
+  "skippedReason": null,
+  "error": "apiRequestContext.post: connect ECONNREFUSED ::1:3001\nCall log:\n\u001b[2m  - → POST http://localhost:3001/api/auth/login\u001b[22m\n\u001b[2m    - user-agent: Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/145.0.7632.6 Safari/537.36\u001b[22m\n\u001b[2m    - accept: */*\u001b[22m\n\u001b[2m    - accept-encoding: gzip,deflate,br\u001b[22m\n\u001b[2m    - content-type: application/json\u001b[22m\n\u001b[2m    - content-length: 61\u001b[22m\n",
+  "meta": {}
+}

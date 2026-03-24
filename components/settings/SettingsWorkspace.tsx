@@ -1,6 +1,6 @@
 "use client";
 
-import { type ReactNode, useCallback, useEffect, useMemo, useState } from "react";
+import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { usePathname, useSearchParams } from "next/navigation";
 import { Building2, MessageSquareShare, ShieldCheck, Users2 } from "lucide-react";
 
@@ -10,6 +10,7 @@ import { MetaCapiManager } from "@/components/settings/MetaCapiManager";
 import { TeamSettings } from "@/components/settings/TeamSettings";
 import { WhatsAppConnectionSettings } from "@/components/settings/WhatsAppConnectionSettings";
 import { SettingsHeaderActionContext } from "@/components/settings/settings-header-actions";
+import { dismissNotify, notifyLoading } from "@/lib/ui/notify";
 
 const SETTINGS_TAB_VALUES = ["business", "team", "whatsapp", "shortlinks"] as const;
 type SettingsTabValue = (typeof SETTINGS_TAB_VALUES)[number];
@@ -64,11 +65,20 @@ const SETTINGS_TAB_META: Record<
   }
 };
 
-export function SettingsWorkspace({ initialTab }: { initialTab: string }) {
+export function SettingsWorkspace({
+  initialTab,
+  canAccessBusinessSettings
+}: {
+  initialTab: string;
+  canAccessBusinessSettings: boolean;
+}) {
   const pathname = usePathname();
   const searchParams = useSearchParams();
-  const [activeTab, setActiveTab] = useState<SettingsTabValue>(normalizeInitialTab(initialTab));
+  const safeInitialTab =
+    !canAccessBusinessSettings && normalizeInitialTab(initialTab) === "business" ? "team" : normalizeInitialTab(initialTab);
+  const [activeTab, setActiveTab] = useState<SettingsTabValue>(safeInitialTab);
   const [headerActions, setHeaderActions] = useState<Record<string, ReactNode>>({});
+  const tabLoadingToastIdRef = useRef<string | number | null>(null);
 
   const activeMeta = useMemo(() => SETTINGS_TAB_META[activeTab], [activeTab]);
   const ActiveIcon = activeMeta.icon;
@@ -103,6 +113,13 @@ export function SettingsWorkspace({ initialTab }: { initialTab: string }) {
     setHeaderActions({});
   }, [activeTab]);
 
+  useEffect(() => {
+    if (tabLoadingToastIdRef.current !== null) {
+      dismissNotify(tabLoadingToastIdRef.current);
+      tabLoadingToastIdRef.current = null;
+    }
+  }, [activeTab]);
+
   const headerActionContextValue = useMemo(
     () => ({
       register: registerHeaderAction,
@@ -113,15 +130,26 @@ export function SettingsWorkspace({ initialTab }: { initialTab: string }) {
 
   useEffect(() => {
     const tabFromQuery = searchParams.get("tab");
+    if (!canAccessBusinessSettings && tabFromQuery === "business") {
+      setActiveTab("team");
+      return;
+    }
     if (tabFromQuery && isSettingsTabValue(tabFromQuery) && tabFromQuery !== activeTab) {
       setActiveTab(tabFromQuery);
     }
-  }, [activeTab, searchParams]);
+  }, [activeTab, canAccessBusinessSettings, searchParams]);
 
   function handleTabChange(nextTab: SettingsTabValue) {
+    if (!canAccessBusinessSettings && nextTab === "business") {
+      return;
+    }
     if (nextTab === activeTab) {
       return;
     }
+    if (tabLoadingToastIdRef.current !== null) {
+      dismissNotify(tabLoadingToastIdRef.current);
+    }
+    tabLoadingToastIdRef.current = notifyLoading("Sedang memuat tab...");
     setActiveTab(nextTab);
     const params = new URLSearchParams(searchParams.toString());
     params.set("tab", nextTab);
@@ -138,7 +166,7 @@ export function SettingsWorkspace({ initialTab }: { initialTab: string }) {
             <p className="mt-1 text-xs leading-5 text-muted-foreground">Pilih area pengaturan yang ingin Anda kelola.</p>
           </div>
           <nav className="inbox-scroll flex gap-2 overflow-x-auto pb-1 xl:min-h-0 xl:flex-1 xl:flex-col xl:overflow-y-auto xl:overflow-x-hidden" aria-label="Settings navigation">
-            {SETTINGS_TABS.map((tab) => {
+            {SETTINGS_TABS.filter((tab) => canAccessBusinessSettings || tab.id !== "business").map((tab) => {
               const meta = SETTINGS_TAB_META[tab.id];
               const Icon = meta.icon;
               const isActive = activeTab === tab.id;

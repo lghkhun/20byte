@@ -8,20 +8,6 @@ import type { ConversationItem, MessageItem } from "@/components/inbox/types";
 import { useModalAccessibility } from "@/lib/a11y/useModalAccessibility";
 import { Button } from "@/components/ui/button";
 
-type CustomerTagItem = {
-  id: string;
-  name: string;
-  color: string;
-  isAssigned: boolean;
-};
-
-type CustomerNoteItem = {
-  id: string;
-  content: string;
-  authorUserId: string;
-  createdAt: string;
-};
-
 type MobileCrmOverlayProps = {
   open: boolean;
   onClose: () => void;
@@ -31,21 +17,10 @@ type MobileCrmOverlayProps = {
   isLoadingConversation: boolean;
   isAssigning: boolean;
   assignError: string | null;
-  tags: CustomerTagItem[];
-  notes: CustomerNoteItem[];
   invoices: CrmInvoiceItem[];
   activity: CrmActivityItem[];
   isLoadingCrm: boolean;
   crmError: string | null;
-  onCreateTag: (name: string, color: string) => Promise<void>;
-  onAssignTag: (tagId: string) => Promise<void>;
-  onCreateNote: (content: string) => Promise<void>;
-  onUpdateNote: (noteId: string, content: string) => Promise<void>;
-  onDeleteNote: (noteId: string) => Promise<void>;
-  selectedProofMessageId: string | null;
-  isAttachingProof: boolean;
-  proofFeedback: string | null;
-  onAttachProof: (invoiceId: string, milestoneType?: "FULL" | "DP" | "FINAL") => Promise<void>;
   onOpenInvoiceDrawer: () => void;
   onSendInvoice: (invoiceId: string) => Promise<void>;
   onMarkInvoicePaid: (invoiceId: string, milestoneType?: "FULL" | "DP" | "FINAL") => Promise<void>;
@@ -58,9 +33,7 @@ type MobileCrmOverlayProps = {
 
 const MOBILE_CRM_ANCHORS = [
   ["Profile", "crm-profile"],
-  ["Pipeline", "crm-pipeline"],
-  ["Proof", "crm-proof"],
-  ["Tags", "crm-tags"],
+  ["Lead", "crm-lead-settings"],
   ["Notes", "crm-notes"],
   ["Media", "crm-media"],
   ["Invoices", "crm-invoices"],
@@ -77,21 +50,10 @@ export function MobileCrmOverlay(props: MobileCrmOverlayProps) {
     isLoadingConversation,
     isAssigning,
     assignError,
-    tags,
-    notes,
     invoices,
     activity,
     isLoadingCrm,
     crmError,
-    onCreateTag,
-    onAssignTag,
-    onCreateNote,
-    onUpdateNote,
-    onDeleteNote,
-    selectedProofMessageId,
-    isAttachingProof,
-    proofFeedback,
-    onAttachProof,
     onOpenInvoiceDrawer,
     onSendInvoice,
     onMarkInvoicePaid,
@@ -127,9 +89,9 @@ export function MobileCrmOverlay(props: MobileCrmOverlayProps) {
     <div className="fixed inset-0 z-40 bg-black/55 p-3 backdrop-blur-sm 2xl:hidden" role="dialog" aria-modal="true" aria-label="CRM context panel">
       <div
         ref={scrollRef}
-        className="inbox-scroll inbox-slide-up relative h-full overflow-auto rounded-3xl border border-border/80 bg-card p-4 shadow-xl"
+        className="inbox-scroll inbox-slide-up relative h-full overflow-auto rounded-3xl p-3"
       >
-        <div className="sticky top-0 z-[2] -mx-4 -mt-4 space-y-2 border-b border-border bg-card/95 px-4 pb-2 pt-4 backdrop-blur-sm">
+        <div className="sticky top-0 z-[2] -mx-3 -mt-3 space-y-2 border-b border-border bg-card/95 px-3 pb-2 pt-3 backdrop-blur-sm">
           <div className="flex items-center justify-between">
             <h3 className="text-sm font-semibold text-foreground">CRM Context</h3>
             <Button ref={closeButtonRef} type="button" variant="ghost" size="sm" className="h-8" onClick={onClose}>
@@ -159,21 +121,10 @@ export function MobileCrmOverlay(props: MobileCrmOverlayProps) {
           isLoading={isLoadingConversation}
           isAssigning={isAssigning}
           assignError={assignError}
-          tags={tags}
-          notes={notes}
           invoices={invoices}
           activity={activity}
           isLoadingCrm={isLoadingCrm}
           crmError={crmError}
-          onCreateTag={onCreateTag}
-          onAssignTag={onAssignTag}
-          onCreateNote={onCreateNote}
-          onUpdateNote={onUpdateNote}
-          onDeleteNote={onDeleteNote}
-          selectedProofMessageId={selectedProofMessageId}
-          isAttachingProof={isAttachingProof}
-          proofFeedback={proofFeedback}
-          onAttachProof={onAttachProof}
           onOpenInvoiceDrawer={onOpenInvoiceDrawer}
           onSendInvoice={onSendInvoice}
           onMarkInvoicePaid={onMarkInvoicePaid}

@@ -10,11 +10,41 @@ type MessageNewPayload = {
   direction: "INBOUND" | "OUTBOUND";
 };
 
+type ConversationUpdatedPayload = {
+  type: "conversation.updated";
+  orgId: string;
+  entityId: string;
+  timestamp: string;
+  conversationId: string;
+  assignedToMemberId: string | null;
+  status: "OPEN" | "CLOSED";
+};
+
+type ConversationTypingPayload = {
+  type: "conversation.typing";
+  orgId: string;
+  entityId: string;
+  timestamp: string;
+  conversationId: string;
+  isTyping: boolean;
+};
+
+type AssignmentChangedPayload = {
+  type: "assignment.changed";
+  orgId: string;
+  entityId: string;
+  timestamp: string;
+  conversationId: string;
+  assignedToMemberId: string | null;
+  status: "OPEN" | "CLOSED";
+};
+
 type SubscribeToOrgEventsInput = {
   orgId: string;
   onMessageNew?: (payload: MessageNewPayload) => void;
-  onConversationUpdated?: () => void;
-  onAssignmentChanged?: () => void;
+  onConversationUpdated?: (payload: ConversationUpdatedPayload) => void;
+  onConversationTyping?: (payload: ConversationTypingPayload) => void;
+  onAssignmentChanged?: (payload: AssignmentChangedPayload) => void;
   onInvoiceCreated?: () => void;
   onInvoiceUpdated?: () => void;
   onInvoicePaid?: () => void;
@@ -52,6 +82,85 @@ function parseMessageNewPayload(data: AblyMessageData, orgId: string): MessageNe
   };
 }
 
+function parseConversationUpdatedPayload(data: AblyMessageData, orgId: string): ConversationUpdatedPayload | null {
+  if (!data || data.type !== "conversation.updated") {
+    return null;
+  }
+
+  if (
+    data.orgId !== orgId ||
+    typeof data.entityId !== "string" ||
+    typeof data.timestamp !== "string" ||
+    typeof data.conversationId !== "string" ||
+    (data.assignedToMemberId !== null && typeof data.assignedToMemberId !== "string") ||
+    (data.status !== "OPEN" && data.status !== "CLOSED")
+  ) {
+    return null;
+  }
+
+  return {
+    type: "conversation.updated",
+    orgId,
+    entityId: data.entityId,
+    timestamp: data.timestamp,
+    conversationId: data.conversationId,
+    assignedToMemberId: data.assignedToMemberId,
+    status: data.status
+  };
+}
+
+function parseConversationTypingPayload(data: AblyMessageData, orgId: string): ConversationTypingPayload | null {
+  if (!data || data.type !== "conversation.typing") {
+    return null;
+  }
+
+  if (
+    data.orgId !== orgId ||
+    typeof data.entityId !== "string" ||
+    typeof data.timestamp !== "string" ||
+    typeof data.conversationId !== "string" ||
+    typeof data.isTyping !== "boolean"
+  ) {
+    return null;
+  }
+
+  return {
+    type: "conversation.typing",
+    orgId,
+    entityId: data.entityId,
+    timestamp: data.timestamp,
+    conversationId: data.conversationId,
+    isTyping: data.isTyping
+  };
+}
+
+function parseAssignmentChangedPayload(data: AblyMessageData, orgId: string): AssignmentChangedPayload | null {
+  if (!data || data.type !== "assignment.changed") {
+    return null;
+  }
+
+  if (
+    data.orgId !== orgId ||
+    typeof data.entityId !== "string" ||
+    typeof data.timestamp !== "string" ||
+    typeof data.conversationId !== "string" ||
+    (data.assignedToMemberId !== null && typeof data.assignedToMemberId !== "string") ||
+    (data.status !== "OPEN" && data.status !== "CLOSED")
+  ) {
+    return null;
+  }
+
+  return {
+    type: "assignment.changed",
+    orgId,
+    entityId: data.entityId,
+    timestamp: data.timestamp,
+    conversationId: data.conversationId,
+    assignedToMemberId: data.assignedToMemberId,
+    status: data.status
+  };
+}
+
 export async function subscribeToOrgMessageEvents(input: SubscribeToOrgEventsInput): Promise<() => void> {
   const orgId = input.orgId.trim();
   if (!orgId) {
@@ -76,12 +185,37 @@ export async function subscribeToOrgMessageEvents(input: SubscribeToOrgEventsInp
     input.onMessageNew(payload);
   };
 
-  const conversationUpdatedListener = () => {
-    input.onConversationUpdated?.();
+  const conversationUpdatedPayloadListener = (message: { data?: unknown }) => {
+    if (!input.onConversationUpdated) {
+      return;
+    }
+    const payload = parseConversationUpdatedPayload((message.data ?? null) as AblyMessageData, orgId);
+    if (!payload) {
+      return;
+    }
+    input.onConversationUpdated(payload);
   };
 
-  const assignmentChangedListener = () => {
-    input.onAssignmentChanged?.();
+  const assignmentChangedListener = (message: { data?: unknown }) => {
+    if (!input.onAssignmentChanged) {
+      return;
+    }
+    const payload = parseAssignmentChangedPayload((message.data ?? null) as AblyMessageData, orgId);
+    if (!payload) {
+      return;
+    }
+    input.onAssignmentChanged(payload);
+  };
+
+  const conversationTypingListener = (message: { data?: unknown }) => {
+    if (!input.onConversationTyping) {
+      return;
+    }
+    const payload = parseConversationTypingPayload((message.data ?? null) as AblyMessageData, orgId);
+    if (!payload) {
+      return;
+    }
+    input.onConversationTyping(payload);
   };
 
   const invoiceCreatedListener = () => {
@@ -109,7 +243,8 @@ export async function subscribeToOrgMessageEvents(input: SubscribeToOrgEventsInp
   };
 
   await channel.subscribe("message.new", messageNewListener);
-  await channel.subscribe("conversation.updated", conversationUpdatedListener);
+  await channel.subscribe("conversation.updated", conversationUpdatedPayloadListener);
+  await channel.subscribe("conversation.typing", conversationTypingListener);
   await channel.subscribe("assignment.changed", assignmentChangedListener);
   await channel.subscribe("invoice.created", invoiceCreatedListener);
   await channel.subscribe("invoice.updated", invoiceUpdatedListener);
@@ -120,7 +255,8 @@ export async function subscribeToOrgMessageEvents(input: SubscribeToOrgEventsInp
 
   return () => {
     channel.unsubscribe("message.new", messageNewListener);
-    channel.unsubscribe("conversation.updated", conversationUpdatedListener);
+    channel.unsubscribe("conversation.updated", conversationUpdatedPayloadListener);
+    channel.unsubscribe("conversation.typing", conversationTypingListener);
     channel.unsubscribe("assignment.changed", assignmentChangedListener);
     channel.unsubscribe("invoice.created", invoiceCreatedListener);
     channel.unsubscribe("invoice.updated", invoiceUpdatedListener);

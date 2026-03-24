@@ -4,6 +4,7 @@ import { prisma } from "@/lib/db/prisma";
 import { canAccessOrganizationSettings } from "@/lib/permissions/orgPermissions";
 import { publishStorageUpdatedEvent } from "@/lib/ably/publisher";
 import { deleteFromR2, getPublicObjectKeyFromUrl } from "@/lib/r2/client";
+import { assertOrgBillingAccess } from "@/server/services/billingService";
 import { CLEANUP_BATCH_SIZE, DEFAULT_RETENTION_DAYS, DEFAULT_STORAGE_QUOTA_MB } from "@/server/services/storage/storageConstants";
 import type {
   ChatRetentionCleanupResult,
@@ -54,6 +55,8 @@ async function requireSettingsAccess(actorUserId: string, orgId: string): Promis
   if (!canAccessOrganizationSettings(membership.role)) {
     throw new ServiceError(403, "FORBIDDEN_SETTINGS_ACCESS", "Your role cannot access storage settings.");
   }
+
+  await assertOrgBillingAccess(orgId, "write");
 }
 
 async function getOrgPlanSettings(orgId: string): Promise<{ storageQuotaMb: number; retentionDays: number }> {

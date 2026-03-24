@@ -4,7 +4,7 @@ import { prisma } from "@/lib/db/prisma";
 import { requireInboxMembership } from "@/server/services/conversation/access";
 import { toConversationListItem } from "@/server/services/conversation/mappers";
 import type { ConversationListItem, ConversationListResult, ListConversationsInput } from "@/server/services/conversation/types";
-import { normalizeLimit, normalizePage, normalizeValue } from "@/server/services/conversation/utils";
+import { normalizeLimit, normalizePage, normalizeValue, resolveLastMessagePreview } from "@/server/services/conversation/utils";
 import { ServiceError } from "@/server/services/serviceError";
 
 export async function listConversations(input: ListConversationsInput): Promise<ConversationListResult> {
@@ -34,10 +34,17 @@ export async function listConversations(input: ListConversationsInput): Promise<
     where.assignedToMemberId = actorMembership.id;
   }
 
-  const [total, rows] = await prisma.$transaction([
-    prisma.conversation.count({ where }),
+  const [groupedCustomers, rows] = await prisma.$transaction([
+    prisma.conversation.groupBy({
+      by: ["customerId"],
+      where,
+      orderBy: {
+        customerId: "asc"
+      }
+    }),
     prisma.conversation.findMany({
       where,
+      distinct: ["customerId"],
       include: {
         crmPipeline: {
           select: {
@@ -55,7 +62,8 @@ export async function listConversations(input: ListConversationsInput): Promise<
             phoneE164: true,
             displayName: true,
             waProfilePicUrl: true,
-            source: true
+            source: true,
+            leadStatus: true
           }
         },
         messages: {
@@ -66,6 +74,7 @@ export async function listConversations(input: ListConversationsInput): Promise<
           select: {
             text: true,
             type: true,
+            direction: true,
             fileName: true
           }
         }
@@ -75,6 +84,8 @@ export async function listConversations(input: ListConversationsInput): Promise<
       take: limit
     })
   ]);
+
+  const total = groupedCustomers.length;
 
   return {
     conversations: rows.map((row) => toConversationListItem(row)),
@@ -123,7 +134,20 @@ export async function getConversationById(
           phoneE164: true,
           displayName: true,
           waProfilePicUrl: true,
-          source: true
+          source: true,
+          leadStatus: true
+        }
+      },
+      messages: {
+        orderBy: {
+          createdAt: "desc"
+        },
+        take: 1,
+        select: {
+          text: true,
+          type: true,
+          direction: true,
+          fileName: true
         }
       }
     }
@@ -133,6 +157,7 @@ export async function getConversationById(
     throw new ServiceError(404, "CONVERSATION_NOT_FOUND", "Conversation does not exist.");
   }
 
+  const latestMessage = conversation.messages[0] ?? null;
   return {
     id: conversation.id,
     orgId: conversation.orgId,
@@ -140,11 +165,20 @@ export async function getConversationById(
     customerPhoneE164: conversation.customer.phoneE164,
     customerDisplayName: conversation.customer.displayName,
     customerAvatarUrl: conversation.customer.waProfilePicUrl,
+    customerLeadStatus: conversation.customer.leadStatus,
     crmPipelineId: conversation.crmPipelineId,
     crmPipelineName: conversation.crmPipeline?.name ?? null,
     crmStageId: conversation.crmStageId,
     crmStageName: conversation.crmStage?.name ?? null,
-    lastMessagePreview: null,
+    lastMessagePreview: latestMessage
+      ? resolveLastMessagePreview({
+          text: latestMessage.text,
+          type: latestMessage.type,
+          fileName: latestMessage.fileName
+        })
+      : null,
+    lastMessageType: latestMessage?.type ?? null,
+    lastMessageDirection: latestMessage?.direction ?? null,
     source: conversation.customer.source,
     sourceCampaign: conversation.sourceCampaign,
     sourceAdset: conversation.sourcePlatform,

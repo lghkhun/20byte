@@ -1,0 +1,12 @@
+{
+  "suite": "smoke-ui-pipeline-deep",
+  "status": "passed",
+  "baseUrl": "http://localhost:3001",
+  "startedAt": "2026-03-22T10:14:41.250Z",
+  "endedAt": "2026-03-22T10:14:44.491Z",
+  "durationMs": 3241,
+  "failures": [],
+  "skippedReason": null,
+  "error": null,
+  "meta": {}
+}

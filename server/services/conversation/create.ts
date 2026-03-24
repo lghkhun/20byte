@@ -58,6 +58,7 @@ export async function createConversation(input: CreateConversationInput): Promis
       phoneE164: true,
       displayName: true,
       waProfilePicUrl: true,
+      leadStatus: true,
       source: true,
       campaign: true,
       adset: true,
@@ -101,6 +102,7 @@ export async function createConversation(input: CreateConversationInput): Promis
             phoneE164: true,
             displayName: true,
             waProfilePicUrl: true,
+            leadStatus: true,
             source: true,
             campaign: true,
             adset: true,
@@ -129,6 +131,7 @@ export async function createConversation(input: CreateConversationInput): Promis
           phoneE164: true,
           displayName: true,
           waProfilePicUrl: true,
+          leadStatus: true,
           source: true,
           campaign: true,
           adset: true,
@@ -138,43 +141,73 @@ export async function createConversation(input: CreateConversationInput): Promis
         }
       });
 
-  const existingOpenConversation = await prisma.conversation.findFirst({
+  const existingConversation = await prisma.conversation.findFirst({
     where: {
       orgId,
-      customerId: customer.id,
-      status: ConversationStatus.OPEN
+      customerId: customer.id
     },
-    orderBy: {
-      updatedAt: "desc"
+    orderBy: [{ updatedAt: "desc" }, { lastMessageAt: "desc" }, { createdAt: "desc" }],
+    include: {
+      crmPipeline: {
+        select: {
+          name: true
+        }
+      },
+      crmStage: {
+        select: {
+          name: true
+        }
+      }
     }
   });
 
-  const conversation =
-    existingOpenConversation ??
-    (await prisma.conversation.create({
-      data: {
-        orgId,
-        customerId: customer.id,
-        status: ConversationStatus.OPEN,
-        crmPipelineId: defaultPipeline?.id ?? null,
-        crmStageId: defaultPipeline?.stages[0]?.id ?? null,
-        sourceCampaign: customer.campaign,
-        sourcePlatform: customer.adset ?? customer.platform,
-        sourceMedium: customer.ad ?? customer.medium
-      },
-      include: {
-        crmPipeline: {
-          select: {
-            name: true
+  const conversation = existingConversation
+    ? existingConversation.status === ConversationStatus.OPEN
+      ? existingConversation
+      : await prisma.conversation.update({
+          where: {
+            id: existingConversation.id
+          },
+          data: {
+            status: ConversationStatus.OPEN
+          },
+          include: {
+            crmPipeline: {
+              select: {
+                name: true
+              }
+            },
+            crmStage: {
+              select: {
+                name: true
+              }
+            }
           }
+        })
+    : await prisma.conversation.create({
+        data: {
+          orgId,
+          customerId: customer.id,
+          status: ConversationStatus.OPEN,
+          crmPipelineId: defaultPipeline?.id ?? null,
+          crmStageId: defaultPipeline?.stages[0]?.id ?? null,
+          sourceCampaign: customer.campaign,
+          sourcePlatform: customer.adset ?? customer.platform,
+          sourceMedium: customer.ad ?? customer.medium
         },
-        crmStage: {
-          select: {
-            name: true
+        include: {
+          crmPipeline: {
+            select: {
+              name: true
+            }
+          },
+          crmStage: {
+            select: {
+              name: true
+            }
           }
         }
-      }
-    }));
+      });
 
   return toConversationSummary({
     conversation,
@@ -182,6 +215,7 @@ export async function createConversation(input: CreateConversationInput): Promis
       phoneE164: customer.phoneE164,
       displayName: customer.displayName,
       waProfilePicUrl: customer.waProfilePicUrl,
+      leadStatus: customer.leadStatus,
       source: customer.source
     }
   });

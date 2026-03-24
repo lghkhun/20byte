@@ -19,7 +19,7 @@ test("owner and admin can view organization members", () => {
 });
 
 test("role assignment matrix follows policy", () => {
-  assert.equal(canAssignOrganizationRole(Role.OWNER, Role.ADMIN), true);
+  assert.equal(canAssignOrganizationRole(Role.OWNER, Role.ADMIN), false);
   assert.equal(canAssignOrganizationRole(Role.OWNER, Role.CS), true);
   assert.equal(canAssignOrganizationRole(Role.OWNER, Role.ADVERTISER), true);
   assert.equal(canAssignOrganizationRole(Role.OWNER, Role.OWNER), false);

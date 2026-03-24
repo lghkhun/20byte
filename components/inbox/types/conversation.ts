@@ -8,11 +8,14 @@ export type ConversationItem = {
   customerPhoneE164: string;
   customerDisplayName: string | null;
   customerAvatarUrl: string | null;
+  customerLeadStatus: string | null;
   crmPipelineId: string | null;
   crmPipelineName: string | null;
   crmStageId: string | null;
   crmStageName: string | null;
   lastMessagePreview: string | null;
+  lastMessageType: string | null;
+  lastMessageDirection: "INBOUND" | "OUTBOUND" | null;
   source: string | null;
   sourceCampaign: string | null;
   sourceAdset: string | null;

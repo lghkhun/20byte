@@ -1,8 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useMemo, useState } from "react";
-import { MoreHorizontal } from "lucide-react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { MoreHorizontal, Workflow } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -12,8 +12,15 @@ import {
   DropdownMenuLabel,
   DropdownMenuTrigger
 } from "@/components/ui/dropdown-menu";
+import { subscribeToOrgMessageEvents } from "@/lib/ably/client";
+import { fetchOrganizationsCached } from "@/lib/client/orgsCache";
 import { notifyError } from "@/lib/ui/notify";
 import { cn } from "@/lib/utils";
+
+type OrgItem = {
+  id: string;
+  name: string;
+};
 
 type StageItem = {
   id: string;
@@ -75,6 +82,12 @@ const STAGE_COLOR_CLASS: Record<string, string> = {
   rose: "border-rose-500/30 bg-rose-500/10 text-rose-700",
   slate: "border-slate-500/30 bg-slate-500/10 text-slate-700"
 };
+const CRM_LAST_ACTIVITY_FORMATTER = new Intl.DateTimeFormat("id-ID", {
+  day: "2-digit",
+  month: "short",
+  hour: "2-digit",
+  minute: "2-digit"
+});
 
 function formatLastActivity(value: string | null): string {
   if (!value) {
@@ -86,53 +99,208 @@ function formatLastActivity(value: string | null): string {
     return "No activity yet";
   }
 
-  return new Intl.DateTimeFormat("id-ID", {
-    day: "2-digit",
-    month: "short",
-    hour: "2-digit",
-    minute: "2-digit"
-  }).format(date);
+  return CRM_LAST_ACTIVITY_FORMATTER.format(date);
 }
 
 function getStageColorClass(color: string): string {
   return STAGE_COLOR_CLASS[color] ?? "border-border bg-muted/40 text-foreground";
 }
 
+type BoardApiPayload = {
+  data?: { board?: KanbanBoard };
+  error?: { message?: string };
+} | null;
+
+type BoardCacheEntry = {
+  board: KanbanBoard | null;
+  cachedAt: number;
+};
+
+const BOARD_CACHE_TTL_MS = 20_000;
+const PERF_STORAGE_KEY = "perf.crm.pipeline.v1";
+const PERF_MAX_SAMPLES = 120;
+
+type PerfMetricName = "crm.board.load" | "crm.move.stage";
+
+type PerfSample = {
+  name: PerfMetricName;
+  durationMs: number;
+  ok: boolean;
+  at: number;
+};
+
+function savePerfSample(sample: PerfSample) {
+  if (typeof window === "undefined") {
+    return;
+  }
+
+  try {
+    const raw = window.localStorage.getItem(PERF_STORAGE_KEY);
+    const parsed = raw ? (JSON.parse(raw) as PerfSample[]) : [];
+    const next = [...parsed, sample].slice(-PERF_MAX_SAMPLES);
+    window.localStorage.setItem(PERF_STORAGE_KEY, JSON.stringify(next));
+  } catch {
+    // Keep primary flow fast even when telemetry write fails.
+  }
+}
+
 export function CrmPipelineWorkspace() {
+  const [orgs, setOrgs] = useState<OrgItem[]>([]);
+  const [hasLoadedOrganizations, setHasLoadedOrganizations] = useState(false);
   const [board, setBoard] = useState<KanbanBoard | null>(null);
   const [isLoadingBoard, setIsLoadingBoard] = useState(true);
+  const [isRefreshingBoard, setIsRefreshingBoard] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isSavingMove, setIsSavingMove] = useState(false);
   const [draggedConversationId, setDraggedConversationId] = useState<string | null>(null);
   const [dragOverStageId, setDragOverStageId] = useState<string | null>(null);
-
-  const loadBoard = useCallback(async (pipelineId: string) => {
-    setIsLoadingBoard(true);
-    setError(null);
-    try {
-      const query = pipelineId ? `?pipelineId=${encodeURIComponent(pipelineId)}&status=OPEN` : "?status=OPEN";
-      const response = await fetch(`/api/crm/pipelines/board${query}`, {
-        cache: "no-store"
-      });
-      const payload = (await response.json().catch(() => null)) as { data?: { board?: KanbanBoard }; error?: { message?: string } } | null;
-      if (!response.ok) {
-        setError(payload?.error?.message ?? "Failed to load CRM board.");
-        return;
-      }
-
-      const nextBoard = payload?.data?.board ?? null;
-      setBoard(nextBoard);
-    } catch {
-      setError("Network error while loading CRM board.");
-    } finally {
-      setIsLoadingBoard(false);
-    }
+  const boardCacheRef = useRef<Map<string, BoardCacheEntry>>(new Map());
+  const boardInFlightRef = useRef<{ key: string; promise: Promise<void> } | null>(null);
+  const boardAbortControllerRef = useRef<AbortController | null>(null);
+  const boardRequestIdRef = useRef(0);
+  const isMountedRef = useRef(true);
+  const boardRef = useRef<KanbanBoard | null>(null);
+  const activeBusiness = useMemo(() => orgs[0] ?? null, [orgs]);
+  const recordPerf = useCallback((name: PerfMetricName, startedAt: number, ok: boolean) => {
+    const durationMs = Number((performance.now() - startedAt).toFixed(1));
+    savePerfSample({
+      name,
+      durationMs,
+      ok,
+      at: Date.now()
+    });
   }, []);
+
+  const loadBoard = useCallback(async (pipelineId: string, options?: { force?: boolean }) => {
+    const orgId = activeBusiness?.id ?? "";
+    if (!hasLoadedOrganizations) {
+      return;
+    }
+    if (!orgId) {
+      if (isMountedRef.current) {
+        setBoard(null);
+        setIsLoadingBoard(false);
+        setIsRefreshingBoard(false);
+      }
+      return;
+    }
+    const startedAt = performance.now();
+    const cacheKey = `${orgId}::${pipelineId || "__default__"}`;
+    const cached = boardCacheRef.current.get(cacheKey);
+    if (cached) {
+      setBoard(cached.board);
+    }
+    const isCacheFresh = Boolean(cached && Date.now() - cached.cachedAt < BOARD_CACHE_TTL_MS);
+    if (isCacheFresh && !options?.force) {
+      setIsLoadingBoard(false);
+      setIsRefreshingBoard(false);
+      recordPerf("crm.board.load", startedAt, true);
+      return;
+    }
+
+    if (!options?.force && boardInFlightRef.current?.key === cacheKey) {
+      await boardInFlightRef.current.promise;
+      return;
+    }
+
+    const requestId = ++boardRequestIdRef.current;
+
+    if (!cached) {
+      setIsLoadingBoard(true);
+    } else {
+      setIsRefreshingBoard(true);
+    }
+    setError(null);
+
+    const requestPromise = (async () => {
+      const abortController = new AbortController();
+      boardAbortControllerRef.current?.abort();
+      boardAbortControllerRef.current = abortController;
+      try {
+        const query = pipelineId
+          ? `?pipelineId=${encodeURIComponent(pipelineId)}&status=OPEN&orgId=${encodeURIComponent(orgId)}`
+          : `?status=OPEN&orgId=${encodeURIComponent(orgId)}`;
+        let attempts = 0;
+        let resolved = false;
+        while (attempts < 2 && !resolved) {
+          attempts += 1;
+          try {
+            const response = await fetch(`/api/crm/pipelines/board${query}`, {
+              cache: "no-store",
+              signal: abortController.signal
+            });
+            const payload = (await response.json().catch(() => null)) as BoardApiPayload;
+            if (!isMountedRef.current || requestId !== boardRequestIdRef.current) {
+              return;
+            }
+            if (!response.ok) {
+              const message = payload?.error?.message ?? "Failed to load CRM board.";
+              if (response.status >= 500 && attempts < 2) {
+                await new Promise((resolve) => {
+                  globalThis.setTimeout(resolve, 240);
+                });
+                continue;
+              }
+              setError(message);
+              recordPerf("crm.board.load", startedAt, false);
+              return;
+            }
+
+            const nextBoard = payload?.data?.board ?? null;
+            boardCacheRef.current.set(cacheKey, {
+              board: nextBoard,
+              cachedAt: Date.now()
+            });
+            setBoard(nextBoard);
+            recordPerf("crm.board.load", startedAt, true);
+            resolved = true;
+          } catch (error) {
+            if (error instanceof DOMException && error.name === "AbortError") {
+              return;
+            }
+            if (!isMountedRef.current || requestId !== boardRequestIdRef.current) {
+              return;
+            }
+            if (attempts < 2) {
+              await new Promise((resolve) => {
+                globalThis.setTimeout(resolve, 240);
+              });
+              continue;
+            }
+            setError("Network error while loading CRM board.");
+            recordPerf("crm.board.load", startedAt, false);
+          }
+        }
+      } finally {
+        if (boardAbortControllerRef.current === abortController) {
+          boardAbortControllerRef.current = null;
+        }
+      }
+    })();
+
+    boardInFlightRef.current = {
+      key: cacheKey,
+      promise: requestPromise
+    };
+
+    try {
+      await requestPromise;
+    } finally {
+      if (boardInFlightRef.current?.promise === requestPromise) {
+        boardInFlightRef.current = null;
+      }
+      if (isMountedRef.current && requestId === boardRequestIdRef.current) {
+        setIsLoadingBoard(false);
+        setIsRefreshingBoard(false);
+      }
+    }
+  }, [activeBusiness?.id, hasLoadedOrganizations, recordPerf]);
 
   const moveConversation = useCallback(async (conversationId: string, stageId: string) => {
     if (!board || isSavingMove) {
       return;
     }
+    const startedAt = performance.now();
 
     const previousBoard = board;
     const targetExists = previousBoard.columns.some((column) => column.stageId === stageId);
@@ -215,6 +383,7 @@ export function CrmPipelineWorkspace() {
           "Content-Type": "application/json"
         },
         body: JSON.stringify({
+          orgId: activeBusiness?.id ?? "",
           pipelineId: board.pipeline?.id,
           stageId
         })
@@ -223,24 +392,268 @@ export function CrmPipelineWorkspace() {
       if (!response.ok) {
         setBoard(previousBoard);
         setError(payload?.error?.message ?? "Failed to move conversation.");
+        recordPerf("crm.move.stage", startedAt, false);
         return;
       }
+      recordPerf("crm.move.stage", startedAt, true);
     } catch {
       setBoard(previousBoard);
       setError("Network error while moving conversation.");
+      recordPerf("crm.move.stage", startedAt, false);
     } finally {
       setIsSavingMove(false);
     }
-  }, [board, isSavingMove]);
+  }, [activeBusiness?.id, board, isSavingMove, recordPerf]);
+
+  const loadOrganizations = useCallback(async () => {
+    try {
+      const organizations = (await fetchOrganizationsCached()) as OrgItem[];
+      setOrgs(organizations);
+    } finally {
+      setHasLoadedOrganizations(true);
+    }
+  }, []);
 
   useEffect(() => {
-    void loadBoard("");
-  }, [loadBoard]);
+    void loadOrganizations().catch(() => {
+      setError("Failed to load organizations.");
+    });
+  }, [loadOrganizations]);
+
+  useEffect(() => {
+    boardRef.current = board;
+  }, [board]);
+
+  useEffect(() => {
+    if (!hasLoadedOrganizations) {
+      return;
+    }
+    if (!activeBusiness?.id) {
+      setBoard(null);
+      setIsLoadingBoard(false);
+      setIsRefreshingBoard(false);
+      return;
+    }
+    void loadBoard("").catch(() => {
+      if (!isMountedRef.current) {
+        return;
+      }
+      setError("Failed to load CRM board.");
+      setIsLoadingBoard(false);
+      setIsRefreshingBoard(false);
+    });
+  }, [activeBusiness?.id, hasLoadedOrganizations, loadBoard]);
+
+  useEffect(() => {
+    isMountedRef.current = true;
+    return () => {
+      isMountedRef.current = false;
+      boardAbortControllerRef.current?.abort();
+    };
+  }, []);
 
   useEffect(() => {
     if (!error) return;
     notifyError(error);
   }, [error]);
+
+  useEffect(() => {
+    if (!hasLoadedOrganizations || !activeBusiness?.id) {
+      return;
+    }
+
+    let active = true;
+    let cleanup: (() => void) | null = null;
+    let refreshTimer: ReturnType<typeof setTimeout> | null = null;
+    let fallbackTimer: ReturnType<typeof setInterval> | null = null;
+
+    const scheduleRefresh = () => {
+      if (refreshTimer) {
+        clearTimeout(refreshTimer);
+      }
+      refreshTimer = setTimeout(() => {
+        if (!active) {
+          return;
+        }
+        const currentPipelineId = boardRef.current?.pipeline?.id ?? "";
+        void loadBoard(currentPipelineId, { force: true });
+      }, 250);
+    };
+
+    const bumpCardRealtime = (conversationId: string, timestamp: string, inbound: boolean) => {
+      const parsed = new Date(timestamp);
+      const eventIso = Number.isNaN(parsed.getTime()) ? new Date().toISOString() : parsed.toISOString();
+      const eventMs = Number.isNaN(parsed.getTime()) ? Date.now() : parsed.getTime();
+      let changed = false;
+
+      setBoard((current) => {
+        if (!current) {
+          return current;
+        }
+
+        const patchCard = (card: KanbanCard): KanbanCard => {
+          const cardLastMs = card.lastMessageAt ? new Date(card.lastMessageAt).getTime() : 0;
+          return {
+            ...card,
+            status: "OPEN",
+            unreadCount: inbound ? card.unreadCount + 1 : card.unreadCount,
+            lastMessageAt: eventMs >= cardLastMs ? eventIso : card.lastMessageAt
+          };
+        };
+
+        const inUnassignedIndex = current.unassigned.cards.findIndex((card) => card.id === conversationId);
+        if (inUnassignedIndex >= 0) {
+          changed = true;
+          const sourceCard = current.unassigned.cards[inUnassignedIndex];
+          const nextCard = patchCard(sourceCard);
+          const remaining = current.unassigned.cards.filter((card) => card.id !== conversationId);
+          return {
+            ...current,
+            unassigned: {
+              ...current.unassigned,
+              cards: [nextCard, ...remaining],
+              cardCount: remaining.length + 1
+            }
+          };
+        }
+
+        const sourceColumnIndex = current.columns.findIndex((column) => column.cards.some((card) => card.id === conversationId));
+        if (sourceColumnIndex < 0) {
+          return current;
+        }
+
+        changed = true;
+        const sourceColumn = current.columns[sourceColumnIndex];
+        const sourceCard = sourceColumn.cards.find((card) => card.id === conversationId);
+        if (!sourceCard) {
+          return current;
+        }
+
+        const nextCard = patchCard(sourceCard);
+        const sourceRemaining = sourceColumn.cards.filter((card) => card.id !== conversationId);
+        const nextColumns = current.columns.map((column, index) => {
+          if (index !== sourceColumnIndex) {
+            return column;
+          }
+          const cards = [nextCard, ...sourceRemaining];
+          return {
+            ...column,
+            cards,
+            cardCount: cards.length
+          };
+        });
+
+        return {
+          ...current,
+          columns: nextColumns
+        };
+      });
+
+      if (!changed) {
+        return;
+      }
+    };
+
+    const patchAssignmentOrStatus = (conversationId: string, status: "OPEN" | "CLOSED", assignedToMemberId: string | null) => {
+      setBoard((current) => {
+        if (!current) {
+          return current;
+        }
+
+        let changed = false;
+        const nextUnassigned = current.unassigned.cards.map((card) => {
+          if (card.id !== conversationId) {
+            return card;
+          }
+          changed = true;
+          return {
+            ...card,
+            status,
+            assignedToMemberId
+          };
+        });
+        const nextColumns = current.columns.map((column) => ({
+          ...column,
+          cards: column.cards.map((card) => {
+            if (card.id !== conversationId) {
+              return card;
+            }
+            changed = true;
+            return {
+              ...card,
+              status,
+              assignedToMemberId
+            };
+          })
+        }));
+
+        if (!changed) {
+          return current;
+        }
+
+        return {
+          ...current,
+          unassigned: {
+            ...current.unassigned,
+            cards: nextUnassigned
+          },
+          columns: nextColumns
+        };
+      });
+    };
+
+    const startSubscription = async () => {
+      try {
+        cleanup = await subscribeToOrgMessageEvents({
+          orgId: activeBusiness.id,
+          onMessageNew: (payload) => {
+            bumpCardRealtime(payload.conversationId, payload.timestamp, payload.direction === "INBOUND");
+            scheduleRefresh();
+          },
+          onConversationUpdated: (payload) => {
+            patchAssignmentOrStatus(payload.conversationId, payload.status, payload.assignedToMemberId);
+            scheduleRefresh();
+          },
+          onAssignmentChanged: (payload) => {
+            patchAssignmentOrStatus(payload.conversationId, payload.status, payload.assignedToMemberId);
+            scheduleRefresh();
+          },
+          onInvoiceCreated: scheduleRefresh,
+          onInvoiceUpdated: scheduleRefresh,
+          onInvoicePaid: scheduleRefresh,
+          onProofAttached: scheduleRefresh,
+          onCustomerUpdated: scheduleRefresh,
+          onStorageUpdated: scheduleRefresh
+        });
+      } catch (subscriptionError) {
+        const message = subscriptionError instanceof Error ? subscriptionError.message : "Unknown realtime subscribe error";
+        console.error(`[realtime] crm pipeline subscription failed: ${message}`);
+      }
+    };
+
+    void startSubscription();
+
+    fallbackTimer = setInterval(() => {
+      if (!active) {
+        return;
+      }
+      const currentPipelineId = boardRef.current?.pipeline?.id ?? "";
+      void loadBoard(currentPipelineId, { force: true });
+    }, 15000);
+
+    return () => {
+      active = false;
+      if (refreshTimer) {
+        clearTimeout(refreshTimer);
+      }
+      if (fallbackTimer) {
+        clearInterval(fallbackTimer);
+      }
+      if (cleanup) {
+        cleanup();
+      }
+    };
+  }, [activeBusiness, hasLoadedOrganizations, loadBoard]);
 
   const activePipeline = useMemo(() => board?.pipeline ?? null, [board]);
 
@@ -249,10 +662,23 @@ export function CrmPipelineWorkspace() {
 
   return (
     <section className="flex h-full min-h-0 flex-1 flex-col overflow-hidden">
+      <div className="flex items-center gap-3 px-3 pb-2 pt-3 md:gap-4 md:px-4 md:pt-4">
+        <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-violet-50 text-violet-600 md:h-11 md:w-11 md:rounded-2xl">
+          <Workflow className="h-5 w-5" />
+        </div>
+        <div>
+          <h1 className="text-xl font-semibold tracking-tight text-foreground md:text-3xl">CRM Pipeline</h1>
+          <p className="text-xs text-muted-foreground md:text-sm">Kelola pergerakan lead antar stage CRM secara cepat dalam satu workspace.</p>
+        </div>
+      </div>
       <section className="flex min-h-0 flex-1 flex-col overflow-hidden">
         <div className="flex items-center justify-between gap-2 px-3 pt-2 text-xs text-muted-foreground md:px-4">
-          <p>Drag and drop leads between stages to update pipeline progress.</p>
-          {isSavingMove ? <p className="font-medium text-foreground">Saving move...</p> : null}
+          <span />
+          {isSavingMove ? (
+            <p className="font-medium text-foreground">Saving move...</p>
+          ) : isRefreshingBoard ? (
+            <p className="font-medium text-muted-foreground">Refreshing board...</p>
+          ) : null}
         </div>
         {isLoadingBoard ? <p className="px-3 py-3 text-sm text-muted-foreground md:px-4">Loading board...</p> : null}
 
@@ -412,6 +838,11 @@ export function CrmPipelineWorkspace() {
             <div className="rounded-xl border border-border/70 bg-card/80 px-5 py-4 text-center">
               <p className="text-sm font-medium text-foreground">Pipeline board is unavailable.</p>
               <p className="mt-1 text-xs text-muted-foreground">Please refresh or create a default pipeline stage in CRM settings.</p>
+              <div className="mt-3">
+                <Button type="button" size="sm" variant="secondary" onClick={() => void loadBoard("", { force: true })}>
+                  Refresh
+                </Button>
+              </div>
             </div>
           </div>
         ) : null}

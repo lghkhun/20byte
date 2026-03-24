@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Bot, Globe, Instagram, MessageCircleMore, Send, ShoppingBag } from "lucide-react";
+import { MessageCircleMore, ShoppingBag } from "lucide-react";
 
 import { ChatHeader } from "@/components/inbox/chat/ChatHeader";
 import { ChatMessagesSkeleton } from "@/components/inbox/chat/ChatMessagesSkeleton";
@@ -20,6 +20,7 @@ type ChatWindowProps = {
   messages: MessageItem[];
   isLoading: boolean;
   isConversationSelected: boolean;
+  isCustomerTyping: boolean;
   error: string | null;
   onSendText: (text: string) => Promise<void>;
   onSendAttachment: (attachment: {
@@ -31,8 +32,10 @@ type ChatWindowProps = {
   isCrmPanelOpen: boolean;
   onToggleCrmPanel: () => void;
   onToggleConversationStatus: () => Promise<void>;
+  onDeleteConversation: () => Promise<void>;
   onRetryOutboundMessage: (messageId: string) => Promise<void>;
   onSelectProofMessage: (messageId: string) => void;
+  onUnselectConversation: () => void;
 };
 
 export function ChatWindow({
@@ -42,16 +45,19 @@ export function ChatWindow({
   messages,
   isLoading,
   isConversationSelected,
+  isCustomerTyping,
   error,
   onSendText,
   onSendAttachment,
   isCrmPanelOpen,
   onToggleCrmPanel,
   onToggleConversationStatus,
+  onDeleteConversation,
   onRetryOutboundMessage,
-  onSelectProofMessage
+  onSelectProofMessage,
+  onUnselectConversation
 }: ChatWindowProps) {
-  const displayName = conversation?.customerDisplayName?.trim() || conversation?.customerPhoneE164 || "No active customer";
+  const displayName = conversation?.customerDisplayName?.trim() || conversation?.customerPhoneE164 || "Belum ada chat dipilih";
   const isOpen = conversation?.status === "OPEN";
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const previousConversationIdRef = useRef<string | null>(null);
@@ -144,14 +150,6 @@ export function ChatWindow({
     element.addEventListener("scroll", updateScrollState, { passive: true });
     return () => element.removeEventListener("scroll", updateScrollState);
   }, [messages.length, conversation?.id]);
-
-  const connectivityItems = [
-    { label: "WhatsApp", icon: MessageCircleMore },
-    { label: "Messenger", icon: Send },
-    { label: "Instagram", icon: Instagram },
-    { label: "Telegram", icon: Send },
-    { label: "Webchat", icon: Globe }
-  ];
 
   async function handleOpenTransfer() {
     if (!conversation) {
@@ -253,6 +251,7 @@ export function ChatWindow({
       <ChatHeader
         conversation={conversation}
         displayName={displayName}
+        isCustomerTyping={isCustomerTyping}
         isOpen={isOpen}
         isCrmPanelOpen={isCrmPanelOpen}
         isUpdatingConversationStatus={isUpdatingConversationStatus}
@@ -261,6 +260,17 @@ export function ChatWindow({
           void handleOpenTransfer();
         }}
         onOpenResolve={() => setIsResolveOpen(true)}
+        onDeleteConversation={() => {
+          if (!conversation) {
+            return;
+          }
+          const confirmed = window.confirm("Hapus chat ini? Semua pesan pada chat ini akan dihapus.");
+          if (!confirmed) {
+            return;
+          }
+          void onDeleteConversation();
+        }}
+        onUnselectConversation={onUnselectConversation}
         onToggleCrmPanel={onToggleCrmPanel}
       />
 
@@ -289,40 +299,26 @@ export function ChatWindow({
                 <ShoppingBag className="h-7 w-7" />
               </div>
               <h3 className="mt-6 text-3xl font-semibold tracking-tight text-foreground">
-                Centralized <span className="text-primary">Inbox</span>
+                WhatsApp <span className="text-primary">Inbox</span>
               </h3>
               <p className="mx-auto mt-3 max-w-sm text-sm leading-6 text-muted-foreground">
-                Kelola semua pesan bisnis dalam satu dashboard yang rapi. Pilih percakapan di kiri atau mulai chat baru untuk menghubungi customer.
+                Channel yang aktif saat ini adalah WhatsApp. Pilih percakapan di panel kiri untuk mulai membalas customer.
               </p>
 
-              <div className="mt-8 rounded-[24px] border border-border/70 bg-muted/35 p-5">
-                <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-muted-foreground">
-                  Multi-Channel Connectivity
-                </p>
-                <div className="mt-4 grid grid-cols-5 gap-3">
-                  {connectivityItems.map(({ label, icon: Icon }) => (
-                    <div key={label} className="flex flex-col items-center gap-2">
-                      <div className="flex h-11 w-11 items-center justify-center rounded-2xl border border-border/80 bg-background shadow-sm">
-                        <Icon className="h-5 w-5 text-primary" />
-                      </div>
-                      <span className="text-[11px] text-muted-foreground">{label}</span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-
-              <div className="mt-6 flex items-center gap-3 rounded-2xl border border-primary/20 bg-primary/5 px-4 py-3 text-left">
-                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-primary/20 bg-background text-primary">
-                  <Bot className="h-5 w-5" />
-                </div>
-                <div>
-                  <p className="text-sm font-semibold text-foreground">Smart AI integration</p>
-                  <p className="text-xs text-muted-foreground">Otomatisasi pesan dengan AI chatbot yang terhubung ke bisnis Anda.</p>
+              <div className="mt-8 rounded-[24px] border border-emerald-500/25 bg-emerald-500/[0.08] p-5 text-left">
+                <div className="flex items-center gap-3">
+                  <div className="flex h-11 w-11 items-center justify-center rounded-2xl border border-emerald-500/30 bg-background shadow-sm">
+                    <MessageCircleMore className="h-5 w-5 text-emerald-600" />
+                  </div>
+                  <div>
+                    <p className="text-sm font-semibold text-foreground">WhatsApp Connected</p>
+                    <p className="text-xs text-muted-foreground">Inbox siap dipakai untuk chat customer dari WhatsApp.</p>
+                  </div>
                 </div>
               </div>
 
               <div className="mt-5 flex items-center justify-center gap-2">
-                <span className="rounded-full border border-border/80 bg-background px-3 py-1 text-xs text-muted-foreground">No contact selected</span>
+                <span className="rounded-full border border-border/80 bg-background px-3 py-1 text-xs text-muted-foreground">Belum ada kontak dipilih</span>
                 {matchedCount > 0 ? (
                   <span className="rounded-full border border-primary/20 bg-primary/10 px-3 py-1 text-xs text-primary">{matchedCount} search matches</span>
                 ) : null}
@@ -338,7 +334,7 @@ export function ChatWindow({
         {isConversationSelected && !isLoading && error ? <ErrorStatePanel title="Failed to Load Messages" message={error} /> : null}
 
         {isConversationSelected && !isLoading && !error && messages.length === 0 ? (
-          <EmptyStatePanel title="No Messages Yet" message="Start conversation by sending your first message." />
+          <EmptyStatePanel title="Belum Ada Pesan" message="Mulai percakapan dengan mengirim pesan pertama." />
         ) : null}
 
         {isConversationSelected && !isLoading && !error && messages.length > 0 ? (

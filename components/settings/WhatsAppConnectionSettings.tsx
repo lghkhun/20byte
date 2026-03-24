@@ -6,6 +6,7 @@ import QRCode from "qrcode";
 import { AlertCircle, CheckCircle2, Link2, Menu, MessageCircle, RefreshCw, ShieldCheck, Smartphone, X } from "lucide-react";
 
 import { useModalAccessibility } from "@/lib/a11y/useModalAccessibility";
+import { fetchJsonCached, invalidateFetchCache } from "@/lib/client/fetchCache";
 import { fetchOrganizationsCached } from "@/lib/client/orgsCache";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -158,13 +159,13 @@ export function WhatsAppConnectionSettings() {
         searchParams.set("refresh", "1");
       }
 
-      const response = await fetch(`/api/whatsapp/baileys${searchParams.size ? `?${searchParams.toString()}` : ""}`, {
-        cache: "no-store"
-      });
-      const payload = (await response.json().catch(() => null)) as WhatsAppConnectionResponse | null;
-      if (!response.ok) {
-        throw new Error(toErrorMessage(payload, "Failed to load WhatsApp connection state."));
-      }
+      const payload = await fetchJsonCached<WhatsAppConnectionResponse | null>(
+        `/api/whatsapp/baileys${searchParams.size ? `?${searchParams.toString()}` : ""}`,
+        {
+          ttlMs: options?.silent ? 2_000 : 8_000,
+          init: { cache: "no-store" }
+        }
+      );
 
       const context = payload?.data?.connection ?? null;
       setConnectionContext(context);
@@ -355,6 +356,7 @@ export function WhatsAppConnectionSettings() {
       }
 
       const qrPayload = payload?.data?.qr;
+      invalidateFetchCache("GET:/api/whatsapp/baileys");
       if (qrPayload?.qrCode) {
         setConnectionContext((current) => ({
           orgId: current?.orgId ?? activeBusiness?.id ?? "",
@@ -430,6 +432,7 @@ export function WhatsAppConnectionSettings() {
       }
 
       const pairingPayload = payload?.data?.pairing;
+      invalidateFetchCache("GET:/api/whatsapp/baileys");
       if (pairingPayload?.pairingCode) {
         setConnectionContext((current) => ({
           orgId: current?.orgId ?? activeBusiness.id,
@@ -475,6 +478,7 @@ export function WhatsAppConnectionSettings() {
         throw new Error(toErrorMessage(payload, "Failed to disconnect WhatsApp."));
       }
 
+      invalidateFetchCache("GET:/api/whatsapp/baileys");
       setConnectionContext((current) => ({
         orgId: current?.orgId ?? activeBusiness.id,
         provider: "BAILEYS",
@@ -590,11 +594,10 @@ export function WhatsAppConnectionSettings() {
     setError(null);
 
     try {
-      const response = await fetch("/api/whatsapp/report", { cache: "no-store" });
-      const payload = (await response.json().catch(() => null)) as WhatsAppReportResponse | null;
-      if (!response.ok) {
-        throw new Error(toErrorMessage(payload, "Failed to load WhatsApp report."));
-      }
+      const payload = await fetchJsonCached<WhatsAppReportResponse | null>("/api/whatsapp/report", {
+        ttlMs: 8_000,
+        init: { cache: "no-store" }
+      });
 
       setReportData(payload?.data?.report ?? null);
       showActionPopup("Report Loaded", "Informasi nomor WhatsApp berhasil diperbarui.", "success");

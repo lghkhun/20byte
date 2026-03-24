@@ -49,6 +49,7 @@ export type OutboundStoreResult = {
   waMessageId: string | null;
   type: "TEXT" | "IMAGE" | "VIDEO" | "AUDIO" | "DOCUMENT" | "TEMPLATE" | "SYSTEM";
   sendStatus: "PENDING" | "SENT" | "FAILED";
+  deliveryStatus: "SENT" | "DELIVERED" | "READ" | null;
   sendError: string | null;
   retryable: boolean;
   sendAttemptCount: number;
@@ -77,9 +78,12 @@ export type MessageListItem = {
   templateLanguageCode: string | null;
   isAutomated: boolean;
   sendStatus: "PENDING" | "SENT" | "FAILED" | null;
+  deliveryStatus: "SENT" | "DELIVERED" | "READ" | null;
   sendError: string | null;
   retryable: boolean;
   sendAttemptCount: number;
+  deliveredAt: Date | null;
+  readAt: Date | null;
   createdAt: Date;
 };
 

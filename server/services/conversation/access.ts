@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/db/prisma";
 import { canAccessInbox } from "@/lib/permissions/orgPermissions";
+import { assertOrgBillingAccess } from "@/server/services/billingService";
 import { ServiceError } from "@/server/services/serviceError";
 
 export async function requireInboxMembership(userId: string, orgId: string) {
@@ -24,6 +25,8 @@ export async function requireInboxMembership(userId: string, orgId: string) {
   if (!canAccessInbox(membership.role)) {
     throw new ServiceError(403, "FORBIDDEN_INBOX_ACCESS", "Your role cannot access inbox conversations.");
   }
+
+  await assertOrgBillingAccess(orgId, "write");
 
   return membership;
 }

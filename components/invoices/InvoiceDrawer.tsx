@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { addDays } from "date-fns";
 import { InvoiceKind, PaymentMilestoneType } from "@prisma/client";
-import { Building2, CalendarDays, ChevronDown, Info, Landmark, Plus, Trash2 } from "lucide-react";
+import { CalendarDays, ChevronDown, Info, Plus, Trash2 } from "lucide-react";
 
 import { InvoiceStatusBadge } from "@/components/invoices/InvoiceStatusBadge";
 import {
@@ -350,7 +350,7 @@ export function InvoiceDrawer({
     setManualCustomerEmail("");
     setNotes((current) => current || buildDefaultInvoiceNotes(businessProfile));
     setTerms((current) => current || buildDefaultInvoiceTerms(businessProfile));
-  }, [open, customerDisplayName, customerPhoneE164, setNotes, setTerms]);
+  }, [open, customerDisplayName, customerPhoneE164, businessProfile, setNotes, setTerms]);
 
   useEffect(() => {
     if (!open || !businessProfile) {
@@ -552,10 +552,6 @@ export function InvoiceDrawer({
   const lineSummaries = items.map((item) => computeInvoiceLine(item));
   const dpAmountCents = kind === InvoiceKind.DP_AND_FINAL ? Math.round((totalCents * dpPercentage) / 100) : totalCents;
   const finalAmountCents = kind === InvoiceKind.DP_AND_FINAL ? Math.max(0, totalCents - dpAmountCents) : 0;
-  const activeSalesperson =
-    salesMembers.find((member) => member.userId === selectedSalesperson)?.name?.trim() ||
-    salesMembers.find((member) => member.userId === selectedSalesperson)?.email ||
-    currentUserLabel;
   const filteredCatalogItems = catalogItems.filter((item) => {
     const code = buildCatalogCode(item.id).toLowerCase();
     const name = item.name.toLowerCase();
@@ -711,31 +707,6 @@ export function InvoiceDrawer({
                   ) : null}
                 </div>
 
-                <div className="rounded-md border border-border bg-card p-4">
-                  <div className="flex items-center gap-2 text-sm font-medium text-foreground">
-                    Default Business Invoice
-                    <FieldHint text="Logo, tanda tangan invoice, dan nama penanggung jawab diambil dari Business Settings." />
-                  </div>
-                  <div className="mt-4 space-y-3 text-sm">
-                    <div className="flex items-start gap-3 rounded-md border border-border bg-muted/30 p-3">
-                      <Building2 className="mt-0.5 h-4 w-4 text-sky-600" />
-                      <div>
-                        <p className="font-medium text-foreground">{businessProfile?.name || "Business belum diatur"}</p>
-                        <p className="text-xs text-muted-foreground">{businessProfile?.legalName || "Nama legal belum diisi."}</p>
-                      </div>
-                    </div>
-                    <div className="flex items-start gap-3 rounded-md border border-border bg-muted/30 p-3">
-                      <Landmark className="mt-0.5 h-4 w-4 text-sky-600" />
-                      <div>
-                        <p className="font-medium text-foreground">{businessProfile?.responsibleName || activeSalesperson}</p>
-                        <p className="text-xs text-muted-foreground">Tanda tangan default bisnis akan dipakai otomatis.</p>
-                      </div>
-                    </div>
-                    <p className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
-                      Ubah logo bisnis, tanda tangan invoice, atau penanggung jawab dari halaman Business Settings.
-                    </p>
-                  </div>
-                </div>
               </section>
 
               <section className="space-y-4">

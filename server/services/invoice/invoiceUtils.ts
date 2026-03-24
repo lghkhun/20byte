@@ -217,7 +217,7 @@ export function normalizeMilestones(kind: InvoiceKind, totalCents: number, miles
 }
 
 export function buildPublicInvoiceUrl(publicToken: string): string {
-  const base = (process.env.APP_URL || process.env.NEXTAUTH_URL || "http://localhost:3100").replace(/\/$/, "");
+  const base = (process.env.APP_URL || process.env.NEXTAUTH_URL || "http://localhost:3000").replace(/\/$/, "");
   return `${base}/i/${publicToken}`;
 }
 

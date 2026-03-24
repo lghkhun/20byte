@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/db/prisma";
 import { canAccessOrganizationSettings } from "@/lib/permissions/orgPermissions";
 import { deleteCachedKey } from "@/lib/redis/cache";
+import { assertOrgBillingAccess } from "@/server/services/billingService";
 import {
   assertWhatsAppDestination,
   normalizeShortlinkValue,
@@ -187,6 +188,8 @@ async function requireShortlinkAccess(actorUserId: string, orgId: string): Promi
   if (!canAccessOrganizationSettings(membership.role)) {
     throw new ServiceError(403, "FORBIDDEN_SHORTLINK_ACCESS", "Your role cannot manage shortlinks.");
   }
+
+  await assertOrgBillingAccess(orgId, "write");
 }
 
 function mapShortlink(row: {
@@ -411,9 +414,10 @@ export async function updateShortlink(input: UpdateShortlinkInput): Promise<Shor
       : normalizeShortlinkValue(existingDestination.templateMessage ?? "");
   const destinationUrl = buildWhatsAppDestination(waPhone, resolvedTemplate);
 
-  const updated = await prisma.shortlink.update({
+  const updateResult = await prisma.shortlink.updateMany({
     where: {
-      id: existing.id
+      id: existing.id,
+      orgId
     },
     data: {
       destinationUrl,
@@ -423,9 +427,17 @@ export async function updateShortlink(input: UpdateShortlinkInput): Promise<Shor
       adName: attribution.adName,
       platform: attribution.platform,
       medium: attribution.medium
-    },
-    select: shortlinkSelect
+    }
   });
+
+  if (updateResult.count !== 1) {
+    throw new ServiceError(404, "SHORTLINK_NOT_FOUND", "Shortlink does not exist.");
+  }
+
+  const updated = await findShortlinkByIdInOrg(orgId, existing.id);
+  if (!updated) {
+    throw new ServiceError(404, "SHORTLINK_NOT_FOUND", "Shortlink does not exist.");
+  }
 
   await clearShortlinkCache(updated.code);
   return mapShortlink(updated);
@@ -508,10 +520,14 @@ export async function deleteShortlink(actorUserId: string, orgIdInput: string, s
       shortlinkId: existing.id
     }
   });
-  await prisma.shortlink.delete({
+  const deleteResult = await prisma.shortlink.deleteMany({
     where: {
-      id: existing.id
+      id: existing.id,
+      orgId
     }
   });
+  if (deleteResult.count !== 1) {
+    throw new ServiceError(404, "SHORTLINK_NOT_FOUND", "Shortlink does not exist.");
+  }
   await clearShortlinkCache(existing.code);
 }

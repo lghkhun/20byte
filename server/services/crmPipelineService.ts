@@ -2,6 +2,7 @@ import { ConversationStatus } from "@prisma/client";
 
 import { prisma } from "@/lib/db/prisma";
 import { canAccessInbox } from "@/lib/permissions/orgPermissions";
+import { assertOrgBillingAccess } from "@/server/services/billingService";
 import { normalizeLegacyLocalInvoiceLinks } from "@/server/services/conversation/utils";
 import { ServiceError } from "@/server/services/serviceError";
 
@@ -83,6 +84,8 @@ async function requireCrmAccess(userId: string, orgId: string) {
   if (!canAccessInbox(membership.role)) {
     throw new ServiceError(403, "FORBIDDEN_CRM_ACCESS", "Your role cannot manage CRM pipelines.");
   }
+
+  await assertOrgBillingAccess(orgId, "write");
 }
 
 function mapPipeline(row: {
@@ -158,10 +161,7 @@ function mapKanbanCard(row: {
     type: string;
     fileName: string | null;
   }>;
-  invoices: Array<{
-    status: string;
-  }>;
-}): CrmPipelineKanbanCard {
+}, invoiceCounters: { total: number; unpaid: number }): CrmPipelineKanbanCard {
   const latestMessage = row.messages[0] ?? null;
   const fallbackPreview = latestMessage?.type === "TEXT" ? "" : latestMessage?.fileName || latestMessage?.type || "";
   const latestTextPreview = normalizeLegacyLocalInvoiceLinks(latestMessage?.text?.trim() || "");
@@ -175,8 +175,8 @@ function mapKanbanCard(row: {
     unreadCount: row.unreadCount,
     lastMessageAt: row.lastMessageAt ? row.lastMessageAt.toISOString() : null,
     lastMessagePreview: latestTextPreview || fallbackPreview || null,
-    invoiceCount: row.invoices.length,
-    unpaidInvoiceCount: row.invoices.filter((invoice) => invoice.status !== "PAID" && invoice.status !== "VOID").length
+    invoiceCount: invoiceCounters.total,
+    unpaidInvoiceCount: invoiceCounters.unpaid
   };
 }
 
@@ -388,14 +388,58 @@ export async function listCrmPipelineKanbanBoard(input: {
           type: true,
           fileName: true
         }
-      },
-      invoices: {
-        select: {
-          status: true
-        }
       }
     }
   });
+
+  const conversationIds = conversations.map((conversation) => conversation.id);
+  const [totalInvoiceGroup, unpaidInvoiceGroup] = conversationIds.length
+    ? await Promise.all([
+        prisma.invoice.groupBy({
+          by: ["conversationId"],
+          where: {
+            orgId,
+            conversationId: {
+              in: conversationIds
+            }
+          },
+          _count: {
+            _all: true
+          }
+        }),
+        prisma.invoice.groupBy({
+          by: ["conversationId"],
+          where: {
+            orgId,
+            conversationId: {
+              in: conversationIds
+            },
+            status: {
+              notIn: ["PAID", "VOID"]
+            }
+          },
+          _count: {
+            _all: true
+          }
+        })
+      ])
+    : [[], []];
+
+  const totalInvoiceMap = new Map<string, number>();
+  for (const item of totalInvoiceGroup) {
+    if (!item.conversationId) {
+      continue;
+    }
+    totalInvoiceMap.set(item.conversationId, item._count._all);
+  }
+
+  const unpaidInvoiceMap = new Map<string, number>();
+  for (const item of unpaidInvoiceGroup) {
+    if (!item.conversationId) {
+      continue;
+    }
+    unpaidInvoiceMap.set(item.conversationId, item._count._all);
+  }
 
   const cardsByStage = new Map<string, CrmPipelineKanbanCard[]>();
   const unassignedCards: CrmPipelineKanbanCard[] = [];
@@ -405,7 +449,10 @@ export async function listCrmPipelineKanbanBoard(input: {
   }
 
   for (const conversation of conversations) {
-    const card = mapKanbanCard(conversation);
+    const card = mapKanbanCard(conversation, {
+      total: totalInvoiceMap.get(conversation.id) ?? 0,
+      unpaid: unpaidInvoiceMap.get(conversation.id) ?? 0
+    });
     if (!conversation.crmStageId || !cardsByStage.has(conversation.crmStageId)) {
       unassignedCards.push(card);
       continue;

@@ -1,7 +1,7 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
-import { Copy, MoreHorizontal, Pencil, Trash2 } from "lucide-react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Copy, Link2, MoreHorizontal, Pencil, Trash2 } from "lucide-react";
 
 import { fetchOrganizationsCached } from "@/lib/client/orgsCache";
 import { notifyError, notifySuccess } from "@/lib/ui/notify";
@@ -60,6 +60,62 @@ type ApiError = {
   };
 };
 
+type ShortlinkMutationResponse = {
+  data?: {
+    shortlink?: ShortlinkItem;
+  };
+} & ApiError;
+
+type ShortlinksCacheEntry = {
+  rows: ShortlinkItem[];
+  cachedAt: number;
+};
+
+type ConnectionCacheEntry = {
+  phone: string;
+  cachedAt: number;
+};
+
+const SHORTLINKS_CACHE_TTL_MS = 30_000;
+const CONNECTION_CACHE_TTL_MS = 60_000;
+const SHORTLINKS_DATE_FORMATTER = new Intl.DateTimeFormat("id-ID", {
+  day: "2-digit",
+  month: "short",
+  year: "numeric"
+});
+const PERF_STORAGE_KEY = "perf.shortlinks.v1";
+const PERF_MAX_SAMPLES = 120;
+
+type PerfMetricName =
+  | "shortlinks.load"
+  | "shortlinks.connection.load"
+  | "shortlinks.create"
+  | "shortlinks.update"
+  | "shortlinks.toggle"
+  | "shortlinks.delete";
+
+type PerfSample = {
+  name: PerfMetricName;
+  durationMs: number;
+  ok: boolean;
+  at: number;
+};
+
+function savePerfSample(sample: PerfSample) {
+  if (typeof window === "undefined") {
+    return;
+  }
+
+  try {
+    const raw = window.localStorage.getItem(PERF_STORAGE_KEY);
+    const parsed = raw ? (JSON.parse(raw) as PerfSample[]) : [];
+    const next = [...parsed, sample].slice(-PERF_MAX_SAMPLES);
+    window.localStorage.setItem(PERF_STORAGE_KEY, JSON.stringify(next));
+  } catch {
+    // Ignore telemetry write failures to keep UX path fast.
+  }
+}
+
 function toErrorMessage(error: unknown, fallback: string) {
   if (error instanceof Error && error.message) {
     return error.message;
@@ -74,17 +130,15 @@ function formatDateLabel(value: string): string {
     return "-";
   }
 
-  return new Intl.DateTimeFormat("id-ID", {
-    day: "2-digit",
-    month: "short",
-    year: "numeric"
-  }).format(date);
+  return SHORTLINKS_DATE_FORMATTER.format(date);
 }
 
 export function ShortlinkManager({ variant = "settings" }: { variant?: "settings" | "page" }) {
   const [orgs, setOrgs] = useState<OrgItem[]>([]);
+  const [hasLoadedOrganizations, setHasLoadedOrganizations] = useState(false);
   const [shortlinks, setShortlinks] = useState<ShortlinkItem[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [isRefreshing, setIsRefreshing] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isMutating, setIsMutating] = useState(false);
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
@@ -109,6 +163,31 @@ export function ShortlinkManager({ variant = "settings" }: { variant?: "settings
   const [editAdName, setEditAdName] = useState("");
   const [editPlatform, setEditPlatform] = useState("meta");
   const [editMedium, setEditMedium] = useState("paid_social");
+  const shortlinksCacheRef = useRef<Map<string, ShortlinksCacheEntry>>(new Map());
+  const connectionCacheRef = useRef<Map<string, ConnectionCacheEntry>>(new Map());
+  const hasPrimedShortlinksRef = useRef<Set<string>>(new Set());
+  const shortlinksRequestIdRef = useRef(0);
+  const connectionRequestIdRef = useRef(0);
+  const shortlinksInFlightRef = useRef<{
+    key: string;
+    promise: Promise<void>;
+  } | null>(null);
+  const connectionInFlightRef = useRef<{
+    key: string;
+    promise: Promise<void>;
+  } | null>(null);
+  const shortlinksAbortControllerRef = useRef<AbortController | null>(null);
+  const connectionAbortControllerRef = useRef<AbortController | null>(null);
+  const isMountedRef = useRef(true);
+  const recordPerf = useCallback((name: PerfMetricName, startedAt: number, ok: boolean) => {
+    const durationMs = Number((performance.now() - startedAt).toFixed(1));
+    savePerfSample({
+      name,
+      durationMs,
+      ok,
+      at: Date.now()
+    });
+  }, []);
 
   const activeBusiness = useMemo(() => orgs[0] ?? null, [orgs]);
   const normalizedConnectedPhone = useMemo(() => connectedPhone.replace(/\D/g, ""), [connectedPhone]);
@@ -144,46 +223,191 @@ export function ShortlinkManager({ variant = "settings" }: { variant?: "settings
     return `https://wa.me/${waPhone}?text=${encodeURIComponent(normalizedMessage)}`;
   }, [editTemplateMessage, editingShortlink?.waPhone, normalizedConnectedPhone]);
   const canSaveEdit = useMemo(() => Boolean(editingShortlinkId && editCampaign.trim() && !isMutating), [editingShortlinkId, editCampaign, isMutating]);
-  const createAction = useMemo(
-    () => (
-      <Button type="button" className="h-10 rounded-xl" onClick={() => setIsCreateDialogOpen(true)}>
-        Tambah Shortlink
-      </Button>
-    ),
+  const updateShortlinksState = useCallback(
+    (orgId: string, rowsOrUpdater: ShortlinkItem[] | ((rows: ShortlinkItem[]) => ShortlinkItem[])) => {
+      setShortlinks((currentRows) => {
+        const nextRows = typeof rowsOrUpdater === "function" ? rowsOrUpdater(currentRows) : rowsOrUpdater;
+        shortlinksCacheRef.current.set(orgId, {
+          rows: nextRows,
+          cachedAt: Date.now()
+        });
+        return nextRows;
+      });
+    },
     []
   );
 
-  useSettingsHeaderAction("10-shortlink-create", variant === "settings" ? createAction : null);
-
   const loadOrganizations = useCallback(async () => {
-    const organizations = (await fetchOrganizationsCached()) as OrgItem[];
-    setOrgs(organizations);
-  }, []);
-
-  const loadShortlinks = useCallback(async () => {
-    const response = await fetch("/api/shortlinks", { cache: "no-store" });
-    const payload = (await response.json()) as { data?: { shortlinks?: ShortlinkItem[] } } & ApiError;
-
-    if (!response.ok) {
-      throw new Error(payload.error?.message ?? "Failed to load shortlinks.");
+    try {
+      const organizations = (await fetchOrganizationsCached()) as OrgItem[];
+      setOrgs(organizations);
+    } finally {
+      setHasLoadedOrganizations(true);
     }
-
-    setShortlinks(payload.data?.shortlinks ?? []);
   }, []);
 
-  const loadBaileysConnection = useCallback(async () => {
-    if (!activeBusiness) {
+  const loadShortlinks = useCallback(async (options?: { force?: boolean }) => {
+    const orgId = activeBusiness?.id ?? "";
+    if (!orgId || !isMountedRef.current) {
+      return;
+    }
+    const startedAt = performance.now();
+    const requestId = ++shortlinksRequestIdRef.current;
+    if (!options?.force && shortlinksInFlightRef.current?.key === orgId) {
+      await shortlinksInFlightRef.current.promise;
+      return;
+    }
+    const cached = shortlinksCacheRef.current.get(orgId);
+    if (cached) {
+      setShortlinks(cached.rows);
+    } else {
+      setShortlinks([]);
+    }
+    const isCacheFresh = Boolean(cached && Date.now() - cached.cachedAt < SHORTLINKS_CACHE_TTL_MS);
+    if (isCacheFresh && !options?.force) {
+      recordPerf("shortlinks.load", startedAt, true);
       return;
     }
 
-    const response = await fetch(`/api/whatsapp/baileys?orgId=${encodeURIComponent(activeBusiness.id)}`, { cache: "no-store" });
-    const payload = (await response.json()) as BaileysConnectionPayload;
-    if (!response.ok) {
-      throw new Error(payload.error?.message ?? "Failed to load connected WhatsApp number.");
+    if (!cached) {
+      setIsLoading(true);
+    } else {
+      setIsRefreshing(true);
     }
 
-    setConnectedPhone(payload.data?.connection?.connectedAccount?.displayPhone?.trim() ?? "");
-  }, [activeBusiness]);
+    const fetchPromise = (async () => {
+      const abortController = new AbortController();
+      shortlinksAbortControllerRef.current?.abort();
+      shortlinksAbortControllerRef.current = abortController;
+      try {
+        const response = await fetch(`/api/shortlinks?orgId=${encodeURIComponent(orgId)}`, { cache: "no-store", signal: abortController.signal });
+        const payload = (await response.json()) as { data?: { shortlinks?: ShortlinkItem[] } } & ApiError;
+        if (!isMountedRef.current || requestId !== shortlinksRequestIdRef.current) {
+          return;
+        }
+
+        if (!response.ok) {
+          recordPerf("shortlinks.load", startedAt, false);
+          throw new Error(payload.error?.message ?? "Failed to load shortlinks.");
+        }
+
+        const rows = payload.data?.shortlinks ?? [];
+        shortlinksCacheRef.current.set(orgId, {
+          rows,
+          cachedAt: Date.now()
+        });
+        setShortlinks(rows);
+        recordPerf("shortlinks.load", startedAt, true);
+      } catch (error) {
+        if (error instanceof DOMException && error.name === "AbortError") {
+          return;
+        }
+        throw error;
+      } finally {
+        if (shortlinksAbortControllerRef.current === abortController) {
+          shortlinksAbortControllerRef.current = null;
+        }
+      }
+    })().finally(() => {
+      if (shortlinksInFlightRef.current?.key === orgId) {
+        shortlinksInFlightRef.current = null;
+      }
+    });
+
+    shortlinksInFlightRef.current = {
+      key: orgId,
+      promise: fetchPromise
+    };
+    await fetchPromise;
+  }, [activeBusiness?.id, recordPerf]);
+
+  const loadBaileysConnection = useCallback(async (options?: { force?: boolean }) => {
+    const orgId = activeBusiness?.id ?? "";
+    if (!orgId || !isMountedRef.current) {
+      return;
+    }
+    const startedAt = performance.now();
+    const requestId = ++connectionRequestIdRef.current;
+
+    if (!options?.force && connectionInFlightRef.current?.key === orgId) {
+      await connectionInFlightRef.current.promise;
+      return;
+    }
+    const cached = connectionCacheRef.current.get(orgId);
+    if (cached) {
+      setConnectedPhone(cached.phone);
+    }
+    const isCacheFresh = Boolean(cached && Date.now() - cached.cachedAt < CONNECTION_CACHE_TTL_MS);
+    if (isCacheFresh && !options?.force) {
+      recordPerf("shortlinks.connection.load", startedAt, true);
+      return;
+    }
+
+    const fetchPromise = (async () => {
+      const abortController = new AbortController();
+      connectionAbortControllerRef.current?.abort();
+      connectionAbortControllerRef.current = abortController;
+      try {
+        const response = await fetch(`/api/whatsapp/baileys?orgId=${encodeURIComponent(orgId)}`, { cache: "no-store", signal: abortController.signal });
+        const payload = (await response.json()) as BaileysConnectionPayload;
+        if (!isMountedRef.current || requestId !== connectionRequestIdRef.current) {
+          return;
+        }
+        if (!response.ok) {
+          recordPerf("shortlinks.connection.load", startedAt, false);
+          throw new Error(payload.error?.message ?? "Failed to load connected WhatsApp number.");
+        }
+
+        const phone = payload.data?.connection?.connectedAccount?.displayPhone?.trim() ?? "";
+        connectionCacheRef.current.set(orgId, {
+          phone,
+          cachedAt: Date.now()
+        });
+        setConnectedPhone(phone);
+        recordPerf("shortlinks.connection.load", startedAt, true);
+      } catch (error) {
+        if (error instanceof DOMException && error.name === "AbortError") {
+          return;
+        }
+        throw error;
+      } finally {
+        if (connectionAbortControllerRef.current === abortController) {
+          connectionAbortControllerRef.current = null;
+        }
+      }
+    })().finally(() => {
+      if (connectionInFlightRef.current?.key === orgId) {
+        connectionInFlightRef.current = null;
+      }
+    });
+
+    connectionInFlightRef.current = {
+      key: orgId,
+      promise: fetchPromise
+    };
+    await fetchPromise;
+  }, [activeBusiness?.id, recordPerf]);
+
+  const createAction = useMemo(
+    () => (
+      <Button
+        type="button"
+        className="h-10 rounded-xl"
+        onMouseEnter={() => {
+          void loadShortlinks();
+        }}
+        onFocus={() => {
+          void loadShortlinks();
+        }}
+        onClick={() => setIsCreateDialogOpen(true)}
+      >
+        Tambah Shortlink
+      </Button>
+    ),
+    [loadShortlinks]
+  );
+
+  useSettingsHeaderAction("10-shortlink-create", variant === "settings" ? createAction : null);
 
   useEffect(() => {
     setRuntimeOrigin(window.location.origin);
@@ -220,7 +444,15 @@ export function ShortlinkManager({ variant = "settings" }: { variant?: "settings
     let mounted = true;
 
     async function syncShortlinks() {
-      if (!activeBusiness) {
+      const orgId = activeBusiness?.id ?? "";
+      if (!hasLoadedOrganizations) {
+        return;
+      }
+      if (!orgId) {
+        if (mounted) {
+          setIsLoading(false);
+          setIsRefreshing(false);
+        }
         return;
       }
 
@@ -228,8 +460,16 @@ export function ShortlinkManager({ variant = "settings" }: { variant?: "settings
         setError(null);
         await Promise.all([loadShortlinks(), loadBaileysConnection()]);
       } catch (err) {
+        if (err instanceof DOMException && err.name === "AbortError") {
+          return;
+        }
         if (mounted) {
           setError(toErrorMessage(err, "Failed to refresh shortlinks."));
+        }
+      } finally {
+        if (mounted) {
+          setIsLoading(false);
+          setIsRefreshing(false);
         }
       }
     }
@@ -239,7 +479,51 @@ export function ShortlinkManager({ variant = "settings" }: { variant?: "settings
     return () => {
       mounted = false;
     };
-  }, [activeBusiness, loadBaileysConnection, loadShortlinks]);
+  }, [activeBusiness, hasLoadedOrganizations, loadBaileysConnection, loadShortlinks]);
+
+  useEffect(() => {
+    isMountedRef.current = true;
+    return () => {
+      isMountedRef.current = false;
+      shortlinksAbortControllerRef.current?.abort();
+      connectionAbortControllerRef.current?.abort();
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!hasLoadedOrganizations) {
+      return;
+    }
+    const orgId = activeBusiness?.id ?? "";
+    if (!orgId) {
+      return;
+    }
+    if (hasPrimedShortlinksRef.current.has(orgId) || shortlinksCacheRef.current.has(orgId)) {
+      return;
+    }
+    hasPrimedShortlinksRef.current.add(orgId);
+
+    let timeoutId: ReturnType<typeof setTimeout> | null = null;
+    let idleId: number | null = null;
+    const runPrefetch = () => {
+      void Promise.all([loadShortlinks(), loadBaileysConnection()]);
+    };
+
+    if (typeof window !== "undefined" && "requestIdleCallback" in window) {
+      idleId = window.requestIdleCallback(runPrefetch, { timeout: 1200 });
+    } else {
+      timeoutId = globalThis.setTimeout(runPrefetch, 600);
+    }
+
+    return () => {
+      if (idleId !== null && typeof window !== "undefined" && "cancelIdleCallback" in window) {
+        window.cancelIdleCallback(idleId);
+      }
+      if (timeoutId !== null) {
+        globalThis.clearTimeout(timeoutId);
+      }
+    };
+  }, [activeBusiness?.id, hasLoadedOrganizations, loadBaileysConnection, loadShortlinks]);
 
   useEffect(() => {
     if (!error) return;
@@ -256,6 +540,7 @@ export function ShortlinkManager({ variant = "settings" }: { variant?: "settings
     if (!canSubmit) {
       return;
     }
+    const startedAt = performance.now();
 
     try {
       setIsSubmitting(true);
@@ -268,6 +553,7 @@ export function ShortlinkManager({ variant = "settings" }: { variant?: "settings
           "Content-Type": "application/json"
         },
         body: JSON.stringify({
+          orgId: activeBusiness?.id ?? "",
           source,
           campaign,
           adset,
@@ -278,8 +564,9 @@ export function ShortlinkManager({ variant = "settings" }: { variant?: "settings
         })
       });
 
-      const payload = (await response.json()) as ApiError;
+      const payload = (await response.json()) as ShortlinkMutationResponse;
       if (!response.ok) {
+        recordPerf("shortlinks.create", startedAt, false);
         throw new Error(payload.error?.message ?? "Failed to create shortlink.");
       }
 
@@ -291,10 +578,16 @@ export function ShortlinkManager({ variant = "settings" }: { variant?: "settings
       setPlatform("meta");
       setMedium("paid_social");
       setIsCreateDialogOpen(false);
-      await loadShortlinks();
+      if (activeBusiness?.id && payload.data?.shortlink) {
+        updateShortlinksState(activeBusiness.id, (currentRows) => [payload.data!.shortlink!, ...currentRows]);
+      } else {
+        await loadShortlinks({ force: true });
+      }
       setSuccess("Shortlink created.");
+      recordPerf("shortlinks.create", startedAt, true);
     } catch (err) {
       setError(toErrorMessage(err, "Failed to create shortlink."));
+      recordPerf("shortlinks.create", startedAt, false);
     } finally {
       setIsSubmitting(false);
     }
@@ -313,6 +606,7 @@ export function ShortlinkManager({ variant = "settings" }: { variant?: "settings
   }
 
   async function handleToggleShortlink(shortlinkId: string, isEnabled: boolean) {
+    const startedAt = performance.now();
     try {
       setIsMutating(true);
       setError(null);
@@ -324,20 +618,30 @@ export function ShortlinkManager({ variant = "settings" }: { variant?: "settings
           "Content-Type": "application/json"
         },
         body: JSON.stringify({
+          orgId: activeBusiness?.id ?? "",
           shortlinkId,
           isEnabled
         })
       });
 
-      const payload = (await response.json()) as ApiError;
+      const payload = (await response.json()) as ShortlinkMutationResponse;
       if (!response.ok) {
+        recordPerf("shortlinks.toggle", startedAt, false);
         throw new Error(payload.error?.message ?? "Failed to update shortlink status.");
       }
 
-      await loadShortlinks();
+      if (activeBusiness?.id && payload.data?.shortlink) {
+        updateShortlinksState(activeBusiness.id, (currentRows) =>
+          currentRows.map((item) => (item.id === shortlinkId ? payload.data!.shortlink! : item))
+        );
+      } else {
+        await loadShortlinks({ force: true });
+      }
       setSuccess(isEnabled ? "Shortlink enabled." : "Shortlink disabled.");
+      recordPerf("shortlinks.toggle", startedAt, true);
     } catch (err) {
       setError(toErrorMessage(err, "Failed to update shortlink status."));
+      recordPerf("shortlinks.toggle", startedAt, false);
     } finally {
       setIsMutating(false);
     }
@@ -348,6 +652,7 @@ export function ShortlinkManager({ variant = "settings" }: { variant?: "settings
     if (!editingShortlinkId) {
       return;
     }
+    const startedAt = performance.now();
 
     try {
       setIsMutating(true);
@@ -359,6 +664,7 @@ export function ShortlinkManager({ variant = "settings" }: { variant?: "settings
           "Content-Type": "application/json"
         },
         body: JSON.stringify({
+          orgId: activeBusiness?.id ?? "",
           shortlinkId: editingShortlinkId,
           templateMessage: editTemplateMessage,
           source: editSource,
@@ -370,17 +676,26 @@ export function ShortlinkManager({ variant = "settings" }: { variant?: "settings
         })
       });
 
-      const payload = (await response.json()) as ApiError;
+      const payload = (await response.json()) as ShortlinkMutationResponse;
       if (!response.ok) {
+        recordPerf("shortlinks.update", startedAt, false);
         throw new Error(payload.error?.message ?? "Failed to update shortlink.");
       }
 
       setIsEditDialogOpen(false);
       setEditingShortlinkId(null);
-      await loadShortlinks();
+      if (activeBusiness?.id && payload.data?.shortlink) {
+        updateShortlinksState(activeBusiness.id, (currentRows) =>
+          currentRows.map((item) => (item.id === editingShortlinkId ? payload.data!.shortlink! : item))
+        );
+      } else {
+        await loadShortlinks({ force: true });
+      }
       setSuccess("Shortlink updated.");
+      recordPerf("shortlinks.update", startedAt, true);
     } catch (err) {
       setError(toErrorMessage(err, "Failed to update shortlink."));
+      recordPerf("shortlinks.update", startedAt, false);
     } finally {
       setIsMutating(false);
     }
@@ -391,6 +706,7 @@ export function ShortlinkManager({ variant = "settings" }: { variant?: "settings
     if (!confirmed) {
       return;
     }
+    const startedAt = performance.now();
 
     try {
       setIsMutating(true);
@@ -402,19 +718,27 @@ export function ShortlinkManager({ variant = "settings" }: { variant?: "settings
           "Content-Type": "application/json"
         },
         body: JSON.stringify({
+          orgId: activeBusiness?.id ?? "",
           shortlinkId
         })
       });
 
       const payload = (await response.json()) as ApiError;
       if (!response.ok) {
+        recordPerf("shortlinks.delete", startedAt, false);
         throw new Error(payload.error?.message ?? "Failed to delete shortlink.");
       }
 
-      await loadShortlinks();
+      if (activeBusiness?.id) {
+        updateShortlinksState(activeBusiness.id, (currentRows) => currentRows.filter((item) => item.id !== shortlinkId));
+      } else {
+        await loadShortlinks({ force: true });
+      }
       setSuccess("Shortlink deleted.");
+      recordPerf("shortlinks.delete", startedAt, true);
     } catch (err) {
       setError(toErrorMessage(err, "Failed to delete shortlink."));
+      recordPerf("shortlinks.delete", startedAt, false);
     }
     finally {
       setIsMutating(false);
@@ -439,16 +763,31 @@ export function ShortlinkManager({ variant = "settings" }: { variant?: "settings
     <section className="space-y-4">
       {variant === "page" ? (
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <div>
-            <h1 className="text-xl font-semibold text-foreground md:text-2xl">Shortlink</h1>
-            <p className="mt-1 text-sm text-muted-foreground">Kelola shortlink kampanye dan tautan publik dari satu tabel.</p>
+          <div className="flex items-center gap-3 md:gap-4">
+            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-cyan-50 text-cyan-600 md:h-11 md:w-11 md:rounded-2xl">
+              <Link2 className="h-5 w-5" />
+            </div>
+            <div>
+              <h1 className="text-xl font-semibold tracking-tight text-foreground md:text-3xl">Shortlink System</h1>
+              <p className="text-xs text-muted-foreground md:text-sm">Kelola shortlink kampanye, tracking, dan tautan publik dari satu workspace.</p>
+            </div>
           </div>
-          <Button type="button" className="h-10 rounded-xl" onClick={() => setIsCreateDialogOpen(true)}>
+          <Button
+            type="button"
+            className="h-10 rounded-xl"
+            onMouseEnter={() => {
+              void loadShortlinks();
+            }}
+            onFocus={() => {
+              void loadShortlinks();
+            }}
+            onClick={() => setIsCreateDialogOpen(true)}
+          >
             Tambah Shortlink
           </Button>
         </div>
       ) : null}
-      <p className="text-sm text-muted-foreground">Buat CTWA shortlink untuk kampanye dan kelola status link dari satu tabel yang rapi.</p>
+      {isRefreshing ? <p className="text-sm text-muted-foreground">Refreshing shortlinks...</p> : null}
 
       <div className="overflow-x-auto rounded-2xl border border-border/70 bg-background/60">
         <Table>
@@ -471,7 +810,7 @@ export function ShortlinkManager({ variant = "settings" }: { variant?: "settings
             </TableRow>
           </TableHeader>
           <TableBody>
-            {isLoading ? (
+            {isLoading && shortlinks.length === 0 ? (
               <TableRow>
                 <TableCell colSpan={14} className="h-20 text-center text-muted-foreground">
                   Loading shortlinks...

@@ -5,6 +5,7 @@ import type { Role } from "@prisma/client";
 import { getAuthSecret } from "@/lib/env";
 import { prisma } from "@/lib/db/prisma";
 import { canAccessOrganizationSettings } from "@/lib/permissions/orgPermissions";
+import { assertOrgBillingAccess } from "@/server/services/billingService";
 import { resolvePrimaryOrganizationIdForUser } from "@/server/services/organizationService";
 import { ServiceError } from "@/server/services/serviceError";
 
@@ -80,6 +81,8 @@ async function requireOrgSettingsAccess(userId: string, orgId: string) {
   if (!canAccessOrganizationSettings(membership.role as Role)) {
     throw new ServiceError(403, "FORBIDDEN_SETTINGS_ACCESS", "Your role cannot manage Meta integration.");
   }
+
+  await assertOrgBillingAccess(orgId, "write");
 }
 
 function getEncryptionKey(): Buffer {

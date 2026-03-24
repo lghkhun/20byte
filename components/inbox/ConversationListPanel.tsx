@@ -1,8 +1,9 @@
-import { useMemo, useRef, useState } from "react";
-import { MoreVertical, Plus, RefreshCw, Search, SlidersHorizontal, Trash2 } from "lucide-react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { Plus, RefreshCw, Search } from "lucide-react";
 
 import { ConversationRow } from "@/components/inbox/conversation-list/ConversationRow";
 import { ConversationListSkeleton } from "@/components/inbox/conversation-list/ConversationListSkeleton";
+import { IndicatorLegend } from "@/components/inbox/IndicatorLegend";
 import type { ConversationListFilter, ConversationItem, ConversationStatusFilter } from "@/components/inbox/types";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -44,8 +45,8 @@ export function ConversationListPanel({
   const [newName, setNewName] = useState("");
   const [isCreating, setIsCreating] = useState(false);
   const [createError, setCreateError] = useState<string | null>(null);
-  const [showMoreMenu, setShowMoreMenu] = useState(false);
   const [showUnreadOnly, setShowUnreadOnly] = useState(false);
+  const [nowMs, setNowMs] = useState(() => Date.now());
   const searchInputRef = useRef<HTMLInputElement | null>(null);
   const filteredConversations = useMemo(() => {
     const query = searchText.trim().toLowerCase();
@@ -67,6 +68,13 @@ export function ConversationListPanel({
       return rightTime - leftTime;
     });
   }, [conversations, searchText, showUnreadOnly]);
+
+  useEffect(() => {
+    const timer = window.setInterval(() => {
+      setNowMs(Date.now());
+    }, 30_000);
+    return () => window.clearInterval(timer);
+  }, []);
 
   const tabItems = [
     {
@@ -123,50 +131,7 @@ export function ConversationListPanel({
             <h2 className="text-lg font-semibold tracking-tight text-foreground">Inbox</h2>
             <p className="text-xs text-muted-foreground">{filteredConversations.length} active conversations</p>
           </div>
-          <div className="flex items-center gap-2">
-            <Button
-              type="button"
-              variant="ghost"
-              size="icon"
-              className="h-9 w-9 rounded-xl border border-border/70 text-muted-foreground"
-              title="Filter actions"
-              onClick={() => {
-                setShowUnreadOnly((current) => !current);
-                onFilterChange("ALL");
-                onStatusChange("OPEN");
-              }}
-            >
-              <SlidersHorizontal className="h-4 w-4" />
-              <span className="sr-only">Filters</span>
-            </Button>
-            <Button
-              type="button"
-              variant="ghost"
-              size="icon"
-              className="h-9 w-9 rounded-xl border border-border/70 text-muted-foreground"
-              title="Reset search and filters"
-              onClick={() => {
-                setSearchText("");
-                setShowUnreadOnly(false);
-                onFilterChange("ALL");
-                onStatusChange("OPEN");
-              }}
-            >
-              <Trash2 className="h-4 w-4" />
-              <span className="sr-only">Archive actions</span>
-            </Button>
-            <Button
-              type="button"
-              variant="ghost"
-              size="icon"
-              className="h-9 w-9 rounded-xl border border-border/70 text-muted-foreground"
-              title="More actions"
-              onClick={() => setShowMoreMenu((current) => !current)}
-            >
-              <MoreVertical className="h-4 w-4" />
-              <span className="sr-only">More actions</span>
-            </Button>
-          </div>
+          <IndicatorLegend compact />
         </div>
 
         <div className="inbox-scroll flex items-center gap-4 overflow-x-auto whitespace-nowrap border-b border-border/70 pb-3">
@@ -222,32 +187,6 @@ export function ConversationListPanel({
             <span className="sr-only">Refresh conversations</span>
           </Button>
         </div>
-
-        {showMoreMenu ? (
-          <div className="absolute right-4 top-20 z-10 w-48 rounded-2xl border border-border/80 bg-card p-2 shadow-xl">
-            <button type="button" className="w-full rounded-xl px-3 py-2 text-left text-sm hover:bg-accent" onClick={() => {
-              onRefresh();
-              setShowMoreMenu(false);
-            }}>
-              Refresh inbox
-            </button>
-            <button type="button" className="w-full rounded-xl px-3 py-2 text-left text-sm hover:bg-accent" onClick={() => {
-              setShowUnreadOnly((current) => !current);
-              onFilterChange("ALL");
-              onStatusChange("OPEN");
-              setShowMoreMenu(false);
-            }}>
-              Toggle unread only
-            </button>
-            <button type="button" className="w-full rounded-xl px-3 py-2 text-left text-sm hover:bg-accent" onClick={() => {
-              setSearchText("");
-              setShowMoreMenu(false);
-              searchInputRef.current?.focus();
-            }}>
-              Clear search
-            </button>
-          </div>
-        ) : null}
       </div>
 
       <div className="inbox-scroll min-h-0 flex-1 overflow-y-auto overscroll-contain border-t border-border/70 bg-[linear-gradient(180deg,hsl(var(--background))/0.88,hsl(var(--muted))/0.2)]">
@@ -266,6 +205,7 @@ export function ConversationListPanel({
                 density={density}
                 conversation={conversation}
                 isSelected={conversation.id === selectedConversationId}
+                nowMs={nowMs}
                 onSelect={onSelectConversation}
               />
             ))}

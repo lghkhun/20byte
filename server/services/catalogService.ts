@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/db/prisma";
 import { canAccessInbox } from "@/lib/permissions/orgPermissions";
+import { assertOrgBillingAccess } from "@/server/services/billingService";
 import { ServiceError } from "@/server/services/serviceError";
 
 type ServiceCatalogItemPayload = {
@@ -108,6 +109,8 @@ async function requireCatalogAccess(actorUserId: string, orgId: string): Promise
   if (!canAccessInbox(membership.role)) {
     throw new ServiceError(403, "FORBIDDEN_CATALOG_ACCESS", "Your role cannot access service catalog.");
   }
+
+  await assertOrgBillingAccess(orgId, "write");
 }
 
 export async function listCatalogItems(

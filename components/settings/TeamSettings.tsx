@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { MoreHorizontal, PencilLine } from "lucide-react";
+import { MoreHorizontal, RefreshCw } from "lucide-react";
 
 import { fetchOrganizationsCached } from "@/lib/client/orgsCache";
 import { notifyError, notifySuccess } from "@/lib/ui/notify";
@@ -40,8 +40,8 @@ type ApiError = {
 };
 
 const MAX_NON_OWNER_MEMBERS = 4;
-const ASSIGNABLE_ROLES = ["ADMIN", "CS", "ADVERTISER"] as const;
-type AssignableRole = (typeof ASSIGNABLE_ROLES)[number];
+const STAFF_ROLES = ["CS", "ADVERTISER"] as const;
+type StaffRole = (typeof STAFF_ROLES)[number];
 
 function toErrorMessage(error: unknown, fallback: string) {
   if (error instanceof Error && error.message) {
@@ -66,21 +66,31 @@ function formatDateLabel(value: string): string {
 export function TeamSettings() {
   const [orgs, setOrgs] = useState<OrgItem[]>([]);
   const [members, setMembers] = useState<OrgMember[]>([]);
+  const [name, setName] = useState("");
   const [email, setEmail] = useState("");
-  const [role, setRole] = useState<AssignableRole>("ADMIN");
+  const [phone, setPhone] = useState("");
+  const [role, setRole] = useState<StaffRole>("CS");
   const [isLoading, setIsLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isResendingForUserId, setIsResendingForUserId] = useState<string | null>(null);
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
-  const [editingMember, setEditingMember] = useState<OrgMember | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
+  const [lastSetupLink, setLastSetupLink] = useState<string | null>(null);
 
   const activeBusiness = useMemo(() => orgs[0] ?? null, [orgs]);
   const nonOwnerCount = useMemo(() => members.filter((member) => member.role !== "OWNER").length, [members]);
-  const normalizedEmail = useMemo(() => email.trim().toLowerCase(), [email]);
-  const isExistingMemberEmail = useMemo(() => members.some((member) => member.email.toLowerCase() === normalizedEmail), [members, normalizedEmail]);
-  const reachedLimitForNewMember = nonOwnerCount >= MAX_NON_OWNER_MEMBERS && !isExistingMemberEmail;
-  const canSubmit = Boolean(activeBusiness && normalizedEmail && !isSubmitting && !reachedLimitForNewMember);
+  const reachedLimitForNewMember = nonOwnerCount >= MAX_NON_OWNER_MEMBERS;
+
+  const canSubmit = Boolean(
+    activeBusiness &&
+      name.trim() &&
+      email.trim() &&
+      phone.trim() &&
+      !isSubmitting &&
+      !reachedLimitForNewMember
+  );
+
   const createAction = useMemo(
     () => (
       <Button
@@ -88,13 +98,15 @@ export function TeamSettings() {
         disabled={reachedLimitForNewMember}
         className="h-10 rounded-xl"
         onClick={() => {
-          setEditingMember(null);
+          setName("");
           setEmail("");
-          setRole("ADMIN");
+          setPhone("");
+          setRole("CS");
+          setLastSetupLink(null);
           setIsCreateDialogOpen(true);
         }}
       >
-        Tambah Member
+        Tambah Staff
       </Button>
     ),
     [reachedLimitForNewMember]
@@ -173,7 +185,7 @@ export function TeamSettings() {
     notifySuccess(success);
   }, [success]);
 
-  async function handleAddMember(event: React.FormEvent<HTMLFormElement>) {
+  async function handleCreateStaff(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!canSubmit || !activeBusiness) {
       return;
@@ -183,45 +195,100 @@ export function TeamSettings() {
       setIsSubmitting(true);
       setError(null);
       setSuccess(null);
+      setLastSetupLink(null);
 
-      const response = await fetch("/api/orgs/members", {
+      const response = await fetch("/api/orgs/staff", {
         method: "POST",
         headers: {
           "Content-Type": "application/json"
         },
         body: JSON.stringify({
           orgId: activeBusiness.id,
-          email: normalizedEmail,
+          name: name.trim(),
+          email: email.trim(),
+          phone: phone.trim(),
           role
         })
       });
-      const payload = (await response.json().catch(() => null)) as ApiError | null;
+      const payload = (await response.json().catch(() => null)) as
+        | ({ data?: { setup?: { whatsappDelivery?: boolean; setupLink?: string } } } & ApiError)
+        | null;
       if (!response.ok) {
-        throw new Error(payload?.error?.message ?? "Failed to save team member.");
+        throw new Error(payload?.error?.message ?? "Failed to create staff.");
       }
 
+      const whatsappDelivery = payload?.data?.setup?.whatsappDelivery;
+      const setupLink = payload?.data?.setup?.setupLink ?? null;
+      setLastSetupLink(setupLink);
+
+      setName("");
       setEmail("");
-      setEditingMember(null);
+      setPhone("");
+      setRole("CS");
       setIsCreateDialogOpen(false);
       await loadMembers(activeBusiness.id);
-      setSuccess(isExistingMemberEmail ? "Member role updated." : "Member added.");
+      setSuccess(
+        whatsappDelivery
+          ? "Staff created and setup link sent via WhatsApp."
+          : "Staff created. WhatsApp delivery failed, use setup link fallback."
+      );
     } catch (submitError) {
-      setError(toErrorMessage(submitError, "Failed to save team member."));
+      setError(toErrorMessage(submitError, "Failed to create staff."));
     } finally {
       setIsSubmitting(false);
+    }
+  }
+
+  async function handleResendSetup(userId: string) {
+    if (!activeBusiness || isResendingForUserId) {
+      return;
+    }
+
+    try {
+      setIsResendingForUserId(userId);
+      setError(null);
+      setSuccess(null);
+
+      const response = await fetch("/api/orgs/staff/resend-setup-link", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          orgId: activeBusiness.id,
+          userId
+        })
+      });
+
+      const payload = (await response.json().catch(() => null)) as
+        | ({ data?: { setupLink?: string; whatsappDelivery?: boolean } } & ApiError)
+        | null;
+
+      if (!response.ok) {
+        throw new Error(payload?.error?.message ?? "Failed to resend setup link.");
+      }
+
+      setLastSetupLink(payload?.data?.setupLink ?? null);
+      setSuccess(payload?.data?.whatsappDelivery ? "Setup link resent via WhatsApp." : "Resent, but WhatsApp delivery failed.");
+    } catch (resendError) {
+      setError(toErrorMessage(resendError, "Failed to resend setup link."));
+    } finally {
+      setIsResendingForUserId(null);
     }
   }
 
   return (
     <section className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <p className="text-sm text-muted-foreground">
-          Maksimal {MAX_NON_OWNER_MEMBERS} anggota non-owner per business. Role anggota yang ada bisa diupdate dari tabel.
-        </p>
-        <p className="text-xs text-muted-foreground">
-          Anggota aktif tanpa owner: {nonOwnerCount}/{MAX_NON_OWNER_MEMBERS}
-        </p>
+        <p className="text-sm text-muted-foreground">Owner dapat menambahkan staff CS/Advertiser dan mengirim link setup password via WhatsApp.</p>
+        <p className="text-xs text-muted-foreground">Anggota aktif non-owner: {nonOwnerCount}/{MAX_NON_OWNER_MEMBERS}</p>
       </div>
+
+      {lastSetupLink ? (
+        <p className="rounded-xl border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-700 break-all">
+          Fallback setup link: {lastSetupLink}
+        </p>
+      ) : null}
 
       <div className="overflow-hidden rounded-2xl border border-border/70 bg-background/60">
         <Table>
@@ -237,15 +304,11 @@ export function TeamSettings() {
           <TableBody>
             {isLoading ? (
               <TableRow>
-                <TableCell colSpan={5} className="h-20 text-center text-muted-foreground">
-                  Loading members...
-                </TableCell>
+                <TableCell colSpan={5} className="h-20 text-center text-muted-foreground">Loading members...</TableCell>
               </TableRow>
             ) : members.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={5} className="h-20 text-center text-muted-foreground">
-                  No members found.
-                </TableCell>
+                <TableCell colSpan={5} className="h-20 text-center text-muted-foreground">No members found.</TableCell>
               </TableRow>
             ) : (
               members.map((member) => (
@@ -267,17 +330,17 @@ export function TeamSettings() {
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align="end">
                           <DropdownMenuLabel>Member actions</DropdownMenuLabel>
-                          <DropdownMenuItem
-                            onClick={() => {
-                              setEditingMember(member);
-                              setEmail(member.email);
-                              setRole((ASSIGNABLE_ROLES.includes(member.role as AssignableRole) ? member.role : "ADMIN") as AssignableRole);
-                              setIsCreateDialogOpen(true);
-                            }}
-                          >
-                            <PencilLine className="mr-2 h-4 w-4" />
-                            Edit role
-                          </DropdownMenuItem>
+                          {(member.role === "CS" || member.role === "ADVERTISER") ? (
+                            <DropdownMenuItem
+                              onClick={() => {
+                                void handleResendSetup(member.userId);
+                              }}
+                              disabled={Boolean(isResendingForUserId)}
+                            >
+                              <RefreshCw className="mr-2 h-4 w-4" />
+                              {isResendingForUserId === member.userId ? "Resending..." : "Resend setup link"}
+                            </DropdownMenuItem>
+                          ) : null}
                         </DropdownMenuContent>
                       </DropdownMenu>
                     ) : null}
@@ -290,47 +353,48 @@ export function TeamSettings() {
       </div>
 
       {reachedLimitForNewMember ? (
-        <p className="rounded-xl border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-sm text-amber-700">
-          Batas anggota sudah penuh. Edit role anggota yang sudah ada jika perlu.
-        </p>
+        <p className="rounded-xl border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-sm text-amber-700">Batas anggota sudah penuh.</p>
       ) : null}
 
-      <Dialog
-        open={isCreateDialogOpen}
-        onOpenChange={(open) => {
-          setIsCreateDialogOpen(open);
-          if (!open) {
-            setEditingMember(null);
-          }
-        }}
-      >
+      <Dialog open={isCreateDialogOpen} onOpenChange={setIsCreateDialogOpen}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>{editingMember ? "Edit Role Member" : "Tambah Member"}</DialogTitle>
-            <DialogDescription>
-              {editingMember ? "Perbarui role anggota yang sudah ada." : "Tambahkan anggota baru ke business aktif."}
-            </DialogDescription>
+            <DialogTitle>Tambah Staff</DialogTitle>
+            <DialogDescription>Owner membuat akun staff lalu sistem kirim link setup password via WhatsApp.</DialogDescription>
           </DialogHeader>
-          <form onSubmit={handleAddMember} className="space-y-3">
+          <form onSubmit={handleCreateStaff} className="space-y-3">
             <Input
-              id="team-member-email"
+              id="staff-name"
+              type="text"
+              value={name}
+              onChange={(event) => setName(event.target.value)}
+              placeholder="Nama staff"
+              className="h-10 rounded-xl"
+            />
+            <Input
+              id="staff-email"
               type="email"
               value={email}
               onChange={(event) => setEmail(event.target.value)}
-              placeholder="member@company.com"
+              placeholder="staff@company.com"
               className="h-10 rounded-xl"
-              disabled={Boolean(editingMember)}
+            />
+            <Input
+              id="staff-phone"
+              type="text"
+              value={phone}
+              onChange={(event) => setPhone(event.target.value)}
+              placeholder="08xxxxxxxxxx"
+              className="h-10 rounded-xl"
             />
             <select
-              id="team-member-role"
+              id="staff-role"
               value={role}
-              onChange={(event) => setRole(event.target.value as AssignableRole)}
+              onChange={(event) => setRole(event.target.value as StaffRole)}
               className="h-10 w-full rounded-xl border border-border bg-background px-3 text-sm text-foreground outline-none"
             >
-              {ASSIGNABLE_ROLES.map((item) => (
-                <option key={item} value={item}>
-                  {item}
-                </option>
+              {STAFF_ROLES.map((item) => (
+                <option key={item} value={item}>{item}</option>
               ))}
             </select>
             <DialogFooter>
@@ -339,14 +403,11 @@ export function TeamSettings() {
                 variant="ghost"
                 onClick={() => {
                   setIsCreateDialogOpen(false);
-                  setEditingMember(null);
                 }}
               >
                 Batal
               </Button>
-              <Button type="submit" disabled={!canSubmit}>
-                {isSubmitting ? "Saving..." : editingMember ? "Update Member" : "Add Member"}
-              </Button>
+              <Button type="submit" disabled={!canSubmit}>{isSubmitting ? "Saving..." : "Create Staff"}</Button>
             </DialogFooter>
           </form>
         </DialogContent>

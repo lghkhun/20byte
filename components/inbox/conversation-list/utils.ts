@@ -1,4 +1,4 @@
-export function formatTimestamp(value: string | null): string {
+export function formatTimestamp(value: string | null, nowMs: number = Date.now()): string {
   if (!value) {
     return "-";
   }
@@ -8,15 +8,28 @@ export function formatTimestamp(value: string | null): string {
     return "-";
   }
 
-  const now = new Date();
-  const diffMs = now.getTime() - date.getTime();
-  const diffMin = Math.floor(diffMs / 60000);
-  if (diffMin < 1) return "now";
-  if (diffMin < 60) return `${diffMin}m`;
-  const diffHour = Math.floor(diffMin / 60);
-  if (diffHour < 24) return `${diffHour}h`;
+  const now = new Date(nowMs);
+  const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+  const tomorrowStart = todayStart + 24 * 60 * 60 * 1000;
+  const dateMs = date.getTime();
+  if (dateMs >= todayStart && dateMs < tomorrowStart) {
+    return new Intl.DateTimeFormat("id-ID", {
+      hour: "2-digit",
+      minute: "2-digit"
+    }).format(date);
+  }
 
-  return new Intl.DateTimeFormat("en-US", {
+  const yesterdayStart = todayStart - 24 * 60 * 60 * 1000;
+  if (dateMs >= yesterdayStart && dateMs < todayStart) {
+    return "Yesterday";
+  }
+
+  const diffDays = Math.floor((todayStart - new Date(date.getFullYear(), date.getMonth(), date.getDate()).getTime()) / (24 * 60 * 60 * 1000));
+  if (diffDays < 7) {
+    return new Intl.DateTimeFormat("id-ID", { weekday: "short" }).format(date);
+  }
+
+  return new Intl.DateTimeFormat("id-ID", {
     month: "short",
     day: "2-digit"
   }).format(date);
