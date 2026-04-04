@@ -96,8 +96,10 @@ export function useInboxWorkspaceLoaders(state: InboxWorkspaceState) {
   const loadMessagesRequestVersionsRef = useRef<Map<string, number>>(new Map());
   const loadConversationAbortRef = useRef<AbortController | null>(null);
   const loadConversationRequestVersionsRef = useRef<Map<string, number>>(new Map());
+  const loadConversationForegroundRequestVersionRef = useRef(0);
   const loadConversationsAbortRef = useRef<AbortController | null>(null);
   const loadConversationsRequestIdRef = useRef(0);
+  const loadCustomerCrmContextRequestIdRef = useRef(0);
   const loadConversationCrmContextRequestVersionsRef = useRef<Map<string, number>>(new Map());
   const currentConversationsPageRef = useRef(1);
   const lastBackgroundConversationsLoadAtRef = useRef(0);
@@ -448,11 +450,13 @@ export function useInboxWorkspaceLoaders(state: InboxWorkspaceState) {
   }, [loadMessages]);
 
   const loadCustomerCrmContext = useCallback(
-    async (customerId: string) => {
+    async (customerId: string, options?: { conversationId?: string }) => {
       if (!orgId) {
         return;
       }
 
+      const requestId = ++loadCustomerCrmContextRequestIdRef.current;
+      const targetConversationId = options?.conversationId ?? selectedConversationIdRef.current;
       setIsLoadingCrm(true);
       setCrmError(null);
       try {
@@ -463,11 +467,25 @@ export function useInboxWorkspaceLoaders(state: InboxWorkspaceState) {
             init: { cache: "no-store" }
           }
         );
+        if (requestId !== loadCustomerCrmContextRequestIdRef.current) {
+          return;
+        }
+        if (targetConversationId && selectedConversationIdRef.current !== targetConversationId) {
+          return;
+        }
         setTags(tagsPayload?.data?.tags ?? []);
       } catch {
+        if (requestId !== loadCustomerCrmContextRequestIdRef.current) {
+          return;
+        }
+        if (targetConversationId && selectedConversationIdRef.current !== targetConversationId) {
+          return;
+        }
         setCrmError("Network error while loading CRM context.");
       } finally {
-        setIsLoadingCrm(false);
+        if (requestId === loadCustomerCrmContextRequestIdRef.current) {
+          setIsLoadingCrm(false);
+        }
       }
     },
     [orgId, setCrmError, setIsLoadingCrm, setTags]
@@ -492,10 +510,16 @@ export function useInboxWorkspaceLoaders(state: InboxWorkspaceState) {
         if (!response.ok) {
           throw new Error(payload?.error?.message ?? "Gagal memuat konteks invoice.");
         }
+        if (selectedConversationIdRef.current !== conversationId) {
+          return;
+        }
         setCrmInvoices(payload?.data?.invoices ?? []);
         setCrmActivity(payload?.data?.events ?? []);
       } catch {
         if (!isRequestVersionCurrent(loadConversationCrmContextRequestVersionsRef.current, conversationId, requestVersion)) {
+          return;
+        }
+        if (selectedConversationIdRef.current !== conversationId) {
           return;
         }
         setCrmError("Network error while loading invoice timeline.");
@@ -511,6 +535,7 @@ export function useInboxWorkspaceLoaders(state: InboxWorkspaceState) {
       if (!orgId) {
         return;
       }
+      const foregroundRequestVersion = !options?.background ? ++loadConversationForegroundRequestVersionRef.current : null;
 
       if (!options?.background) {
         setIsLoadingConversation(true);
@@ -547,6 +572,13 @@ export function useInboxWorkspaceLoaders(state: InboxWorkspaceState) {
         );
         const payload = (await response.json().catch(() => null)) as ConversationFetchResponse | null;
         if (!isRequestVersionCurrent(loadConversationRequestVersionsRef.current, conversationId, requestVersion)) {
+          return;
+        }
+        if (
+          !options?.background &&
+          foregroundRequestVersion !== null &&
+          foregroundRequestVersion !== loadConversationForegroundRequestVersionRef.current
+        ) {
           return;
         }
 
@@ -588,7 +620,7 @@ export function useInboxWorkspaceLoaders(state: InboxWorkspaceState) {
         if (!options?.background) {
           if (conversation?.customerId) {
             void Promise.all([
-              loadCustomerCrmContext(conversation.customerId),
+              loadCustomerCrmContext(conversation.customerId, { conversationId: conversation.id }),
               loadConversationCrmContext(conversation.id)
             ]);
           } else {
@@ -604,10 +636,25 @@ export function useInboxWorkspaceLoaders(state: InboxWorkspaceState) {
           return;
         }
 
+        if (
+          !options?.background &&
+          foregroundRequestVersion !== null &&
+          foregroundRequestVersion !== loadConversationForegroundRequestVersionRef.current
+        ) {
+          return;
+        }
+
         if (!options?.background) {
           setError("Network error while fetching conversation.");
         }
       } finally {
+        if (
+          !options?.background &&
+          foregroundRequestVersion !== null &&
+          foregroundRequestVersion !== loadConversationForegroundRequestVersionRef.current
+        ) {
+          return;
+        }
         if (!options?.background) {
           setIsLoadingConversation(false);
         }

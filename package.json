@@ -10,7 +10,7 @@
     "db:seed": "tsx scripts/seedDatabase.ts",
     "lint": "next lint",
     "typecheck": "tsc --noEmit --incremental false",
-    "test": "tsx --test tests/**/*.test.ts",
+    "test": "NODE_ENV=test tsx --test tests/**/*.test.ts",
     "smoke:ui": "node scripts/smoke-ui.mjs",
     "smoke:ui:customers-deep": "node scripts/smoke-ui-customers-deep.mjs",
     "smoke:ui:inbox-deep": "node scripts/smoke-ui-inbox-deep.mjs",

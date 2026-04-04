@@ -1,0 +1,14 @@
+{
+  "suite": "smoke-ui-inbox-deep",
+  "status": "failed",
+  "baseUrl": "http://localhost:3000",
+  "startedAt": "2026-04-04T14:03:08.495Z",
+  "endedAt": "2026-04-04T14:03:59.002Z",
+  "durationMs": 50507,
+  "failures": [
+    "Inbox deep: unable to find CRM panel toggle control."
+  ],
+  "skippedReason": null,
+  "error": null,
+  "meta": {}
+}

@@ -164,26 +164,46 @@ export async function createConversation(input: CreateConversationInput): Promis
   const conversation = existingConversation
     ? existingConversation.status === ConversationStatus.OPEN
       ? existingConversation
-      : await prisma.conversation.update({
-          where: {
-            id: existingConversation.id
-          },
-          data: {
-            status: ConversationStatus.OPEN
-          },
-          include: {
-            crmPipeline: {
-              select: {
-                name: true
-              }
+      : await (async () => {
+          const updateResult = await prisma.conversation.updateMany({
+            where: {
+              id: existingConversation.id,
+              orgId
             },
-            crmStage: {
-              select: {
-                name: true
+            data: {
+              status: ConversationStatus.OPEN
+            }
+          });
+
+          if (updateResult.count !== 1) {
+            throw new ServiceError(404, "CONVERSATION_NOT_FOUND", "Conversation does not exist.");
+          }
+
+          const refreshed = await prisma.conversation.findFirst({
+            where: {
+              id: existingConversation.id,
+              orgId
+            },
+            include: {
+              crmPipeline: {
+                select: {
+                  name: true
+                }
+              },
+              crmStage: {
+                select: {
+                  name: true
+                }
               }
             }
+          });
+
+          if (!refreshed) {
+            throw new ServiceError(404, "CONVERSATION_NOT_FOUND", "Conversation does not exist.");
           }
-        })
+
+          return refreshed;
+        })()
     : await prisma.conversation.create({
         data: {
           orgId,

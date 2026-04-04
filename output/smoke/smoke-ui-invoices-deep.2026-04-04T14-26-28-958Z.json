@@ -1,0 +1,12 @@
+{
+  "suite": "smoke-ui-invoices-deep",
+  "status": "passed",
+  "baseUrl": "http://localhost:3000",
+  "startedAt": "2026-04-04T14:26:17.182Z",
+  "endedAt": "2026-04-04T14:26:28.958Z",
+  "durationMs": 11776,
+  "failures": [],
+  "skippedReason": null,
+  "error": null,
+  "meta": {}
+}

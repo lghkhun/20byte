@@ -379,12 +379,6 @@ export function InvoiceDrawer({
     setCatalogDraft(createEmptyCatalogDraft());
   }, [open]);
 
-  function handleOpenManualCustomerModal() {
-    setManualCustomerName(customerName.trim() || customerDisplayName?.trim() || "");
-    setManualCustomerPhone(customerPhone.trim() || customerPhoneE164 || "");
-    setIsManualCustomerModalOpen(true);
-  }
-
   function handleApplyManualCustomer() {
     setCustomerName(manualCustomerName.trim());
     setCustomerPhone(manualCustomerPhone.trim());
@@ -626,6 +620,7 @@ export function InvoiceDrawer({
                           value={selectedSalesperson}
                           onChange={(event) => setSelectedSalesperson(event.target.value)}
                           className="h-11 w-full bg-transparent text-sm outline-none"
+                          disabled
                         >
                           {salesMembers.length === 0 ? <option value={currentUserId}>{currentUserLabel}</option> : null}
                           {salesMembers.map((member) => (
@@ -635,54 +630,34 @@ export function InvoiceDrawer({
                           ))}
                         </select>
                       </div>
+                      <p className="text-xs text-muted-foreground">Informasi salesperson saat ini untuk referensi tampilan invoice.</p>
                     </label>
 
                     <DueDatePickerField value={invoiceDueDate} onChange={setInvoiceDueDate} />
 
                     <label className="space-y-2">
-                      <span className="flex items-center justify-between gap-2 text-sm font-medium text-foreground">
-                        Pelanggan
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="sm"
-                          className="h-7 rounded-md border border-border px-2 text-[11px] text-muted-foreground hover:text-foreground"
-                          onClick={handleOpenManualCustomerModal}
-                        >
-                          <Plus className="mr-1 h-3.5 w-3.5" />
-                          Tambah Manual
-                        </Button>
-                      </span>
+                      <span className="text-sm font-medium text-foreground">Pelanggan</span>
                       <Input
                         value={customerName}
-                        onChange={(event) => setCustomerName(event.target.value)}
                         placeholder="Nama pelanggan"
                         className="h-11 rounded-md border-border bg-muted/40"
+                        readOnly
                       />
                     </label>
 
                     <label className="space-y-2">
-                      <span className="flex items-center justify-between gap-2 text-sm font-medium text-foreground">
-                        Nomor WhatsApp
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="sm"
-                          className="h-7 rounded-md border border-border px-2 text-[11px] text-muted-foreground hover:text-foreground"
-                          onClick={handleOpenManualCustomerModal}
-                        >
-                          <Plus className="mr-1 h-3.5 w-3.5" />
-                          Tambah Manual
-                        </Button>
-                      </span>
+                      <span className="text-sm font-medium text-foreground">Nomor WhatsApp</span>
                       <Input
                         value={customerPhone}
-                        onChange={(event) => setCustomerPhone(event.target.value)}
                         placeholder="+628..."
                         className="h-11 rounded-md border-border bg-muted/40"
+                        readOnly
                       />
                     </label>
                   </div>
+                  <p className="text-xs text-muted-foreground">
+                    Data pelanggan mengikuti kontak pada percakapan aktif agar sinkron dengan CRM. Untuk mengubah data pelanggan, lakukan dari modul pelanggan.
+                  </p>
 
                   {kind === InvoiceKind.DP_AND_FINAL ? (
                     <div className="grid gap-4 rounded-md border border-primary/20 bg-primary/5 p-4 lg:grid-cols-[minmax(0,1fr)_140px]">

@@ -1,0 +1,14 @@
+{
+  "suite": "smoke-ui-invoices-deep",
+  "status": "failed",
+  "baseUrl": "http://localhost:3000",
+  "startedAt": "2026-04-04T14:08:53.180Z",
+  "endedAt": "2026-04-04T14:09:33.432Z",
+  "durationMs": 40252,
+  "failures": [
+    "locator.click: Timeout 30000ms exceeded.\nCall log:\n\u001b[2m  - waiting for getByRole('dialog', { name: /Create Invoice from Invoices|Buat Invoice dari Halaman Invoice/i }).getByRole('button', { name: /^Continue$/i })\u001b[22m\n"
+  ],
+  "skippedReason": null,
+  "error": "locator.click: Timeout 30000ms exceeded.\nCall log:\n\u001b[2m  - waiting for getByRole('dialog', { name: /Create Invoice from Invoices|Buat Invoice dari Halaman Invoice/i }).getByRole('button', { name: /^Continue$/i })\u001b[22m\n",
+  "meta": {}
+}

@@ -194,7 +194,7 @@ export async function getConversationCrmContext(
     {
       id: `conversation-started-${conversation.id}`,
       type: "CONVERSATION_STARTED",
-      label: "Conversation started",
+      label: "Percakapan dimulai",
       time: conversation.createdAt
     }
   ];
@@ -203,7 +203,7 @@ export async function getConversationCrmContext(
     events.push({
       id: `invoice-created-${invoice.id}`,
       type: "INVOICE_CREATED",
-      label: `Invoice ${invoice.invoiceNo} created`,
+      label: `Invoice ${invoice.invoiceNo} dibuat`,
       time: invoice.createdAt
     });
   }
@@ -217,7 +217,7 @@ export async function getConversationCrmContext(
     events.push({
       id: `invoice-sent-${entry.id}`,
       type: "INVOICE_SENT",
-      label: `Invoice ${invoiceNo} sent to customer`,
+      label: `Invoice ${invoiceNo} dikirim ke pelanggan`,
       time: entry.createdAt
     });
   }
@@ -226,7 +226,7 @@ export async function getConversationCrmContext(
     events.push({
       id: `proof-attached-${proof.id}`,
       type: "PROOF_ATTACHED",
-      label: `Payment proof attached to ${proof.invoice.invoiceNo}`,
+      label: `Bukti pembayaran terlampir di ${proof.invoice.invoiceNo}`,
       time: proof.createdAt
     });
   }
@@ -239,7 +239,7 @@ export async function getConversationCrmContext(
     events.push({
       id: `invoice-paid-${milestone.id}`,
       type: "INVOICE_PAID",
-      label: `Invoice ${milestone.invoice.invoiceNo} marked paid (${milestone.type})`,
+      label: `Invoice ${milestone.invoice.invoiceNo} ditandai lunas (${milestone.type})`,
       time: milestone.paidAt
     });
   }

@@ -2,17 +2,34 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import Image from "next/image";
-import { ChevronDown, FileText, ImageIcon, Link2, NotebookPen, Workflow } from "lucide-react";
+import {
+  ChevronDown,
+  FileText,
+  ImageIcon,
+  Link2,
+  NotebookPen,
+  Workflow,
+  X,
+  Trash2
+} from "lucide-react";
 
 import { ActivityTimelineSection } from "@/components/inbox/crm/ActivityTimelineSection";
 import { IndicatorLegend } from "@/components/inbox/IndicatorLegend";
 import { InvoicesSection } from "@/components/inbox/crm/InvoicesSection";
-import type { CrmActivityItem, CrmInvoiceItem, CrmTimelineItem } from "@/components/inbox/crm/types";
+import type {
+  CrmActivityItem,
+  CrmInvoiceItem,
+  CrmTimelineItem
+} from "@/components/inbox/crm/types";
 import { normalizeRuntimeUrl } from "@/components/inbox/bubble/utils";
 import type { ConversationItem, MessageItem } from "@/components/inbox/types";
 import { useModalAccessibility } from "@/lib/a11y/useModalAccessibility";
 import { useLocalImageCache } from "@/lib/client/localImageCache";
-import { BUSINESS_CATEGORY_OPTIONS, LEAD_STATUS_OPTIONS, formatLeadSettingLabel } from "@/lib/crm/leadSettingsConfig";
+import {
+  BUSINESS_CATEGORY_OPTIONS,
+  LEAD_STATUS_OPTIONS,
+  formatLeadSettingLabel
+} from "@/lib/crm/leadSettingsConfig";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 
@@ -49,6 +66,8 @@ type CrmContextPanelProps = {
   isMarkingInvoicePaid: boolean;
   invoiceActionError: string | null;
   invoiceActionSuccess: string | null;
+  onUnselectConversation?: () => void;
+  onDeleteConversation?: () => Promise<void>;
 };
 
 function formatDateTime(value: string | null): string {
@@ -80,7 +99,10 @@ function resolveSafeMediaUrl(value: string | null | undefined): string | null {
 
   const normalized = value.trim();
   try {
-    const parsed = new URL(normalized, typeof window !== "undefined" ? window.location.origin : "http://localhost");
+    const parsed = new URL(
+      normalized,
+      typeof window !== "undefined" ? window.location.origin : "http://localhost"
+    );
     const hostname = parsed.hostname.toLowerCase();
     if (hostname === "example.com" || hostname.endsWith(".example.com")) {
       return null;
@@ -110,7 +132,11 @@ function AccordionCard({
   action?: React.ReactNode;
 }) {
   return (
-    <details id={id} className="group rounded-[20px] border border-border/80 bg-card/95 shadow-sm" open={defaultOpen}>
+    <details
+      id={id}
+      className="group rounded-[20px] border border-border/80 bg-card/95 shadow-sm"
+      open={defaultOpen}
+    >
       <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-3">
         <div className="flex items-center gap-3">
           <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-muted/70 text-muted-foreground">
@@ -146,12 +172,16 @@ export function CrmContextPanel({
   isSendingInvoice,
   isMarkingInvoicePaid,
   invoiceActionError,
-  invoiceActionSuccess
+  invoiceActionSuccess,
+  onUnselectConversation,
+  onDeleteConversation
 }: CrmContextPanelProps) {
   const [noteContent, setNoteContent] = useState("");
   const [isSavingNotes, setIsSavingNotes] = useState(false);
   const [isAssignModalOpen, setIsAssignModalOpen] = useState(false);
-  const [assignMembers, setAssignMembers] = useState<Array<{ userId: string; name: string | null; email: string; role: string }>>([]);
+  const [assignMembers, setAssignMembers] = useState<
+    Array<{ userId: string; name: string | null; email: string; role: string }>
+  >([]);
   const [selectedAssignee, setSelectedAssignee] = useState("");
   const [isSavingAssignment, setIsSavingAssignment] = useState(false);
   const [assignModalError, setAssignModalError] = useState<string | null>(null);
@@ -165,13 +195,16 @@ export function CrmContextPanel({
   const [customBusinessCategories, setCustomBusinessCategories] = useState<string[]>([]);
   const [activeMediaTab, setActiveMediaTab] = useState<"media" | "documents" | "links">("media");
   const [previewMediaUrl, setPreviewMediaUrl] = useState<string | null>(null);
-  const [previewMediaType, setPreviewMediaType] = useState<"IMAGE" | "VIDEO" | "DOCUMENT" | "LINK" | null>(null);
+  const [previewMediaType, setPreviewMediaType] = useState<
+    "IMAGE" | "VIDEO" | "DOCUMENT" | "LINK" | null
+  >(null);
   const [previewMediaTitle, setPreviewMediaTitle] = useState<string>("");
   const [pipelineId, setPipelineId] = useState<string | null>(null);
   const [pipelineStages, setPipelineStages] = useState<PipelineStageOption[]>([]);
   const [isLoadingLeadSettings, setIsLoadingLeadSettings] = useState(false);
   const [leadSettingsError, setLeadSettingsError] = useState<string | null>(null);
   const [isSavingLeadSettings, setIsSavingLeadSettings] = useState(false);
+  const [avatarError, setAvatarError] = useState(false);
   const assignModalContainerRef = useRef<HTMLDivElement | null>(null);
   const assignModalCloseButtonRef = useRef<HTMLButtonElement | null>(null);
   const cachedCustomerAvatarUrl = useLocalImageCache(conversation?.customerAvatarUrl, {
@@ -180,6 +213,10 @@ export function CrmContextPanel({
     maxBytes: 180 * 1024
   });
 
+  useEffect(() => {
+    setAvatarError(false);
+  }, [conversation?.customerAvatarUrl]);
+
   useModalAccessibility({
     open: isAssignModalOpen,
     onClose: () => setIsAssignModalOpen(false),
@@ -187,7 +224,8 @@ export function CrmContextPanel({
     initialFocusRef: assignModalCloseButtonRef
   });
 
-  const canOperateInvoice = activeOrgRole === "OWNER" || activeOrgRole === "ADMIN" || activeOrgRole === "CS";
+  const canOperateInvoice =
+    activeOrgRole === "OWNER" || activeOrgRole === "ADMIN" || activeOrgRole === "CS";
   const activityTimestamp = conversation?.lastMessageAt ?? conversation?.updatedAt ?? null;
   const avatarPresenceActive =
     conversation?.status === "OPEN" &&
@@ -217,7 +255,10 @@ export function CrmContextPanel({
       setIsLoadingLeadSettings(true);
       setLeadSettingsError(null);
       try {
-        const response = await fetch(`/api/customers/${encodeURIComponent(conversation.customerId)}`, { cache: "no-store" });
+        const response = await fetch(
+          `/api/customers/${encodeURIComponent(conversation.customerId)}`,
+          { cache: "no-store" }
+        );
         const payload = (await response.json().catch(() => null)) as {
           data?: {
             customer?: {
@@ -278,17 +319,20 @@ export function CrmContextPanel({
           ? `?pipelineId=${encodeURIComponent(conversation.crmPipelineId)}&status=OPEN`
           : "?status=OPEN";
         const response = await fetch(`/api/crm/pipelines/board${query}`, { cache: "no-store" });
-        const payload = (await response.json().catch(() => null)) as
-          | {
-              data?: {
-                board?: {
-                  pipeline?: { id: string } | null;
-                  columns?: Array<{ stageId: string; stageName: string; stageColor: string; position: number }>;
-                };
-              };
-              error?: { message?: string };
-            }
-          | null;
+        const payload = (await response.json().catch(() => null)) as {
+          data?: {
+            board?: {
+              pipeline?: { id: string } | null;
+              columns?: Array<{
+                stageId: string;
+                stageName: string;
+                stageColor: string;
+                position: number;
+              }>;
+            };
+          };
+          error?: { message?: string };
+        } | null;
         if (!response.ok) {
           if (!ignore) {
             setLeadSettingsError(payload?.error?.message ?? "Failed to load pipeline stages.");
@@ -331,7 +375,9 @@ export function CrmContextPanel({
     const items: CrmTimelineItem[] = [
       {
         id: `assignment-${conversation.id}`,
-        label: conversation.assignedToMemberId ? "Conversation assigned" : "Conversation unassigned",
+        label: conversation.assignedToMemberId
+          ? "Conversation assigned"
+          : "Conversation unassigned",
         time: conversation.updatedAt
       }
     ];
@@ -348,7 +394,9 @@ export function CrmContextPanel({
       items.push({ id: `crm-${event.id}`, label: event.label, time: event.time });
     }
 
-    return items.sort((left, right) => new Date(right.time ?? 0).getTime() - new Date(left.time ?? 0).getTime());
+    return items.sort(
+      (left, right) => new Date(right.time ?? 0).getTime() - new Date(left.time ?? 0).getTime()
+    );
   }, [activity, conversation]);
 
   const mediaItems = useMemo(() => {
@@ -360,8 +408,14 @@ export function CrmContextPanel({
       }))
       .filter((message) => Boolean(message.safeMediaUrl));
   }, [messages]);
-  const mediaOnlyItems = useMemo(() => mediaItems.filter((item) => item.type === "IMAGE" || item.type === "VIDEO"), [mediaItems]);
-  const documentItems = useMemo(() => mediaItems.filter((item) => item.type === "DOCUMENT"), [mediaItems]);
+  const mediaOnlyItems = useMemo(
+    () => mediaItems.filter((item) => item.type === "IMAGE" || item.type === "VIDEO"),
+    [mediaItems]
+  );
+  const documentItems = useMemo(
+    () => mediaItems.filter((item) => item.type === "DOCUMENT"),
+    [mediaItems]
+  );
 
   const links = useMemo(() => {
     const regex = /(https?:\/\/[^\s]+)/gi;
@@ -385,16 +439,21 @@ export function CrmContextPanel({
     setIsSavingNotes(true);
     setLeadSettingsError(null);
     try {
-      const response = await fetch(`/api/customers/${encodeURIComponent(conversation.customerId)}`, {
-        method: "PUT",
-        headers: {
-          "Content-Type": "application/json"
-        },
-        body: JSON.stringify({
-          remarks: noteContent.trim() || null
-        })
-      });
-      const payload = (await response.json().catch(() => null)) as { error?: { message?: string } } | null;
+      const response = await fetch(
+        `/api/customers/${encodeURIComponent(conversation.customerId)}`,
+        {
+          method: "PUT",
+          headers: {
+            "Content-Type": "application/json"
+          },
+          body: JSON.stringify({
+            remarks: noteContent.trim() || null
+          })
+        }
+      );
+      const payload = (await response.json().catch(() => null)) as {
+        error?: { message?: string };
+      } | null;
       if (!response.ok) {
         setLeadSettingsError(payload?.error?.message ?? "Failed to save notes.");
         return;
@@ -415,7 +474,9 @@ export function CrmContextPanel({
       return;
     }
 
-    setCustomBusinessCategories((current) => (current.includes(value) ? current : [...current, value]));
+    setCustomBusinessCategories((current) =>
+      current.includes(value) ? current : [...current, value]
+    );
     setLeadSettings((current) => ({ ...current, businessCategory: value }));
     setNewBusinessCategory("");
   }
@@ -428,15 +489,15 @@ export function CrmContextPanel({
     setIsAssignModalOpen(true);
     setAssignModalError(null);
     try {
-      const response = await fetch(`/api/orgs/members?orgId=${encodeURIComponent(conversation.orgId)}`);
-      const payload = (await response.json().catch(() => null)) as
-        | {
-            data?: {
-              members?: Array<{ userId: string; name: string | null; email: string; role: string }>;
-            };
-            error?: { message?: string };
-          }
-        | null;
+      const response = await fetch(
+        `/api/orgs/members?orgId=${encodeURIComponent(conversation.orgId)}`
+      );
+      const payload = (await response.json().catch(() => null)) as {
+        data?: {
+          members?: Array<{ userId: string; name: string | null; email: string; role: string }>;
+        };
+        error?: { message?: string };
+      } | null;
       if (!response.ok) {
         setAssignModalError(payload?.error?.message ?? "Failed to load business members.");
         return;
@@ -468,7 +529,9 @@ export function CrmContextPanel({
           assigneeUserId: selectedAssignee
         })
       });
-      const payload = (await response.json().catch(() => null)) as { error?: { message?: string } } | null;
+      const payload = (await response.json().catch(() => null)) as {
+        error?: { message?: string };
+      } | null;
       if (!response.ok) {
         setAssignModalError(payload?.error?.message ?? "Failed to assign conversation.");
         return;
@@ -491,34 +554,44 @@ export function CrmContextPanel({
     setIsSavingLeadSettings(true);
     setLeadSettingsError(null);
     try {
-      const response = await fetch(`/api/customers/${encodeURIComponent(conversation.customerId)}`, {
-        method: "PUT",
-        headers: {
-          "Content-Type": "application/json"
-        },
-        body: JSON.stringify({
-          leadStatus: leadSettings.leadStatus,
-          businessCategory: leadSettings.businessCategory
-        })
-      });
-      const payload = (await response.json().catch(() => null)) as { error?: { message?: string } } | null;
+      const response = await fetch(
+        `/api/customers/${encodeURIComponent(conversation.customerId)}`,
+        {
+          method: "PUT",
+          headers: {
+            "Content-Type": "application/json"
+          },
+          body: JSON.stringify({
+            leadStatus: leadSettings.leadStatus,
+            businessCategory: leadSettings.businessCategory
+          })
+        }
+      );
+      const payload = (await response.json().catch(() => null)) as {
+        error?: { message?: string };
+      } | null;
       if (!response.ok) {
         setLeadSettingsError(payload?.error?.message ?? "Failed to save lead settings.");
         return;
       }
 
       if (leadSettings.crmStageId && pipelineId) {
-        const stageResponse = await fetch(`/api/conversations/${encodeURIComponent(conversation.id)}/pipeline`, {
-          method: "PATCH",
-          headers: {
-            "Content-Type": "application/json"
-          },
-          body: JSON.stringify({
-            pipelineId,
-            stageId: leadSettings.crmStageId
-          })
-        });
-        const stagePayload = (await stageResponse.json().catch(() => null)) as { error?: { message?: string } } | null;
+        const stageResponse = await fetch(
+          `/api/conversations/${encodeURIComponent(conversation.id)}/pipeline`,
+          {
+            method: "PATCH",
+            headers: {
+              "Content-Type": "application/json"
+            },
+            body: JSON.stringify({
+              pipelineId,
+              stageId: leadSettings.crmStageId
+            })
+          }
+        );
+        const stagePayload = (await stageResponse.json().catch(() => null)) as {
+          error?: { message?: string };
+        } | null;
         if (!stageResponse.ok) {
           setLeadSettingsError(stagePayload?.error?.message ?? "Failed to update pipeline stage.");
           return;
@@ -546,7 +619,10 @@ export function CrmContextPanel({
       <aside className="inbox-scroll h-full min-h-0 overflow-y-auto overscroll-contain rounded-[24px] border border-border/80 bg-card/95 p-5 shadow-sm">
         <div className="rounded-[20px] border border-dashed border-border/80 bg-background/60 p-5">
           <h2 className="text-base font-semibold text-foreground">CRM Context</h2>
-          <p className="mt-2 text-sm leading-6 text-muted-foreground">Pilih percakapan untuk melihat profile customer, lead settings, catatan internal, media, dan invoice terkait.</p>
+          <p className="mt-2 text-sm leading-6 text-muted-foreground">
+            Pilih percakapan untuk melihat profile customer, lead settings, catatan internal, media,
+            dan invoice terkait.
+          </p>
         </div>
       </aside>
     );
@@ -554,11 +630,21 @@ export function CrmContextPanel({
 
   return (
     <aside className="inbox-scroll h-full min-h-0 space-y-3 overflow-y-auto overscroll-contain pb-3">
-      <section id="crm-profile" className="rounded-[24px] border border-border/80 bg-card/95 shadow-sm">
+      <section
+        id="crm-profile"
+        className="rounded-[24px] border border-border/80 bg-card/95 shadow-sm"
+      >
         <div className="flex items-start gap-3 px-4 py-4">
-          {conversation.customerAvatarUrl ? (
-            <div className="relative h-16 w-16 overflow-hidden rounded-full border border-border/70">
-              <Image src={cachedCustomerAvatarUrl ?? conversation.customerAvatarUrl} alt={conversation.customerDisplayName ?? conversation.customerPhoneE164} fill unoptimized className="object-cover" />
+          {conversation.customerAvatarUrl && !avatarError ? (
+            <div className="relative h-16 w-16 shrink-0 overflow-hidden rounded-full border border-border/70">
+              <Image
+                src={cachedCustomerAvatarUrl ?? conversation.customerAvatarUrl}
+                alt={conversation.customerDisplayName ?? conversation.customerPhoneE164}
+                fill
+                unoptimized
+                className="object-cover"
+                onError={() => setAvatarError(true)}
+              />
               <span
                 className={`absolute -bottom-0.5 -right-0.5 h-3.5 w-3.5 rounded-full border-2 border-card ${
                   avatarPresenceActive ? "bg-emerald-500" : "bg-slate-300"
@@ -567,8 +653,10 @@ export function CrmContextPanel({
               />
             </div>
           ) : (
-            <div className="relative flex h-16 w-16 items-center justify-center rounded-full bg-primary/10 text-lg font-semibold text-primary">
-              {(conversation.customerDisplayName?.trim() || conversation.customerPhoneE164).slice(0, 2).toUpperCase()}
+            <div className="relative flex h-16 w-16 shrink-0 items-center justify-center rounded-full bg-primary/10 text-lg font-semibold text-primary">
+              {(conversation.customerDisplayName?.trim() || conversation.customerPhoneE164)
+                .slice(0, 2)
+                .toUpperCase()}
               <span
                 className={`absolute -bottom-0.5 -right-0.5 h-3.5 w-3.5 rounded-full border-2 border-card ${
                   avatarPresenceActive ? "bg-emerald-500" : "bg-slate-300"
@@ -578,12 +666,18 @@ export function CrmContextPanel({
             </div>
           )}
           <div className="min-w-0 flex-1">
-            <h2 className="truncate text-lg font-semibold text-foreground">{conversation.customerDisplayName?.trim() || conversation.customerPhoneE164}</h2>
-            <p className="truncate text-sm text-muted-foreground">{conversation.customerPhoneE164}</p>
+            <h2 className="truncate text-lg font-semibold text-foreground">
+              {conversation.customerDisplayName?.trim() || conversation.customerPhoneE164}
+            </h2>
+            <p className="truncate text-sm text-muted-foreground">
+              {conversation.customerPhoneE164}
+            </p>
             <div className="mt-2 flex flex-wrap items-center gap-2">
               <span
                 className={`rounded-full border px-2 py-0.5 text-[11px] ${conversation.status === "OPEN" ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-600" : "border-amber-500/30 bg-amber-500/10 text-amber-600"}`}
-                title={conversation.status === "OPEN" ? "Conversation is open" : "Conversation is closed"}
+                title={
+                  conversation.status === "OPEN" ? "Conversation is open" : "Conversation is closed"
+                }
               >
                 {conversation.status}
               </span>
@@ -605,7 +699,16 @@ export function CrmContextPanel({
               ) : null}
             </div>
           </div>
-          <IndicatorLegend compact />
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon"
+            className="shrink-0 rounded-lg text-muted-foreground hover:bg-muted hover:text-foreground"
+            onClick={onUnselectConversation}
+            title="Tutup obrolan (Esc)"
+          >
+            <X className="h-4.5 w-4.5" />
+          </Button>
         </div>
         <div className="border-t border-border/70 px-4 py-4">
           <div className="space-y-2 text-sm">
@@ -616,10 +719,23 @@ export function CrmContextPanel({
             </div>
             <div className="pt-3">
               <div className="flex flex-wrap gap-2">
-                <Button type="button" onClick={onOpenInvoiceDrawer} size="sm" variant="outline" className="h-8 shadow-sm">
+                <Button
+                  type="button"
+                  onClick={onOpenInvoiceDrawer}
+                  size="sm"
+                  variant="outline"
+                  className="h-8 shadow-sm"
+                >
                   Create Invoice
                 </Button>
-                <Button type="button" onClick={() => void openAssignModal()} disabled={isAssigning} size="sm" variant="outline" className="h-8 shadow-sm">
+                <Button
+                  type="button"
+                  onClick={() => void openAssignModal()}
+                  disabled={isAssigning}
+                  size="sm"
+                  variant="outline"
+                  className="h-8 shadow-sm"
+                >
                   {isAssigning ? "Assigning..." : "Assign to"}
                 </Button>
               </div>
@@ -642,7 +758,9 @@ export function CrmContextPanel({
               <p className="mb-1 text-xs text-muted-foreground">Status Lead</p>
               <select
                 value={leadSettings.leadStatus}
-                onChange={(event) => setLeadSettings((current) => ({ ...current, leadStatus: event.target.value }))}
+                onChange={(event) =>
+                  setLeadSettings((current) => ({ ...current, leadStatus: event.target.value }))
+                }
                 className="h-11 w-full rounded-xl border border-border bg-background px-3 text-sm"
               >
                 {leadStatusOptions.map((option) => (
@@ -676,7 +794,12 @@ export function CrmContextPanel({
               <p className="mb-1 text-xs text-muted-foreground">Business Category</p>
               <select
                 value={leadSettings.businessCategory ?? ""}
-                onChange={(event) => setLeadSettings((current) => ({ ...current, businessCategory: event.target.value || null }))}
+                onChange={(event) =>
+                  setLeadSettings((current) => ({
+                    ...current,
+                    businessCategory: event.target.value || null
+                  }))
+                }
                 className="h-11 w-full rounded-xl border border-border bg-background px-3 text-sm"
               >
                 <option value="">Set category</option>
@@ -705,12 +828,20 @@ export function CrmContextPanel({
                 </Button>
               </div>
             </div>
-            <Button type="submit" disabled={isSavingLeadSettings || isLoadingLeadSettings} className="h-10 w-full rounded-xl shadow-md shadow-primary/20">
+            <Button
+              type="submit"
+              disabled={isSavingLeadSettings || isLoadingLeadSettings}
+              className="h-10 w-full rounded-xl shadow-md shadow-primary/20"
+            >
               {isSavingLeadSettings ? "Saving..." : "Save Lead Settings"}
             </Button>
           </form>
-          {isLoadingLeadSettings ? <p className="text-xs text-muted-foreground">Loading lead settings...</p> : null}
-          {leadSettingsError ? <p className="text-xs text-destructive">{leadSettingsError}</p> : null}
+          {isLoadingLeadSettings ? (
+            <p className="text-xs text-muted-foreground">Loading lead settings...</p>
+          ) : null}
+          {leadSettingsError ? (
+            <p className="text-xs text-destructive">{leadSettingsError}</p>
+          ) : null}
           {crmError ? <p className="text-xs text-destructive">{crmError}</p> : null}
         </div>
       </AccordionCard>
@@ -724,11 +855,20 @@ export function CrmContextPanel({
             className="min-h-[112px] w-full rounded-2xl border border-amber-200 bg-amber-50/40 px-3 py-3 text-sm text-foreground outline-none transition focus:border-amber-300 focus:ring-2 focus:ring-amber-200/60"
           />
           <div className="flex justify-end">
-            <Button type="button" disabled={isSavingNotes} size="sm" className="h-9 rounded-lg shadow-sm" variant="outline" onClick={() => void handleSaveNotes()}>
+            <Button
+              type="button"
+              disabled={isSavingNotes}
+              size="sm"
+              className="h-9 rounded-lg shadow-sm"
+              variant="outline"
+              onClick={() => void handleSaveNotes()}
+            >
               {isSavingNotes ? "Saving..." : "Simpan Catatan"}
             </Button>
           </div>
-          <p className="text-xs text-muted-foreground">Terhubung langsung ke field Notes pada data customer.</p>
+          <p className="text-xs text-muted-foreground">
+            Terhubung langsung ke field Notes pada data customer.
+          </p>
           {crmError ? <p className="text-xs text-destructive">{crmError}</p> : null}
         </div>
       </AccordionCard>
@@ -761,7 +901,9 @@ export function CrmContextPanel({
 
           {activeMediaTab === "media" ? (
             mediaOnlyItems.length === 0 ? (
-              <div className="rounded-2xl border border-dashed border-border/80 bg-background/50 px-4 py-6 text-center text-xs text-muted-foreground">Tidak ada media.</div>
+              <div className="rounded-2xl border border-dashed border-border/80 bg-background/50 px-4 py-6 text-center text-xs text-muted-foreground">
+                Tidak ada media.
+              </div>
             ) : (
               <div className="grid grid-cols-2 gap-2">
                 {mediaOnlyItems.map((item) => (
@@ -778,14 +920,26 @@ export function CrmContextPanel({
                     <div className="relative aspect-[4/3] bg-muted/40">
                       {item.type === "IMAGE" ? (
                         // eslint-disable-next-line @next/next/no-img-element
-                        <img src={item.safeMediaUrl ?? ""} alt={item.fileName ?? "media"} className="h-full w-full object-cover transition group-hover:scale-[1.02]" />
+                        <img
+                          src={item.safeMediaUrl ?? ""}
+                          alt={item.fileName ?? "media"}
+                          className="h-full w-full object-cover transition group-hover:scale-[1.02]"
+                        />
                       ) : (
-                        <video src={item.safeMediaUrl ?? ""} className="h-full w-full object-cover" muted />
+                        <video
+                          src={item.safeMediaUrl ?? ""}
+                          className="h-full w-full object-cover"
+                          muted
+                        />
                       )}
                     </div>
                     <div className="p-2">
-                      <p className="truncate text-xs font-medium text-foreground">{item.fileName ?? `${item.type} attachment`}</p>
-                      <p className="text-[11px] text-muted-foreground">{formatDateTime(item.createdAt)}</p>
+                      <p className="truncate text-xs font-medium text-foreground">
+                        {item.fileName ?? `${item.type} attachment`}
+                      </p>
+                      <p className="text-[11px] text-muted-foreground">
+                        {formatDateTime(item.createdAt)}
+                      </p>
                     </div>
                   </button>
                 ))}
@@ -795,7 +949,9 @@ export function CrmContextPanel({
 
           {activeMediaTab === "documents" ? (
             documentItems.length === 0 ? (
-              <div className="rounded-2xl border border-dashed border-border/80 bg-background/50 px-4 py-6 text-center text-xs text-muted-foreground">Tidak ada dokumen.</div>
+              <div className="rounded-2xl border border-dashed border-border/80 bg-background/50 px-4 py-6 text-center text-xs text-muted-foreground">
+                Tidak ada dokumen.
+              </div>
             ) : (
               <div className="grid grid-cols-2 gap-2">
                 {documentItems.map((item) => (
@@ -812,8 +968,12 @@ export function CrmContextPanel({
                     <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-muted/70 text-muted-foreground">
                       <FileText className="h-4 w-4" />
                     </div>
-                    <p className="mt-2 line-clamp-2 text-xs font-medium text-foreground">{item.fileName ?? "Document"}</p>
-                    <p className="mt-1 text-[11px] text-muted-foreground">{formatDateTime(item.createdAt)}</p>
+                    <p className="mt-2 line-clamp-2 text-xs font-medium text-foreground">
+                      {item.fileName ?? "Document"}
+                    </p>
+                    <p className="mt-1 text-[11px] text-muted-foreground">
+                      {formatDateTime(item.createdAt)}
+                    </p>
                   </button>
                 ))}
               </div>
@@ -822,7 +982,9 @@ export function CrmContextPanel({
 
           {activeMediaTab === "links" ? (
             links.length === 0 ? (
-              <div className="rounded-2xl border border-dashed border-border/80 bg-background/50 px-4 py-6 text-center text-xs text-muted-foreground">Tidak ada tautan.</div>
+              <div className="rounded-2xl border border-dashed border-border/80 bg-background/50 px-4 py-6 text-center text-xs text-muted-foreground">
+                Tidak ada tautan.
+              </div>
             ) : (
               <div className="grid grid-cols-1 gap-2">
                 {links.map((link) => (
@@ -840,7 +1002,9 @@ export function CrmContextPanel({
                       <div className="mt-0.5 flex h-7 w-7 items-center justify-center rounded-lg bg-muted/70 text-muted-foreground">
                         <Link2 className="h-4 w-4" />
                       </div>
-                      <span className="break-all text-xs text-primary underline underline-offset-2">{link}</span>
+                      <span className="break-all text-xs text-primary underline underline-offset-2">
+                        {link}
+                      </span>
                     </div>
                   </button>
                 ))}
@@ -874,6 +1038,25 @@ export function CrmContextPanel({
         </AccordionCard>
       </div>
 
+      <div className="mt-6 flex justify-center px-4">
+        <Button
+          type="button"
+          variant="ghost"
+          className="w-full rounded-xl border border-destructive/20 text-destructive hover:bg-destructive/10 hover:text-destructive"
+          onClick={() => {
+            const confirmed = window.confirm(
+              "Hapus chat ini? Semua pesan pada chat ini akan dihapus."
+            );
+            if (confirmed && onDeleteConversation) {
+              void onDeleteConversation();
+            }
+          }}
+        >
+          <Trash2 className="mr-2 h-4 w-4" />
+          Hapus Obrolan
+        </Button>
+      </div>
+
       {isAssignModalOpen ? (
         <div
           className="fixed inset-0 z-[70] flex items-center justify-center bg-black/45 p-4 backdrop-blur-sm"
@@ -881,26 +1064,44 @@ export function CrmContextPanel({
           aria-modal="true"
           aria-label="Assign conversation"
         >
-          <div ref={assignModalContainerRef} className="w-full max-w-lg rounded-[28px] border border-border/80 bg-card p-5 shadow-2xl">
+          <div
+            ref={assignModalContainerRef}
+            className="w-full max-w-lg rounded-[28px] border border-border/80 bg-card p-5 shadow-2xl"
+          >
             <div className="flex items-center justify-between">
               <h3 className="text-lg font-semibold text-foreground">Assign conversation</h3>
-              <Button ref={assignModalCloseButtonRef} type="button" variant="ghost" onClick={() => setIsAssignModalOpen(false)}>
+              <Button
+                ref={assignModalCloseButtonRef}
+                type="button"
+                variant="ghost"
+                onClick={() => setIsAssignModalOpen(false)}
+              >
                 Close
               </Button>
             </div>
-            <select value={selectedAssignee} onChange={(event) => setSelectedAssignee(event.target.value)} className="mt-4 h-11 w-full rounded-xl border border-border bg-background px-3 text-sm">
+            <select
+              value={selectedAssignee}
+              onChange={(event) => setSelectedAssignee(event.target.value)}
+              className="mt-4 h-11 w-full rounded-xl border border-border bg-background px-3 text-sm"
+            >
               {assignMembers.map((member) => (
                 <option key={member.userId} value={member.userId}>
-                  {(member.name?.trim() || member.email)} • {member.role}
+                  {member.name?.trim() || member.email} • {member.role}
                 </option>
               ))}
             </select>
-            {assignModalError ? <p className="mt-3 text-sm text-destructive">{assignModalError}</p> : null}
+            {assignModalError ? (
+              <p className="mt-3 text-sm text-destructive">{assignModalError}</p>
+            ) : null}
             <div className="mt-5 flex justify-end gap-2">
               <Button type="button" variant="ghost" onClick={() => setIsAssignModalOpen(false)}>
                 Cancel
               </Button>
-              <Button type="button" onClick={() => void handleSaveAssignment()} disabled={!selectedAssignee || isSavingAssignment}>
+              <Button
+                type="button"
+                onClick={() => void handleSaveAssignment()}
+                disabled={!selectedAssignee || isSavingAssignment}
+              >
                 {isSavingAssignment ? "Saving..." : "Assign"}
               </Button>
             </div>
@@ -909,7 +1110,12 @@ export function CrmContextPanel({
       ) : null}
 
       {previewMediaUrl && previewMediaType ? (
-        <div className="fixed inset-0 z-[75] flex items-center justify-center bg-black/65 p-4 backdrop-blur-sm" role="dialog" aria-modal="true" aria-label="Preview media">
+        <div
+          className="fixed inset-0 z-[75] flex items-center justify-center bg-black/65 p-4 backdrop-blur-sm"
+          role="dialog"
+          aria-modal="true"
+          aria-label="Preview media"
+        >
           <div className="w-full max-w-4xl rounded-2xl border border-border/80 bg-card p-4 shadow-2xl">
             <div className="mb-3 flex items-center justify-between gap-3">
               <p className="truncate text-sm font-medium text-foreground">{previewMediaTitle}</p>
@@ -928,18 +1134,35 @@ export function CrmContextPanel({
             <div className="rounded-xl border border-border/70 bg-background/50 p-3">
               {previewMediaType === "IMAGE" ? (
                 // eslint-disable-next-line @next/next/no-img-element
-                <img src={previewMediaUrl} alt={previewMediaTitle} className="mx-auto max-h-[70vh] w-auto max-w-full rounded-lg object-contain" />
+                <img
+                  src={previewMediaUrl}
+                  alt={previewMediaTitle}
+                  className="mx-auto max-h-[70vh] w-auto max-w-full rounded-lg object-contain"
+                />
               ) : null}
               {previewMediaType === "VIDEO" ? (
-                <video src={previewMediaUrl} controls className="mx-auto max-h-[70vh] w-auto max-w-full rounded-lg" />
+                <video
+                  src={previewMediaUrl}
+                  controls
+                  className="mx-auto max-h-[70vh] w-auto max-w-full rounded-lg"
+                />
               ) : null}
               {previewMediaType === "DOCUMENT" ? (
-                <iframe src={previewMediaUrl} className="h-[70vh] w-full rounded-lg border border-border/70" title={previewMediaTitle} />
+                <iframe
+                  src={previewMediaUrl}
+                  className="h-[70vh] w-full rounded-lg border border-border/70"
+                  title={previewMediaTitle}
+                />
               ) : null}
               {previewMediaType === "LINK" ? (
                 <div className="space-y-3 p-2">
                   <p className="break-all text-sm text-foreground">{previewMediaUrl}</p>
-                  <a href={previewMediaUrl} target="_blank" rel="noreferrer" className="inline-flex rounded-lg border border-border px-3 py-1.5 text-xs font-medium text-primary hover:bg-accent">
+                  <a
+                    href={previewMediaUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="inline-flex rounded-lg border border-border px-3 py-1.5 text-xs font-medium text-primary hover:bg-accent"
+                  >
                     Open link
                   </a>
                 </div>
@@ -948,7 +1171,6 @@ export function CrmContextPanel({
           </div>
         </div>
       ) : null}
-
     </aside>
   );
 }

@@ -1,0 +1,12 @@
+{
+  "suite": "smoke-ui-customers-deep",
+  "status": "passed",
+  "baseUrl": "http://localhost:3000",
+  "startedAt": "2026-04-04T14:36:10.390Z",
+  "endedAt": "2026-04-04T14:36:30.816Z",
+  "durationMs": 20426,
+  "failures": [],
+  "skippedReason": null,
+  "error": null,
+  "meta": {}
+}

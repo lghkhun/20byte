@@ -130,14 +130,19 @@ export async function markConversationAsRead(input: MarkConversationAsReadInput)
   }
 
   if (conversation.unreadCount > 0) {
-    await prisma.conversation.update({
+    const updateResult = await prisma.conversation.updateMany({
       where: {
-        id: conversation.id
+        id: conversation.id,
+        orgId
       },
       data: {
         unreadCount: 0
       }
     });
+
+    if (updateResult.count !== 1) {
+      throw new ServiceError(404, "CONVERSATION_NOT_FOUND", "Conversation does not exist.");
+    }
 
     void publishConversationUpdatedEvent({
       orgId: conversation.orgId,

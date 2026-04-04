@@ -1,0 +1,16 @@
+{
+  "suite": "smoke-ui",
+  "status": "failed",
+  "baseUrl": "http://localhost:3000",
+  "startedAt": "2026-04-04T14:43:58.894Z",
+  "endedAt": "2026-04-04T14:45:41.208Z",
+  "durationMs": 102314,
+  "failures": [
+    "Console errors detected: [realtime] customers subscription failed: Connection closed @ webpack-internal:///(app-pages-browser)/./node_modules/next/dist/client/app-index.js"
+  ],
+  "skippedReason": null,
+  "error": null,
+  "meta": {
+    "consoleErrorCount": 1
+  }
+}

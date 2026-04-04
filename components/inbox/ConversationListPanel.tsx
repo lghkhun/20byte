@@ -160,7 +160,7 @@ export function ConversationListPanel({
               type="text"
               value={searchQuery}
               onChange={(event) => onSearchQueryChange(event.target.value)}
-              placeholder="Cari nama, nomor, atau isi chat..."
+              placeholder="Cari chat..."
               className="h-10 rounded-xl border-border/80 bg-background/80 pl-9"
             />
           </label>

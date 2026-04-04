@@ -180,7 +180,8 @@ export function InboxWorkspace() {
     window.localStorage.setItem("inbox.crm.width", String(crmPanelWidth));
   }, [crmPanelWidth]);
 
-  const gridLayoutClass = isDesktopCrmOpen
+  const isCrmVisible = isDesktopCrmOpen && Boolean(selectedConversationId);
+  const gridLayoutClass = isCrmVisible
     ? "grid h-full min-h-0 gap-2 lg:gap-3 lg:grid-cols-[var(--inbox-list-panel-width,340px)_minmax(0,1fr)_minmax(260px,var(--crm-panel-width))]"
     : "grid h-full min-h-0 gap-2 lg:gap-3 lg:grid-cols-[var(--inbox-list-panel-width,340px)_minmax(0,1fr)]";
 
@@ -322,7 +323,7 @@ export function InboxWorkspace() {
               />
             </div>
 
-            {isDesktopCrmOpen ? (
+            {isCrmVisible ? (
               <div data-panel="crm-panel" className="inbox-scroll relative hidden h-full min-h-0 max-h-full overflow-y-auto overscroll-contain lg:block">
                 <button
                   type="button"
@@ -359,6 +360,8 @@ export function InboxWorkspace() {
                     isMarkingInvoicePaid={isMarkingInvoicePaid}
                     invoiceActionError={invoiceActionError}
                     invoiceActionSuccess={invoiceActionSuccess}
+                    onUnselectConversation={clearSelectedConversation}
+                    onDeleteConversation={deleteSelectedConversation}
                   />
                   </div>
                 </div>

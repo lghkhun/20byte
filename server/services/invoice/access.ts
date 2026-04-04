@@ -62,6 +62,7 @@ export async function reserveNextInvoiceNumber(
   now: Date
 ): Promise<string> {
   const year = now.getUTCFullYear();
+  const invoicePrefix = `INV-${year}-`;
   const sequence = await tx.invoiceSequence.upsert({
     where: {
       orgId_year: {
@@ -84,5 +85,38 @@ export async function reserveNextInvoiceNumber(
     }
   });
 
-  return formatInvoiceNumber(year, sequence.lastSeq);
+  let nextSeq = sequence.lastSeq;
+  const latestInvoice = await tx.invoice.findFirst({
+    where: {
+      orgId,
+      invoiceNo: {
+        startsWith: invoicePrefix
+      }
+    },
+    orderBy: {
+      invoiceNo: "desc"
+    },
+    select: {
+      invoiceNo: true
+    }
+  });
+
+  const latestInvoiceSeq = Number.parseInt(latestInvoice?.invoiceNo.slice(invoicePrefix.length) ?? "", 10);
+  if (Number.isFinite(latestInvoiceSeq) && latestInvoiceSeq >= nextSeq) {
+    nextSeq = latestInvoiceSeq + 1;
+    await tx.invoiceSequence.updateMany({
+      where: {
+        orgId,
+        year,
+        lastSeq: {
+          lt: nextSeq
+        }
+      },
+      data: {
+        lastSeq: nextSeq
+      }
+    });
+  }
+
+  return formatInvoiceNumber(year, nextSeq);
 }

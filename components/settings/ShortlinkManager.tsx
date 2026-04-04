@@ -399,12 +399,15 @@ export function ShortlinkManager({ variant = "settings" }: { variant?: "settings
         onFocus={() => {
           void loadShortlinks();
         }}
-        onClick={() => setIsCreateDialogOpen(true)}
+        onClick={() => {
+          setIsCreateDialogOpen(true);
+          void loadBaileysConnection({ force: true });
+        }}
       >
         Tambah Shortlink
       </Button>
     ),
-    [loadShortlinks]
+    [loadBaileysConnection, loadShortlinks]
   );
 
   useSettingsHeaderAction("10-shortlink-create", variant === "settings" ? createAction : null);
@@ -534,6 +537,16 @@ export function ShortlinkManager({ variant = "settings" }: { variant?: "settings
     if (!success) return;
     notifySuccess(success);
   }, [success]);
+
+  useEffect(() => {
+    if (!isCreateDialogOpen) {
+      return;
+    }
+
+    void loadBaileysConnection({ force: true }).catch((error) => {
+      setError(toErrorMessage(error, "Failed to refresh connected WhatsApp number."));
+    });
+  }, [isCreateDialogOpen, loadBaileysConnection]);
 
   async function handleCreateShortlink(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -781,7 +794,10 @@ export function ShortlinkManager({ variant = "settings" }: { variant?: "settings
             onFocus={() => {
               void loadShortlinks();
             }}
-            onClick={() => setIsCreateDialogOpen(true)}
+            onClick={() => {
+              setIsCreateDialogOpen(true);
+              void loadBaileysConnection({ force: true });
+            }}
           >
             Tambah Shortlink
           </Button>

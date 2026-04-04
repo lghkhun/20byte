@@ -1,0 +1,12 @@
+{
+  "suite": "smoke-ui-shortlinks-deep",
+  "status": "skipped",
+  "baseUrl": "http://localhost:3000",
+  "startedAt": "2026-04-04T15:05:32.960Z",
+  "endedAt": "2026-04-04T15:05:43.315Z",
+  "durationMs": 10355,
+  "failures": [],
+  "skippedReason": "Baileys connected number is unavailable, create flow skipped.",
+  "error": null,
+  "meta": {}
+}

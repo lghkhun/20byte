@@ -1,0 +1,14 @@
+{
+  "suite": "smoke-ui-inbox-deep",
+  "status": "failed",
+  "baseUrl": "http://localhost:3000",
+  "startedAt": "2026-04-04T14:39:53.408Z",
+  "endedAt": "2026-04-04T14:41:49.671Z",
+  "durationMs": 116263,
+  "failures": [
+    "Inbox deep: notes value is not persisted after save/reload."
+  ],
+  "skippedReason": null,
+  "error": null,
+  "meta": {}
+}

@@ -133,6 +133,7 @@ test("inbox outbound status from Baileys updates DB and emits conversation updat
     assert.equal(refreshed.deliveryStatus, "READ");
     assert.ok(refreshed.deliveredAt instanceof Date);
     assert.ok(refreshed.readAt instanceof Date);
+    const readAtBeforeDowngrade = refreshed.readAt;
 
     assert.equal(updateCalls.length, 1);
     assert.equal(updateCalls[0]?.orgId, SEED_ORG_ID);
@@ -144,6 +145,58 @@ test("inbox outbound status from Baileys updates DB and emits conversation updat
     assert.equal(publishedConversationUpdates[0]?.conversationId, conversation.id);
     assert.equal(publishedConversationUpdates[0]?.assignedToMemberId ?? null, conversation.assignedToMemberId ?? null);
     assert.equal(publishedConversationUpdates[0]?.status, conversation.status);
+
+    const processedDowngrade = await processBaileysOutboundStatusUpdate(
+      SEED_ORG_ID,
+      {
+        key: {
+          id: waMessageId,
+          fromMe: true
+        },
+        update: {
+          status: WAMessageStatus.DELIVERY_ACK
+        }
+      },
+      {
+        updateDeliveryStatusByWaMessageId: async (params) => {
+          updateCalls.push(params);
+          return updateOutboundDeliveryStatusByWaMessageId(params);
+        },
+        publishConversationUpdated: async (payload) => {
+          publishedConversationUpdates.push(payload);
+        }
+      }
+    );
+
+    assert.ok(processedDowngrade);
+    assert.equal(processedDowngrade?.deliveryStatus, "READ");
+    assert.ok(processedDowngrade?.readAt instanceof Date);
+    assert.equal(processedDowngrade?.readAt?.toISOString(), readAtBeforeDowngrade?.toISOString() ?? null);
+
+    const refreshedAfterDowngrade = await prisma.message.findUniqueOrThrow({
+      where: {
+        id: created.id
+      },
+      select: {
+        deliveryStatus: true,
+        deliveredAt: true,
+        readAt: true
+      }
+    });
+    assert.equal(refreshedAfterDowngrade.deliveryStatus, "READ");
+    assert.equal(refreshedAfterDowngrade.readAt?.toISOString(), readAtBeforeDowngrade?.toISOString() ?? null);
+    assert.ok(refreshedAfterDowngrade.deliveredAt instanceof Date);
+
+    assert.equal(updateCalls.length, 2);
+    assert.equal(updateCalls[1]?.orgId, SEED_ORG_ID);
+    assert.equal(updateCalls[1]?.waMessageId, waMessageId);
+    assert.equal(updateCalls[1]?.deliveryStatus, "DELIVERED");
+
+    assert.equal(publishedConversationUpdates.length, 2);
+    assert.equal(publishedConversationUpdates[1]?.orgId, SEED_ORG_ID);
+    assert.equal(publishedConversationUpdates[1]?.conversationId, conversation.id);
+    assert.equal(publishedConversationUpdates[1]?.assignedToMemberId ?? null, conversation.assignedToMemberId ?? null);
+    assert.equal(publishedConversationUpdates[1]?.status, conversation.status);
   } finally {
     if (createdMessageId) {
       await prisma.message.deleteMany({

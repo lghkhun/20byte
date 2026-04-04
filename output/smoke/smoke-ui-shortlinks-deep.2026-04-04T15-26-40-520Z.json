@@ -1,0 +1,14 @@
+{
+  "suite": "smoke-ui-shortlinks-deep",
+  "status": "failed",
+  "baseUrl": "http://localhost:3000",
+  "startedAt": "2026-04-04T15:25:52.168Z",
+  "endedAt": "2026-04-04T15:26:40.520Z",
+  "durationMs": 48352,
+  "failures": [
+    "locator.waitFor: Timeout 20000ms exceeded.\nCall log:\n\u001b[2m  - waiting for locator('tr').filter({ hasText: 'SMOKE-SHORTLINK-1775316371961' }).first() to be detached\u001b[22m\n\u001b[2m    42 × locator resolved to visible <tr class=\"border-b transition-colors hover:bg-muted/50 data-[state=selected]:bg-muted\">…</tr>\u001b[22m\n"
+  ],
+  "skippedReason": null,
+  "error": "locator.waitFor: Timeout 20000ms exceeded.\nCall log:\n\u001b[2m  - waiting for locator('tr').filter({ hasText: 'SMOKE-SHORTLINK-1775316371961' }).first() to be detached\u001b[22m\n\u001b[2m    42 × locator resolved to visible <tr class=\"border-b transition-colors hover:bg-muted/50 data-[state=selected]:bg-muted\">…</tr>\u001b[22m\n",
+  "meta": {}
+}

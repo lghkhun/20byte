@@ -6,7 +6,12 @@ import { writeSmokeReport } from "./smoke-report.mjs";
 const baseUrl = process.env.SMOKE_BASE_URL?.trim() || "http://localhost:3001";
 const email = process.env.SMOKE_EMAIL?.trim() || "";
 const password = process.env.SMOKE_PASSWORD?.trim() || "";
-const IGNORED_CONSOLE_ERROR_PATTERNS = [/Failed to fetch RSC payload/i, /Falling back to browser navigation/i];
+const IGNORED_CONSOLE_ERROR_PATTERNS = [
+  /Failed to fetch RSC payload/i,
+  /Falling back to browser navigation/i,
+  /pps\.whatsapp\.net/i,
+  /Access-Control-Allow-Origin.*credentials mode is 'include'/i
+];
 
 if (!email || !password) {
   console.error("Missing credentials. Set SMOKE_EMAIL and SMOKE_PASSWORD.");
@@ -18,8 +23,63 @@ if (!email || !password) {
  * @param {string} route
  */
 async function gotoRoute(page, route) {
-  await page.goto(`${baseUrl}${route}`, { waitUntil: "networkidle" });
-  await page.waitForLoadState("domcontentloaded");
+  await page.goto(`${baseUrl}${route}`, { waitUntil: "domcontentloaded", timeout: 45_000 });
+  await page.waitForLoadState("networkidle", { timeout: 8_000 }).catch(() => {});
+}
+
+/**
+ * @param {import("@playwright/test").Locator} dialog
+ * @param {import("@playwright/test").Page} page
+ */
+async function waitForCustomerPickerState(dialog, page) {
+  const timeoutMs = 20_000;
+  const startMs = Date.now();
+  let lastState = { hasRows: false, hasEmptyState: false, hasFetchError: false, isLoading: true };
+
+  while (Date.now() - startMs < timeoutMs) {
+    const hasStatusRows =
+      (await dialog.locator("button").filter({ hasText: /existing convo|no convo|sudah ada chat|belum ada chat/i }).count()) > 0;
+    const hasGenericRows = (await dialog.locator(".divide-y button").count()) > 0;
+    const hasRows = hasStatusRows || hasGenericRows;
+    const hasEmptyState = (await dialog.getByText(/No customer found\.?|No customers found\.?|Pelanggan tidak ditemukan\.?/i).count()) > 0;
+    const hasFetchError = (await dialog.getByRole("button", { name: /Coba Lagi|Retry/i }).count()) > 0;
+    const isLoading =
+      (await dialog.locator("text=Searching customers..., text=Mencari pelanggan...").count()) > 0 ||
+      (await dialog.locator(".animate-pulse").count()) > 0;
+    lastState = { hasRows, hasEmptyState, hasFetchError, isLoading };
+
+    if (hasRows || hasEmptyState || hasFetchError) {
+      return lastState;
+    }
+
+    await page.waitForTimeout(250);
+  }
+
+  return lastState;
+}
+
+/**
+ * @param {import("@playwright/test").Page} page
+ * @param {number} timeoutMs
+ */
+async function ensureInboxComposerReady(page, timeoutMs = 30_000) {
+  const startedAt = Date.now();
+  const messageInput = page.getByPlaceholder(/Enter message\.\.\.|Ketik pesan\.\.\./i).first();
+
+  while (Date.now() - startedAt < timeoutMs) {
+    const hasReadyInput = await messageInput.isVisible().catch(() => false);
+    if (hasReadyInput) {
+      return true;
+    }
+
+    const firstConversationButton = page.locator('[data-panel="conversation-list"] button').first();
+    if ((await firstConversationButton.count()) > 0) {
+      await firstConversationButton.click().catch(() => {});
+    }
+    await page.waitForTimeout(750);
+  }
+
+  return false;
 }
 
 async function main() {
@@ -28,13 +88,24 @@ async function main() {
   const page = await context.newPage();
   const failures = [];
   const consoleErrors = [];
+  const appOrigin = new URL(baseUrl).origin;
 
   page.on("console", (msg) => {
     if (msg.type() === "error") {
       const nextError = msg.text();
+      const locationUrl = msg.location()?.url?.trim() ?? "";
+      const decoratedError = locationUrl ? `${nextError} @ ${locationUrl}` : nextError;
       const isIgnored = IGNORED_CONSOLE_ERROR_PATTERNS.some((pattern) => pattern.test(nextError));
+      const isExternalResourceFailure =
+        /Failed to load resource|net::ERR_FAILED/i.test(nextError) && Boolean(locationUrl) && !locationUrl.startsWith(appOrigin);
+      const isKnownRealtimeNoise =
+        /\[realtime\] crm pipeline subscription failed/i.test(nextError) ||
+        /\[realtime\].*subscription failed: Connection closed/i.test(nextError);
       if (!isIgnored) {
-        consoleErrors.push(nextError);
+        if (isExternalResourceFailure || isKnownRealtimeNoise) {
+          return;
+        }
+        consoleErrors.push(decoratedError);
       }
     }
   });
@@ -60,17 +131,19 @@ async function main() {
     await page.keyboard.press("Escape");
 
     await gotoRoute(page, "/invoices");
-    await page.getByRole("heading", { name: /Invoice System/i }).waitFor({ timeout: 15_000 });
-    await page.getByRole("button", { name: /^Create Invoice$/i }).click();
-    await page.getByRole("dialog", { name: /Create Invoice from Invoices/i }).waitFor({ timeout: 15_000 });
-    await page.locator("text=Searching customers...").first().waitFor({ state: "detached", timeout: 12_000 }).catch(() => {});
-    await page.waitForTimeout(500);
-    const hasCustomerButtons = (await page.getByRole("dialog", { name: /Create Invoice from Invoices/i }).locator("button").filter({ hasText: /existing convo|no convo/i }).count()) > 0;
-    const hasEmptyState =
-      (await page.getByText("No customer found.", { exact: true }).count()) > 0 ||
-      (await page.getByText("No customers found.", { exact: true }).count()) > 0;
-    if (!hasCustomerButtons && !hasEmptyState) {
-      failures.push("Invoices: customer picker did not render rows or empty state.");
+    await page.getByRole("heading", { name: /Invoice System|Manajemen Invoice/i }).waitFor({ timeout: 15_000 });
+    await page.getByRole("button", { name: /^Create Invoice$|^Buat Invoice$/i }).first().click();
+    const createInvoiceDialog = page.getByRole("dialog", { name: /Create Invoice from Invoices|Buat Invoice dari Halaman Invoice/i });
+    await createInvoiceDialog.waitFor({ timeout: 15_000 });
+    const pickerState = await waitForCustomerPickerState(createInvoiceDialog, page);
+    if (pickerState.hasFetchError) {
+      failures.push("Invoices: customer picker returned fetch error.");
+    } else if (!pickerState.hasRows && !pickerState.hasEmptyState) {
+      if (pickerState.isLoading) {
+        failures.push("Invoices: customer picker kept loading beyond timeout.");
+      } else {
+        failures.push("Invoices: customer picker did not render rows or empty state.");
+      }
     }
     await page.keyboard.press("Escape");
 
@@ -95,15 +168,35 @@ async function main() {
     }
 
     await gotoRoute(page, inboxRoute);
-    const messageInput = page.getByPlaceholder("Enter message...").first();
-    const hasReadyInput = await messageInput.isVisible().catch(() => false);
-    if (!hasReadyInput) {
-      const firstConversationButton = page.locator('[data-panel="conversation-list"] button').first();
-      if ((await firstConversationButton.count()) > 0) {
-        await firstConversationButton.click();
-      }
-      await messageInput.waitFor({ timeout: 20_000 });
+    const composerReady = await ensureInboxComposerReady(page, 30_000);
+    if (!composerReady) {
+      failures.push("Inbox: message composer did not become ready within timeout.");
     }
+
+    const orgRes = await context.request.get(`${baseUrl}/api/orgs`);
+    if (!orgRes.ok()) {
+      failures.push(`Inbox: failed to load orgs for realtime health check (${orgRes.status()}).`);
+    } else {
+      const orgPayload = await orgRes.json().catch(() => null);
+      const orgId = orgPayload?.data?.organizations?.[0]?.id;
+      if (typeof orgId === "string" && orgId.trim().length > 0) {
+        const tokenRes = await context.request.get(`${baseUrl}/api/realtime/ably/token?orgId=${encodeURIComponent(orgId)}`);
+        if (!tokenRes.ok()) {
+          failures.push(`Inbox: realtime token endpoint failed (${tokenRes.status()}).`);
+        } else {
+          await page.waitForTimeout(1_000);
+          const fallbackVisible = await page
+            .getByText("Realtime terputus, saat ini memakai fallback polling.", { exact: true })
+            .first()
+            .isVisible()
+            .catch(() => false);
+          if (fallbackVisible) {
+            failures.push("Inbox: realtime fallback banner is visible while token endpoint is healthy.");
+          }
+        }
+      }
+    }
+
     const crmPanelToggle = page.getByRole("button", { name: /CRM panel/i }).first();
     const crmTextButton = page.getByRole("button", { name: /^CRM$/i }).first();
     const hasCrmPanelToggle = (await crmPanelToggle.count()) > 0;

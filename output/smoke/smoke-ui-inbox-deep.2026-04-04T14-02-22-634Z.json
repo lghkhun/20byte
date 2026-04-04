@@ -1,0 +1,14 @@
+{
+  "suite": "smoke-ui-inbox-deep",
+  "status": "failed",
+  "baseUrl": "http://localhost:3000",
+  "startedAt": "2026-04-04T14:01:42.957Z",
+  "endedAt": "2026-04-04T14:02:22.634Z",
+  "durationMs": 39677,
+  "failures": [
+    "locator.waitFor: Timeout 15000ms exceeded.\nCall log:\n\u001b[2m  - waiting for getByPlaceholder('Catatan khusus pelanggan ini... (Tidak terkirim)').first() to be visible\u001b[22m\n"
+  ],
+  "skippedReason": null,
+  "error": "locator.waitFor: Timeout 15000ms exceeded.\nCall log:\n\u001b[2m  - waiting for getByPlaceholder('Catatan khusus pelanggan ini... (Tidak terkirim)').first() to be visible\u001b[22m\n",
+  "meta": {}
+}

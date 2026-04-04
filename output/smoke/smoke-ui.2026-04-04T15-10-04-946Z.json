@@ -1,0 +1,14 @@
+{
+  "suite": "smoke-ui",
+  "status": "failed",
+  "baseUrl": "http://localhost:3000",
+  "startedAt": "2026-04-04T15:08:56.710Z",
+  "endedAt": "2026-04-04T15:10:04.946Z",
+  "durationMs": 68236,
+  "failures": [
+    "locator.waitFor: Timeout 20000ms exceeded.\nCall log:\n\u001b[2m  - waiting for getByPlaceholder(/Enter message\\.\\.\\.|Ketik pesan\\.\\.\\./i).first() to be visible\u001b[22m\n"
+  ],
+  "skippedReason": null,
+  "error": "locator.waitFor: Timeout 20000ms exceeded.\nCall log:\n\u001b[2m  - waiting for getByPlaceholder(/Enter message\\.\\.\\.|Ketik pesan\\.\\.\\./i).first() to be visible\u001b[22m\n",
+  "meta": {}
+}

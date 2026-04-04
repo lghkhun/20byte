@@ -12,6 +12,29 @@ if (!email || !password) {
   process.exit(1);
 }
 
+/**
+ * @param {import("@playwright/test").Locator} locator
+ * @param {import("@playwright/test").Page} page
+ * @param {number} timeoutMs
+ */
+async function waitForConnectedBaileysPhone(locator, page, timeoutMs = 15_000) {
+  const startedAt = Date.now();
+  let lastText = "";
+
+  while (Date.now() - startedAt < timeoutMs) {
+    const nextText = (await locator.textContent().catch(() => ""))?.trim() ?? "";
+    lastText = nextText;
+    const isUnavailable = /Belum ada nomor terhubung/i.test(nextText);
+    const isLoading = /memuat|loading/i.test(nextText);
+    if (nextText && !isUnavailable && !isLoading) {
+      return nextText;
+    }
+    await page.waitForTimeout(500);
+  }
+
+  return lastText;
+}
+
 async function main() {
   const browser = await chromium.launch({ headless: true });
   const context = await browser.newContext();
@@ -35,7 +58,8 @@ async function main() {
     const createDialog = page.getByRole("dialog", { name: /Tambah Shortlink/i });
     await createDialog.waitFor({ timeout: 10_000 });
 
-    const connectedPhoneText = (await createDialog.getByText(/Nomor Terhubung \(Baileys\)/i).locator("xpath=../p[2]").textContent())?.trim() ?? "";
+    const connectedPhoneLocator = createDialog.getByText(/Nomor Terhubung \(Baileys\)/i).locator("xpath=../p[2]");
+    const connectedPhoneText = await waitForConnectedBaileysPhone(connectedPhoneLocator, page, 15_000);
     if (!connectedPhoneText || /Belum ada nomor terhubung/i.test(connectedPhoneText)) {
       skippedReason = "Baileys connected number is unavailable, create flow skipped.";
     } else {
@@ -52,7 +76,14 @@ async function main() {
 
       const rowActionsButton = createdRow.getByRole("button", { name: /Open shortlink actions/i }).first();
       await rowActionsButton.click();
+      const confirmDeletePromise = page
+        .waitForEvent("dialog", { timeout: 3_000 })
+        .then(async (dialog) => {
+          await dialog.accept();
+        })
+        .catch(() => {});
       await page.getByRole("menuitem", { name: /^Delete$/i }).click();
+      await confirmDeletePromise;
 
       await createdRow.waitFor({ state: "detached", timeout: 20_000 });
       createdCampaignName = "";
@@ -64,7 +95,14 @@ async function main() {
         const fallbackRow = page.locator("tr", { hasText: createdCampaignName }).first();
         if (await fallbackRow.isVisible().catch(() => false)) {
           await fallbackRow.getByRole("button", { name: /Open shortlink actions/i }).first().click();
+          const cleanupConfirmDeletePromise = page
+            .waitForEvent("dialog", { timeout: 3_000 })
+            .then(async (dialog) => {
+              await dialog.accept();
+            })
+            .catch(() => {});
           await page.getByRole("menuitem", { name: /^Delete$/i }).click();
+          await cleanupConfirmDeletePromise;
         }
       } catch {
         // best-effort cleanup only

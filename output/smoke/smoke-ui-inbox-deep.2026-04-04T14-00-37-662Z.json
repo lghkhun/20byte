@@ -1,0 +1,15 @@
+{
+  "suite": "smoke-ui-inbox-deep",
+  "status": "failed",
+  "baseUrl": "http://localhost:3000",
+  "startedAt": "2026-04-04T13:58:56.180Z",
+  "endedAt": "2026-04-04T14:00:37.662Z",
+  "durationMs": 101482,
+  "failures": [
+    "Inbox deep: unable to find CRM panel toggle control.",
+    "Inbox deep: notes value is not persisted after save/reload."
+  ],
+  "skippedReason": null,
+  "error": null,
+  "meta": {}
+}

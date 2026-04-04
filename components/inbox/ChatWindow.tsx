@@ -404,16 +404,65 @@ export function ChatWindow({
 
       {!isConversationSelected ? (
         <div className="relative flex flex-1 flex-col items-center justify-center bg-[radial-gradient(ellipse_at_top,hsl(var(--primary)/0.05),transparent_80%),linear-gradient(to_bottom,hsl(var(--background)/0.96),hsl(var(--muted)/0.4))] p-8">
-          <div className="flex w-full max-w-md flex-col items-center text-center">
-            <div className="relative mb-10 flex h-36 w-36 items-center justify-center rounded-[2rem] bg-background shadow-sm border border-border/80">
-              <MessageCircleMore className="relative z-10 h-16 w-16 text-primary" />
-              <div className="absolute inset-0 rounded-[2rem] border border-primary/20 bg-gradient-to-tr from-primary/10 to-transparent"></div>
+          <div className="flex w-full max-w-lg flex-col items-center text-center">
+            <div className="relative mb-10 mt-4 flex h-36 w-[260px] items-center justify-center transition-transform duration-500 hover:scale-[1.02] lg:mb-12 lg:h-40 lg:w-[280px] 2xl:mb-14 2xl:mt-6 2xl:h-48 2xl:w-[320px]">
+              {/* Dashboard Window Glass */}
+              <div className="absolute inset-0 overflow-hidden rounded-2xl border border-border/80 bg-background/60 shadow-xl backdrop-blur-md dark:bg-card/40 dark:shadow-primary/5 2xl:rounded-3xl 2xl:shadow-2xl">
+                {/* Top Header */}
+                <div className="flex h-10 items-center gap-2 border-b border-border/50 bg-muted/30 px-4">
+                  <div className="h-2.5 w-2.5 rounded-full bg-rose-400/80"></div>
+                  <div className="h-2.5 w-2.5 rounded-full bg-amber-400/80"></div>
+                  <div className="h-2.5 w-2.5 rounded-full bg-emerald-400/80"></div>
+                  <div className="ml-4 h-2 w-16 rounded-full bg-muted-foreground/20"></div>
+                  <div className="ml-auto flex gap-1">
+                    <div className="h-4 w-4 rounded bg-muted-foreground/10"></div>
+                    <div className="h-4 w-4 rounded bg-muted-foreground/10"></div>
+                  </div>
+                </div>
+                {/* Dashboard Body Layout */}
+                <div className="flex h-full gap-4 p-4">
+                  {/* Sidebar */}
+                  <div className="flex w-8 flex-col items-center gap-3">
+                     <div className="h-5 w-5 rounded bg-primary/20"></div>
+                     <div className="h-5 w-5 rounded bg-muted-foreground/10"></div>
+                     <div className="h-5 w-5 rounded bg-muted-foreground/10"></div>
+                     <div className="h-5 w-5 rounded bg-muted-foreground/10"></div>
+                  </div>
+                  {/* Main Data Content */}
+                  <div className="flex flex-1 flex-col gap-3 border-l border-border/40 pl-4 pr-2 pt-1">
+                    <div className="flex gap-2">
+                       <div className="h-10 flex-1 rounded-lg border border-emerald-500/20 bg-emerald-500/10"></div>
+                       <div className="h-10 flex-1 rounded-lg border border-blue-500/20 bg-blue-500/10"></div>
+                       <div className="h-10 flex-1 rounded-lg border border-amber-500/20 bg-amber-500/10"></div>
+                    </div>
+                    {/* Graph Area */}
+                    <div className="flex flex-1 items-end gap-2 rounded-xl border border-border/30 bg-muted/20 p-2">
+                       <div className="h-[30%] w-full rounded-sm bg-muted-foreground/20"></div>
+                       <div className="h-[60%] w-full rounded-sm bg-primary/40"></div>
+                       <div className="h-[45%] w-full rounded-sm bg-muted-foreground/20"></div>
+                       <div className="h-[80%] w-full rounded-sm bg-primary/60"></div>
+                       <div className="h-[55%] w-full rounded-sm bg-muted-foreground/20"></div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Floating WhatsApp Bubble */}
+              <div className="absolute -bottom-6 -right-3 z-10 drop-shadow-xl lg:-right-6 2xl:-bottom-8 2xl:-right-8 2xl:drop-shadow-2xl">
+                <div className="relative flex items-center gap-2.5 rounded-[20px] rounded-bl-sm border border-emerald-400/40 bg-gradient-to-br from-emerald-400 to-emerald-600 px-4 py-2.5 shadow-lg shadow-emerald-500/20 dark:shadow-emerald-500/10 2xl:gap-3 2xl:rounded-[24px] 2xl:px-5 2xl:py-3.5 2xl:shadow-xl">
+                  <div className="absolute -right-1.5 -top-1.5 flex h-4 w-4 items-center justify-center rounded-full border-2 border-background bg-rose-500 text-[9px] font-bold text-white shadow-sm 2xl:h-5 2xl:w-5 2xl:text-[10px]">
+                    3
+                  </div>
+                  <MessageCircleMore className="h-5 w-5 text-white drop-shadow-md 2xl:h-7 2xl:w-7" />
+                  <span className="text-lg font-bold tracking-tight text-white drop-shadow-md 2xl:text-xl">WhatsApp</span>
+                </div>
+              </div>
             </div>
-            <h3 className="text-[32px] font-light text-foreground/90 tracking-tight">
-              20byte <span className="font-semibold text-primary">WhatsApp CRM</span>
+            <h3 className="mt-2 text-[24px] font-light tracking-tight text-foreground/90 lg:text-[28px] 2xl:text-[32px]">
+              Transformasi <span className="font-bold text-primary">Konversi Maksimal</span>
             </h3>
-            <p className="mt-4 text-[15px] leading-relaxed text-muted-foreground/80">
-              Pusat kendali interaksi pelanggan Anda. Kembangkan, atur, dan kelola kelancaran bisnis Anda di satu tempat.
+            <p className="mt-3 px-2 text-[13px] leading-relaxed text-muted-foreground/80 lg:mt-4 lg:px-4 lg:text-[14px] 2xl:text-[15px]">
+              Ubah setiap obrolan menjadi penjualan riil. Maksimalkan kampanye performa tinggi Anda dengan mulus melalui dukungan <strong>CTWA</strong> penuh, pelacakan konversi <strong>Meta CAPI & Pixel</strong> termutakhir, serta terhubung langsung ke mesin <strong>Invoice</strong> cerdas kami.
             </p>
           </div>
           
@@ -428,7 +477,7 @@ export function ChatWindow({
         <div
           ref={scrollRef}
           className={`inbox-scroll min-h-0 flex-1 overflow-y-auto overscroll-contain bg-[radial-gradient(ellipse_at_top,hsl(var(--primary)/0.05),transparent_80%),linear-gradient(to_bottom,hsl(var(--background)/0.96),hsl(var(--muted)/0.4))] ${
-            density === "compact" ? "space-y-2 px-4 py-4 sm:px-5 sm:py-5" : "space-y-3 px-4 py-4 sm:px-6 sm:py-6"
+            density === "compact" ? "space-y-2 px-3 py-3 sm:px-4 sm:py-4" : "space-y-3 px-3 py-4 sm:px-5 sm:py-5"
           }`}
         >
           {messages.length > 0 ? (

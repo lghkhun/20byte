@@ -1,0 +1,14 @@
+{
+  "suite": "smoke-ui-inbox-deep",
+  "status": "failed",
+  "baseUrl": "http://localhost:3000",
+  "startedAt": "2026-04-04T14:57:27.243Z",
+  "endedAt": "2026-04-04T14:59:12.786Z",
+  "durationMs": 105543,
+  "failures": [
+    "locator.waitFor: Timeout 20000ms exceeded.\nCall log:\n\u001b[2m  - waiting for getByPlaceholder(/Enter message\\.\\.\\.|Ketik pesan\\.\\.\\./i).first() to be visible\u001b[22m\n\u001b[2m    - waiting for\" http://localhost:3000/inbox\" navigation to finish...\u001b[22m\n\u001b[2m    - navigated to \"http://localhost:3000/inbox\"\u001b[22m\n"
+  ],
+  "skippedReason": null,
+  "error": "locator.waitFor: Timeout 20000ms exceeded.\nCall log:\n\u001b[2m  - waiting for getByPlaceholder(/Enter message\\.\\.\\.|Ketik pesan\\.\\.\\./i).first() to be visible\u001b[22m\n\u001b[2m    - waiting for\" http://localhost:3000/inbox\" navigation to finish...\u001b[22m\n\u001b[2m    - navigated to \"http://localhost:3000/inbox\"\u001b[22m\n",
+  "meta": {}
+}

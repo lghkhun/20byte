@@ -1,5 +1,5 @@
 import Image from "next/image";
-import { CheckCheck, Ellipsis, Search, SendToBack, ShieldCheck, Trash2, X } from "lucide-react";
+import { Ellipsis, Search, SendToBack, ShieldCheck, Trash2, X } from "lucide-react";
 
 import { IndicatorLegend } from "@/components/inbox/IndicatorLegend";
 import type { ConversationItem } from "@/components/inbox/types";
@@ -52,8 +52,8 @@ export function ChatHeader({
     (conversation.lastMessageType === "IMAGE" || conversation.lastMessageType === "DOCUMENT");
 
   return (
-    <div className="flex items-center justify-between border-b border-border/70 bg-card/95 px-4 py-3.5 sm:px-6 sm:py-4">
-      <div className="flex min-w-0 items-center gap-3">
+    <div className="flex items-center justify-between gap-3 border-b border-border/70 bg-card/95 px-4 py-3.5 sm:px-6 sm:py-4">
+      <div className="flex min-w-0 flex-1 items-center gap-3">
         {conversation?.customerAvatarUrl ? (
           <div className="relative h-11 w-11 shrink-0 overflow-hidden rounded-full border border-border/70 shadow-sm">
             <Image
@@ -108,10 +108,6 @@ export function ChatHeader({
                   Sedang mengetik...
                 </span>
               ) : null}
-              <span className="inline-flex items-center gap-1 rounded-full border border-border/80 bg-background/80 px-2 py-0.5">
-                <CheckCheck className="h-3 w-3" />
-                {conversation.assignedToMemberId ? "Assigned" : "Unassigned"}
-              </span>
               {isLatestMessageProofReady ? (
                 <span
                   className="inline-flex items-center gap-1 rounded-full border border-emerald-500/30 bg-emerald-500/10 px-2 py-0.5 text-emerald-600 dark:text-emerald-400"
@@ -121,18 +117,12 @@ export function ChatHeader({
                   Proof ready
                 </span>
               ) : null}
-              <span
-                className="inline-flex items-center rounded-full border border-primary/30 bg-primary/10 px-2 py-0.5 text-primary"
-                title="Customer lead status"
-              >
-                {formatLeadSettingLabel(conversation.customerLeadStatus ?? "NEW_LEAD")}
-              </span>
             </div>
           ) : <p className="text-xs text-muted-foreground">Pilih percakapan di panel kiri untuk mulai membalas customer.</p>}
         </div>
       </div>
-      <div className="flex items-center gap-1.5 rounded-2xl border border-border/80 bg-background/55 p-1">
-        <IndicatorLegend compact />
+      <div className="flex shrink-0 items-center gap-0.5 rounded-2xl border border-border/80 bg-background/55 p-1 sm:gap-1.5">
+        <div className="hidden xl:block"><IndicatorLegend compact /></div>
         <Button
           type="button"
           variant="ghost"
@@ -166,28 +156,7 @@ export function ChatHeader({
         >
           <ShieldCheck className="h-4.5 w-4.5" />
         </Button>
-        <Button
-          type="button"
-          variant="ghost"
-          size="icon"
-          disabled={!conversation}
-          className="rounded-lg text-destructive/80 hover:bg-destructive/10 hover:text-destructive"
-          title="Delete chat"
-          onClick={onDeleteConversation}
-        >
-          <Trash2 className="h-4.5 w-4.5" />
-        </Button>
-        <Button
-          type="button"
-          variant="ghost"
-          size="icon"
-          disabled={!conversation}
-          className="rounded-lg text-muted-foreground hover:bg-muted hover:text-foreground"
-          title="Keluar dari chat (Esc)"
-          onClick={onUnselectConversation}
-        >
-          <X className="h-4.5 w-4.5" />
-        </Button>
+
         <Button
           type="button"
           variant="ghost"

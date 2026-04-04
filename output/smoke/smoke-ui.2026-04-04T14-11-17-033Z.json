@@ -1,0 +1,16 @@
+{
+  "suite": "smoke-ui",
+  "status": "failed",
+  "baseUrl": "http://localhost:3000",
+  "startedAt": "2026-04-04T14:10:22.853Z",
+  "endedAt": "2026-04-04T14:11:17.033Z",
+  "durationMs": 54180,
+  "failures": [
+    "Invoices: customer picker did not render rows or empty state."
+  ],
+  "skippedReason": null,
+  "error": null,
+  "meta": {
+    "consoleErrorCount": 0
+  }
+}

@@ -99,12 +99,12 @@ export function MessageInput({
 
   return (
     <form
-      className={`space-y-3 border-t border-border/80 bg-card/95 backdrop-blur-sm ${density === "compact" ? "px-3 py-3 sm:px-4" : "px-3 py-3 sm:px-5 sm:py-4"}`}
+      className={`space-y-2 border-t border-border/80 bg-card/95 backdrop-blur-sm ${density === "compact" ? "px-3 py-2 sm:px-4 sm:py-3" : "px-3 py-3 sm:px-4 sm:py-4"}`}
       onSubmit={handleSubmit}
     >
       <div
         className={`relative flex items-end gap-2 rounded-2xl border border-border bg-background/95 shadow-sm transition ${
-          density === "compact" ? "px-2 py-2" : "px-2 py-2.5 sm:px-3"
+          density === "compact" ? "px-2 py-1.5" : "px-2 py-2 sm:px-3 sm:py-2"
         }`}
       >
         <textarea
@@ -177,8 +177,6 @@ export function MessageInput({
           </div>
         ) : null}
       </div>
-
-      <p className="text-[11px] text-muted-foreground">`Enter` untuk kirim, `Shift + Enter` untuk baris baru.</p>
 
       {pendingAttachment ? (
         <AttachmentPendingBar

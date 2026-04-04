@@ -4,7 +4,7 @@ import test from "node:test";
 import { InvoiceKind } from "@prisma/client";
 
 import { prisma } from "@/lib/db/prisma";
-import { createDraftInvoice } from "@/server/services/invoiceService";
+import { createDraftInvoice } from "@/server/services/invoice/draft";
 
 const RUN_INTEGRATION = process.env.RUN_DB_INTEGRATION_TESTS === "1";
 const SEED_ORG_ID = "seed_org_alpha";

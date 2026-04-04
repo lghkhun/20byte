@@ -242,14 +242,28 @@ export async function updateOutboundDeliveryStatusByWaMessageId(params: {
   let nextReadAt = existing.readAt;
 
   if (nextState.shouldPersist) {
-    const updatedMessage = await prisma.message.update({
+    const updateResult = await prisma.message.updateMany({
       where: {
-        id: existing.id
+        id: existing.id,
+        orgId: params.orgId,
+        direction: MessageDirection.OUTBOUND
       },
       data: {
         deliveryStatus: nextState.deliveryStatus ?? undefined,
         deliveredAt: nextState.deliveredAt ?? undefined,
         readAt: nextState.readAt ?? undefined
+      }
+    });
+
+    if (updateResult.count !== 1) {
+      throw new ServiceError(404, "MESSAGE_NOT_FOUND", "Outbound message does not exist.");
+    }
+
+    const updatedMessage = await prisma.message.findFirst({
+      where: {
+        id: existing.id,
+        orgId: params.orgId,
+        direction: MessageDirection.OUTBOUND
       },
       select: {
         deliveryStatus: true,
@@ -257,6 +271,11 @@ export async function updateOutboundDeliveryStatusByWaMessageId(params: {
         readAt: true
       }
     });
+
+    if (!updatedMessage) {
+      throw new ServiceError(404, "MESSAGE_NOT_FOUND", "Outbound message does not exist.");
+    }
+
     nextDeliveryStatus = updatedMessage.deliveryStatus as "SENT" | "DELIVERED" | "READ" | null;
     nextDeliveredAt = updatedMessage.deliveredAt;
     nextReadAt = updatedMessage.readAt;

@@ -210,7 +210,7 @@ export function buildInvoiceTimelineEvents(params: {
     {
       id: `invoice-created-${params.invoiceId}`,
       type: "INVOICE_CREATED",
-      label: "Invoice created",
+      label: "Invoice dibuat",
       at: params.invoiceCreatedAt
     }
   ];
@@ -220,7 +220,7 @@ export function buildInvoiceTimelineEvents(params: {
       events.push({
         id: `invoice-sent-${row.id}`,
         type: "INVOICE_SENT",
-        label: "Invoice sent to customer",
+        label: "Invoice dikirim ke pelanggan",
         at: row.createdAt
       });
       continue;
@@ -229,7 +229,7 @@ export function buildInvoiceTimelineEvents(params: {
     events.push({
       id: `invoice-payment-marked-${row.id}`,
       type: "PAYMENT_MARKED",
-      label: "Payment marked by team",
+      label: "Pembayaran ditandai oleh tim",
       at: row.createdAt
     });
   }
@@ -238,7 +238,7 @@ export function buildInvoiceTimelineEvents(params: {
     events.push({
       id: `proof-attached-${proof.id}`,
       type: "PROOF_ATTACHED",
-      label: `Payment proof attached${proof.milestoneType ? ` (${proof.milestoneType})` : ""}`,
+      label: `Bukti pembayaran terlampir${proof.milestoneType ? ` (${proof.milestoneType})` : ""}`,
       at: proof.createdAt
     });
   }
@@ -251,7 +251,7 @@ export function buildInvoiceTimelineEvents(params: {
     events.push({
       id: `milestone-paid-${paid.id}`,
       type: "PAYMENT_MARKED",
-      label: `Milestone ${paid.type} marked paid`,
+      label: `Termin ${paid.type} ditandai lunas`,
       at: paid.paidAt
     });
   }
@@ -262,7 +262,7 @@ export function buildInvoiceTimelineEvents(params: {
       events.push({
         id: `invoice-completed-${params.invoiceId}`,
         type: "INVOICE_COMPLETED",
-        label: "Invoice completed (fully paid)",
+        label: "Invoice selesai (lunas penuh)",
         at: completedAt
       });
     }

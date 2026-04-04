@@ -1,0 +1,14 @@
+{
+  "suite": "smoke-ui",
+  "status": "failed",
+  "baseUrl": "http://localhost:3000",
+  "startedAt": "2026-04-04T13:49:35.035Z",
+  "endedAt": "2026-04-04T13:50:06.538Z",
+  "durationMs": 31503,
+  "failures": [
+    "locator.waitFor: Timeout 15000ms exceeded.\nCall log:\n\u001b[2m  - waiting for getByRole('heading', { name: /Invoice System/i }) to be visible\u001b[22m\n"
+  ],
+  "skippedReason": null,
+  "error": "locator.waitFor: Timeout 15000ms exceeded.\nCall log:\n\u001b[2m  - waiting for getByRole('heading', { name: /Invoice System/i }) to be visible\u001b[22m\n",
+  "meta": {}
+}

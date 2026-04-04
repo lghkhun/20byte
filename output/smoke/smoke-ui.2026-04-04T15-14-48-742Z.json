@@ -1,0 +1,16 @@
+{
+  "suite": "smoke-ui",
+  "status": "failed",
+  "baseUrl": "http://localhost:3000",
+  "startedAt": "2026-04-04T15:13:12.293Z",
+  "endedAt": "2026-04-04T15:14:48.742Z",
+  "durationMs": 96449,
+  "failures": [
+    "Inbox: realtime fallback banner is visible while token endpoint is healthy."
+  ],
+  "skippedReason": null,
+  "error": null,
+  "meta": {
+    "consoleErrorCount": 0
+  }
+}

@@ -40,6 +40,14 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 
 const STATUS_FILTERS: Array<"ALL" | InvoiceStatus> = ["ALL", "DRAFT", "SENT", "PARTIALLY_PAID", "PAID", "VOID"];
+const STATUS_FILTER_LABEL: Record<"ALL" | InvoiceStatus, string> = {
+  ALL: "Semua Status",
+  DRAFT: "Draf",
+  SENT: "Terkirim",
+  PARTIALLY_PAID: "Sebagian Lunas",
+  PAID: "Lunas",
+  VOID: "Batal"
+};
 
 type CreateConversationResponse = {
   data?: {
@@ -248,7 +256,6 @@ export function InvoicesWorkspace() {
   const [customerOptions, setCustomerOptions] = useState<CustomerOption[]>([]);
   const [isLoadingCustomers, setIsLoadingCustomers] = useState(false);
   const [hasMoreCustomers, setHasMoreCustomers] = useState(false);
-  const [customerPage, setCustomerPage] = useState(1);
   const [selectedCustomerId, setSelectedCustomerId] = useState<string>("");
   const [customerSearchText, setCustomerSearchText] = useState("");
   const [customerSearchQuery, setCustomerSearchQuery] = useState("");
@@ -505,12 +512,10 @@ export function InvoicesWorkspace() {
       if (cached?.rows) {
         setCustomerOptions(cached.rows);
         setHasMoreCustomers(cached.hasMore);
-        setCustomerPage(1);
         customerPageRef.current = 1;
       } else if (!append) {
         setCustomerOptions([]);
         setHasMoreCustomers(false);
-        setCustomerPage(1);
         customerPageRef.current = 1;
       }
       if (!options?.force && isCacheFresh) {
@@ -548,7 +553,6 @@ export function InvoicesWorkspace() {
             const uniqueRows = rows.filter((item) => !knownIds.has(item.id));
             return [...current, ...uniqueRows];
           });
-          setCustomerPage(targetPage);
           customerPageRef.current = targetPage;
           setHasMoreCustomers(hasMore);
           return;
@@ -561,7 +565,6 @@ export function InvoicesWorkspace() {
         });
         setCustomerOptions(rows);
         setHasMoreCustomers(hasMore);
-        setCustomerPage(1);
         customerPageRef.current = 1;
       } catch (loadError) {
         if (loadError instanceof DOMException && loadError.name === "AbortError") {
@@ -1314,21 +1317,18 @@ export function InvoicesWorkspace() {
     <section className="flex h-full min-h-0 flex-1 flex-col space-y-3 p-3 md:space-y-4 md:p-5">
       <div className="space-y-3 px-1 py-1 md:space-y-4">
         <div className="flex flex-wrap items-center justify-between gap-3 md:gap-4">
-          <div className="flex flex-wrap items-center gap-3 md:gap-4">
-            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-orange-50 text-orange-500 md:h-11 md:w-11 md:rounded-2xl">
-              <FileText className="h-5 w-5" />
+          <div className="flex flex-wrap items-center gap-3 lg:gap-4 2xl:gap-5">
+            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-tr from-primary/20 to-primary/5 text-primary shadow-inner ring-1 ring-primary/20 lg:h-12 lg:w-12 lg:rounded-[18px] 2xl:h-14 2xl:w-14">
+              <FileText className="h-5 w-5 lg:h-6 lg:w-6" />
             </div>
             <div>
-              <h1 className="text-xl font-semibold tracking-tight text-foreground md:text-3xl">Manajemen Invoice</h1>
-              <p className="text-xs text-muted-foreground md:text-sm">Kelola invoice, pengiriman, pelunasan, dan sinkronisasi stage CRM dari satu workspace.</p>
-              <p className={`mt-2 inline-flex items-center rounded-full border px-2.5 py-1 text-[11px] font-medium ${realtimeBadgeTone(realtimeConnectionState)}`}>
-                {realtimeBadgeLabel(realtimeConnectionState)}
-              </p>
+              <h1 className="text-xl font-bold tracking-tight text-foreground lg:text-2xl 2xl:text-3xl">Manajemen Invoice</h1>
+              <p className="text-xs text-muted-foreground lg:text-sm">Kelola invoice, pengiriman, pelunasan, dan sinkronisasi stage CRM dari satu workspace.</p>
             </div>
           </div>
           <Button
             type="button"
-            className="h-9 rounded-xl bg-emerald-600 px-4 text-white hover:bg-emerald-700"
+            className="h-10 rounded-xl px-5 shadow-md shadow-primary/20 transition-all hover:scale-[1.02]"
             onMouseEnter={() => {
               void primeCustomerPicker();
             }}
@@ -1342,7 +1342,6 @@ export function InvoicesWorkspace() {
               setCustomerSearchQuery("");
               setCustomerOptions([]);
               setHasMoreCustomers(false);
-              setCustomerPage(1);
               customerPageRef.current = 1;
               customerQueryRef.current = "";
               setNewCustomerName("");
@@ -1355,26 +1354,35 @@ export function InvoicesWorkspace() {
         </div>
       </div>
 
-      <div className="grid gap-3 md:grid-cols-3 md:gap-4">
-        <article className="rounded-xl border border-emerald-200 bg-emerald-50/70 p-4 md:rounded-2xl md:p-5">
-          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-emerald-600 md:text-sm">Invoice Lunas</p>
-          <p className="mt-2 text-2xl font-semibold text-emerald-700 md:mt-3 md:text-4xl">{summary.paid}</p>
+      <div className="grid gap-3 lg:grid-cols-3 xl:gap-4">
+        <article className="flex flex-col justify-center rounded-[14px] border border-border/70 bg-card p-3 shadow-sm transition-shadow hover:shadow-md lg:rounded-[16px] lg:p-4 2xl:rounded-[20px] 2xl:p-5">
+          <div className="flex items-center gap-2">
+            <div className="h-1.5 w-1.5 rounded-full bg-emerald-500 lg:h-2 lg:w-2"></div>
+            <p className="text-[10px] font-medium uppercase tracking-[0.12em] text-muted-foreground lg:text-[11px]">Invoice Lunas</p>
+          </div>
+          <p className="mt-1.5 text-xl font-semibold tracking-tight text-foreground lg:mt-2 lg:text-2xl 2xl:mt-2.5 2xl:text-[28px]">{summary.paid}</p>
         </article>
-        <article className="rounded-xl border border-rose-200 bg-rose-50/70 p-4 md:rounded-2xl md:p-5">
-          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-rose-600 md:text-sm">Invoice Belum Lunas</p>
-          <p className="mt-2 text-2xl font-semibold text-rose-700 md:mt-3 md:text-4xl">{summary.unpaid}</p>
+        <article className="flex flex-col justify-center rounded-[14px] border border-border/70 bg-card p-3 shadow-sm transition-shadow hover:shadow-md lg:rounded-[16px] lg:p-4 2xl:rounded-[20px] 2xl:p-5">
+          <div className="flex items-center gap-2">
+            <div className="h-1.5 w-1.5 rounded-full bg-rose-500 lg:h-2 lg:w-2"></div>
+            <p className="text-[10px] font-medium uppercase tracking-[0.12em] text-muted-foreground lg:text-[11px]">Belum Lunas</p>
+          </div>
+          <p className="mt-1.5 text-xl font-semibold tracking-tight text-foreground lg:mt-2 lg:text-2xl 2xl:mt-2.5 2xl:text-[28px]">{summary.unpaid}</p>
         </article>
-        <article className="rounded-xl border border-blue-200 bg-blue-50/70 p-4 md:rounded-2xl md:p-5">
-          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-blue-600 md:text-sm">Total Pendapatan</p>
-          <p className="mt-2 text-2xl font-semibold text-blue-700 md:mt-3 md:text-4xl">{formatMoney(summary.revenue, "IDR")}</p>
+        <article className="flex flex-col justify-center rounded-[14px] border border-border/70 bg-card p-3 shadow-sm transition-shadow hover:shadow-md lg:rounded-[16px] lg:p-4 2xl:rounded-[20px] 2xl:p-5">
+          <div className="flex items-center gap-2">
+            <div className="h-1.5 w-1.5 rounded-full bg-blue-500 lg:h-2 lg:w-2"></div>
+            <p className="text-[10px] font-medium uppercase tracking-[0.12em] text-muted-foreground lg:text-[11px]">Total Pendapatan</p>
+          </div>
+          <p className="mt-1.5 text-xl font-semibold tracking-tight text-foreground lg:mt-2 lg:text-2xl 2xl:mt-2.5 2xl:text-[28px]">{formatMoney(summary.revenue, "IDR")}</p>
         </article>
       </div>
 
-      <section className="flex min-h-0 flex-1 flex-col rounded-2xl border border-border/70 bg-card/95 p-3 shadow-sm md:p-5">
-        <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
+      <section className="flex min-h-0 flex-1 flex-col rounded-[16px] border border-border/80 bg-card p-3 shadow-md shadow-black/5 lg:rounded-2xl lg:p-4 2xl:rounded-[24px] 2xl:p-6">
+        <div className="mb-4 flex flex-wrap items-center justify-between gap-3 2xl:mb-5">
           <div>
-            <h2 className="text-xl font-semibold tracking-tight text-foreground md:text-3xl">Daftar Invoice</h2>
-            <p className="text-xs text-muted-foreground md:text-sm">Register invoice {activeBusiness?.name ?? "Bisnis"}</p>
+            <h2 className="text-lg font-semibold tracking-tight text-foreground lg:text-xl 2xl:text-2xl">Daftar Invoice</h2>
+            <p className="text-[11px] text-muted-foreground lg:text-xs 2xl:text-sm">Register invoice {activeBusiness?.name ?? "Bisnis"}</p>
           </div>
           <div className="flex w-full flex-wrap items-center gap-2 md:w-auto">
             <label className="relative block w-full md:w-auto">
@@ -1383,7 +1391,7 @@ export function InvoicesWorkspace() {
                 value={searchInput}
                 onChange={(event) => setSearchInput(event.target.value)}
                 placeholder="Cari invoice/customer..."
-                className="h-9 rounded-lg pl-10 md:h-10 md:rounded-xl"
+                className="h-10 rounded-xl pl-10 shadow-sm transition-shadow focus-visible:ring-primary/30"
               />
             </label>
             <Select
@@ -1393,13 +1401,13 @@ export function InvoicesWorkspace() {
                 setPage(1);
               }}
             >
-              <SelectTrigger className="h-9 w-full rounded-lg md:h-10 md:w-[180px] md:rounded-xl">
+              <SelectTrigger className="h-10 w-full rounded-xl bg-background shadow-sm md:w-[180px]">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
                 {STATUS_FILTERS.map((filter) => (
                   <SelectItem key={filter} value={filter}>
-                    {filter}
+                    {STATUS_FILTER_LABEL[filter]}
                   </SelectItem>
                 ))}
               </SelectContent>
