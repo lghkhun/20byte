@@ -1,18 +1,19 @@
 "use client";
 
-import { type FormEvent, useRef, useState } from "react";
+import { type FormEvent, type KeyboardEvent, useRef, useState } from "react";
 import EmojiPicker, { Theme } from "emoji-picker-react";
 import { Paperclip, Smile } from "lucide-react";
 
 import { AttachmentPendingBar } from "@/components/inbox/input/AttachmentPendingBar";
 import { isAllowedAttachmentType } from "@/components/inbox/input/utils";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { useTheme } from "next-themes";
 
 type MessageInputProps = {
   density?: "compact" | "comfy";
   disabled: boolean;
+  textValue: string;
+  onTextValueChange: (nextValue: string) => void;
   onSendText: (text: string) => Promise<void>;
   onSendAttachment: (attachment: {
     file: File;
@@ -22,11 +23,17 @@ type MessageInputProps = {
   }) => Promise<void>;
 };
 
-export function MessageInput({ density = "comfy", disabled, onSendText, onSendAttachment }: MessageInputProps) {
-  const inputRef = useRef<HTMLInputElement | null>(null);
+export function MessageInput({
+  density = "comfy",
+  disabled,
+  textValue,
+  onTextValueChange,
+  onSendText,
+  onSendAttachment
+}: MessageInputProps) {
+  const inputRef = useRef<HTMLTextAreaElement | null>(null);
   const emojiButtonRef = useRef<HTMLButtonElement | null>(null);
   const { resolvedTheme } = useTheme();
-  const [text, setText] = useState("");
   const [isSending, setIsSending] = useState(false);
   const [pendingAttachment, setPendingAttachment] = useState<{
     file: File;
@@ -38,9 +45,8 @@ export function MessageInput({ density = "comfy", disabled, onSendText, onSendAt
   const [isSendingAttachment, setIsSendingAttachment] = useState(false);
   const [isEmojiOpen, setIsEmojiOpen] = useState(false);
 
-  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    const payload = text.trim();
+  async function submitText() {
+    const payload = textValue.trim();
     if (!payload || disabled || isSending) {
       return;
     }
@@ -48,10 +54,15 @@ export function MessageInput({ density = "comfy", disabled, onSendText, onSendAt
     setIsSending(true);
     try {
       await onSendText(payload);
-      setText("");
+      onTextValueChange("");
     } finally {
       setIsSending(false);
     }
+  }
+
+  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    await submitText();
   }
 
   async function handleSendAttachment() {
@@ -69,23 +80,42 @@ export function MessageInput({ density = "comfy", disabled, onSendText, onSendAt
     }
   }
 
+  function handleKeyDown(event: KeyboardEvent<HTMLTextAreaElement>) {
+    if (event.key !== "Enter") {
+      return;
+    }
+
+    if (event.shiftKey) {
+      return;
+    }
+
+    if (event.nativeEvent.isComposing) {
+      return;
+    }
+
+    event.preventDefault();
+    void submitText();
+  }
+
   return (
     <form
       className={`space-y-3 border-t border-border/80 bg-card/95 backdrop-blur-sm ${density === "compact" ? "px-3 py-3 sm:px-4" : "px-3 py-3 sm:px-5 sm:py-4"}`}
       onSubmit={handleSubmit}
     >
       <div
-        className={`relative flex items-center gap-2 rounded-2xl border border-border bg-background/95 shadow-sm transition ${
+        className={`relative flex items-end gap-2 rounded-2xl border border-border bg-background/95 shadow-sm transition ${
           density === "compact" ? "px-2 py-2" : "px-2 py-2.5 sm:px-3"
         }`}
       >
-        <Input
+        <textarea
           ref={inputRef}
-          value={text}
-          onChange={(event) => setText(event.target.value)}
-          placeholder="Enter message..."
+          value={textValue}
+          onChange={(event) => onTextValueChange(event.target.value)}
+          onKeyDown={handleKeyDown}
+          placeholder="Ketik pesan..."
           disabled={disabled || isSending}
-          className="h-8 border-0 bg-transparent p-0 text-sm shadow-none placeholder:text-muted-foreground/80 focus-visible:ring-0"
+          rows={1}
+          className="max-h-40 min-h-8 flex-1 resize-none border-0 bg-transparent px-0 py-0 text-sm shadow-none placeholder:text-muted-foreground/80 focus-visible:outline-none"
         />
         <div className="flex items-center gap-1">
           <Button
@@ -94,7 +124,7 @@ export function MessageInput({ density = "comfy", disabled, onSendText, onSendAt
             variant="ghost"
             size="icon"
             className="h-8 w-8 rounded-md text-muted-foreground"
-            title="Insert emoji"
+            title="Sisipkan emoji"
             onClick={() => {
               setIsEmojiOpen((current) => !current);
             }}
@@ -115,7 +145,7 @@ export function MessageInput({ density = "comfy", disabled, onSendText, onSendAt
                 }
 
                 if (!isAllowedAttachmentType(file.type)) {
-                  setAttachmentError("Attachment type is not supported.");
+                  setAttachmentError("Tipe lampiran belum didukung.");
                   return;
                 }
 
@@ -130,8 +160,8 @@ export function MessageInput({ density = "comfy", disabled, onSendText, onSendAt
             />
           </label>
         </div>
-        <Button type="submit" disabled={disabled || isSending} className="h-9 rounded-xl px-3 shadow-sm sm:px-5">
-          {isSending ? "Sending..." : "Send"}
+        <Button type="submit" disabled={disabled || isSending} className="h-9 rounded-xl px-4 shadow-md shadow-primary/20 sm:px-6">
+          {isSending ? "Mengirim..." : "Kirim"}
         </Button>
         {isEmojiOpen ? (
           <div className="absolute bottom-[calc(100%_+_12px)] right-0 z-20 overflow-hidden rounded-2xl border border-border bg-card shadow-2xl">
@@ -139,7 +169,7 @@ export function MessageInput({ density = "comfy", disabled, onSendText, onSendAt
               lazyLoadEmojis
               theme={resolvedTheme === "dark" ? Theme.DARK : Theme.LIGHT}
               onEmojiClick={(emojiData) => {
-                setText((current) => `${current}${emojiData.emoji}`);
+                onTextValueChange(`${textValue}${emojiData.emoji}`);
                 setIsEmojiOpen(false);
                 inputRef.current?.focus();
               }}
@@ -147,6 +177,8 @@ export function MessageInput({ density = "comfy", disabled, onSendText, onSendAt
           </div>
         ) : null}
       </div>
+
+      <p className="text-[11px] text-muted-foreground">`Enter` untuk kirim, `Shift + Enter` untuk baris baru.</p>
 
       {pendingAttachment ? (
         <AttachmentPendingBar

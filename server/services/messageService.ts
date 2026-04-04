@@ -1,6 +1,6 @@
 export { storeInboundMessage } from "@/server/services/message/inbound";
 export { retryOutboundMessage, sendOutboundMessage } from "@/server/services/message/outbound";
-export { listConversationMessages } from "@/server/services/message/listing";
+export { listConversationMessages, searchConversationMessages } from "@/server/services/message/listing";
 
 export type {
   InboundStoreResult,
@@ -8,6 +8,8 @@ export type {
   MessageListResult,
   OutboundStoreResult,
   RetryOutboundMessageInput,
+  SearchConversationMessagesInput,
+  SearchConversationMessagesResult,
   SendOutboundMessageInput,
   StoreInboundMessageInput
 } from "@/server/services/message/messageTypes";

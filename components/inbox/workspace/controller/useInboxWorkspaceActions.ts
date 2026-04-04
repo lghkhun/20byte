@@ -3,6 +3,7 @@
 import { useCallback } from "react";
 
 import type { AssignConversationResponse, DeleteConversationResponse, SendMessageResponse, UpdateConversationStatusResponse } from "@/components/inbox/workspace/types";
+import { recordInboxTelemetry } from "@/components/inbox/workspace/controller/inboxTelemetry";
 
 import { useInboxWorkspaceCrmInvoiceActions } from "./useInboxWorkspaceCrmInvoiceActions";
 import type { InboxWorkspaceLoaders } from "./useInboxWorkspaceLoaders";
@@ -14,6 +15,7 @@ export function useInboxWorkspaceActions(state: InboxWorkspaceState, loaders: In
     orgId,
     selectedConversationId,
     selectedConversation,
+    realtimeConnectionState,
     isUpdatingConversationStatus,
     isAssigning,
     conversations,
@@ -35,6 +37,20 @@ export function useInboxWorkspaceActions(state: InboxWorkspaceState, loaders: In
 
   const { loadConversation, loadConversations, loadMessages } = loaders;
   const loadConversationsBackground = useCallback(() => loadConversations({ background: true }), [loadConversations]);
+  const reconcileSendWithoutRealtime = useCallback(async () => {
+    if (!selectedConversationId) {
+      return;
+    }
+
+    if (realtimeConnectionState === "connected") {
+      return;
+    }
+
+    await Promise.all([
+      loadMessages(selectedConversationId, { background: true }),
+      loadConversationsBackground()
+    ]);
+  }, [loadConversationsBackground, loadMessages, realtimeConnectionState, selectedConversationId]);
 
   const selectConversation = useCallback(
     (conversationId: string) => {
@@ -71,6 +87,7 @@ export function useInboxWorkspaceActions(state: InboxWorkspaceState, loaders: In
         return;
       }
 
+      const startedAt = performance.now();
       setMessageError(null);
       const response = await fetch("/api/inbox/send", {
         method: "POST",
@@ -80,14 +97,25 @@ export function useInboxWorkspaceActions(state: InboxWorkspaceState, loaders: In
 
       const payload = (await response.json().catch(() => null)) as SendMessageResponse | null;
       if (!response.ok) {
-        setMessageError(payload?.error?.message ?? "Failed to send message.");
-        await Promise.all([loadMessages(selectedConversationId), loadConversationsBackground()]);
+        recordInboxTelemetry("send_latency_ms", Number((performance.now() - startedAt).toFixed(1)), {
+          orgId,
+          conversationId: selectedConversationId
+        });
+        setMessageError(payload?.error?.message ?? "Gagal mengirim pesan.");
+        await Promise.all([
+          loadMessages(selectedConversationId, { background: true }),
+          loadConversationsBackground()
+        ]);
         return;
       }
 
-      await Promise.all([loadMessages(selectedConversationId), loadConversationsBackground()]);
+      recordInboxTelemetry("send_latency_ms", Number((performance.now() - startedAt).toFixed(1)), {
+        orgId,
+        conversationId: selectedConversationId
+      });
+      await reconcileSendWithoutRealtime();
     },
-    [loadConversationsBackground, loadMessages, orgId, selectedConversationId, setMessageError]
+    [loadConversationsBackground, loadMessages, orgId, reconcileSendWithoutRealtime, selectedConversationId, setMessageError]
   );
 
   const createConversation = useCallback(
@@ -113,7 +141,7 @@ export function useInboxWorkspaceActions(state: InboxWorkspaceState, loaders: In
         | null;
 
       if (!response.ok) {
-        throw new Error(payload?.error?.message ?? "Failed to create conversation.");
+        throw new Error(payload?.error?.message ?? "Gagal membuat percakapan.");
       }
 
       await loadConversations();
@@ -133,6 +161,7 @@ export function useInboxWorkspaceActions(state: InboxWorkspaceState, loaders: In
         return;
       }
 
+      const startedAt = performance.now();
       setMessageError(null);
       const response = await fetch("/api/inbox/send", {
         method: "POST",
@@ -149,14 +178,25 @@ export function useInboxWorkspaceActions(state: InboxWorkspaceState, loaders: In
 
       const payload = (await response.json().catch(() => null)) as SendMessageResponse | null;
       if (!response.ok) {
-        setMessageError(payload?.error?.message ?? "Failed to send template message.");
-        await Promise.all([loadMessages(selectedConversationId), loadConversationsBackground()]);
+        recordInboxTelemetry("send_latency_ms", Number((performance.now() - startedAt).toFixed(1)), {
+          orgId,
+          conversationId: selectedConversationId
+        });
+        setMessageError(payload?.error?.message ?? "Gagal mengirim template pesan.");
+        await Promise.all([
+          loadMessages(selectedConversationId, { background: true }),
+          loadConversationsBackground()
+        ]);
         return;
       }
 
-      await Promise.all([loadMessages(selectedConversationId), loadConversationsBackground()]);
+      recordInboxTelemetry("send_latency_ms", Number((performance.now() - startedAt).toFixed(1)), {
+        orgId,
+        conversationId: selectedConversationId
+      });
+      await reconcileSendWithoutRealtime();
     },
-    [loadConversationsBackground, loadMessages, orgId, selectedConversationId, setMessageError]
+    [loadConversationsBackground, loadMessages, orgId, reconcileSendWithoutRealtime, selectedConversationId, setMessageError]
   );
 
   const sendAttachmentMessage = useCallback(
@@ -165,6 +205,7 @@ export function useInboxWorkspaceActions(state: InboxWorkspaceState, loaders: In
         return;
       }
 
+      const startedAt = performance.now();
       setMessageError(null);
       const body = new FormData();
       body.set("conversationId", selectedConversationId);
@@ -178,14 +219,25 @@ export function useInboxWorkspaceActions(state: InboxWorkspaceState, loaders: In
 
       const payload = (await response.json().catch(() => null)) as SendMessageResponse | null;
       if (!response.ok) {
-        setMessageError(payload?.error?.message ?? "Failed to process attachment.");
-        await Promise.all([loadMessages(selectedConversationId), loadConversationsBackground()]);
+        recordInboxTelemetry("send_latency_ms", Number((performance.now() - startedAt).toFixed(1)), {
+          orgId,
+          conversationId: selectedConversationId
+        });
+        setMessageError(payload?.error?.message ?? "Gagal memproses lampiran.");
+        await Promise.all([
+          loadMessages(selectedConversationId, { background: true }),
+          loadConversationsBackground()
+        ]);
         return;
       }
 
-      await Promise.all([loadMessages(selectedConversationId), loadConversationsBackground()]);
+      recordInboxTelemetry("send_latency_ms", Number((performance.now() - startedAt).toFixed(1)), {
+        orgId,
+        conversationId: selectedConversationId
+      });
+      await reconcileSendWithoutRealtime();
     },
-    [loadConversationsBackground, loadMessages, orgId, selectedConversationId, setMessageError]
+    [loadConversationsBackground, loadMessages, orgId, reconcileSendWithoutRealtime, selectedConversationId, setMessageError]
   );
 
   const toggleSelectedConversationStatus = useCallback(async () => {
@@ -205,13 +257,13 @@ export function useInboxWorkspaceActions(state: InboxWorkspaceState, loaders: In
 
       const payload = (await response.json().catch(() => null)) as UpdateConversationStatusResponse | null;
       if (!response.ok) {
-        setAssignError(payload?.error?.message ?? "Failed to update conversation status.");
+        setAssignError(payload?.error?.message ?? "Gagal memperbarui status percakapan.");
         return;
       }
 
       await loadConversationsBackground();
     } catch {
-      setAssignError("Network error while updating conversation status.");
+      setAssignError("Terjadi masalah jaringan saat memperbarui status percakapan.");
     } finally {
       setIsUpdatingConversationStatus(false);
     }
@@ -238,13 +290,13 @@ export function useInboxWorkspaceActions(state: InboxWorkspaceState, loaders: In
 
       const payload = (await response.json().catch(() => null)) as DeleteConversationResponse | null;
       if (!response.ok) {
-        setAssignError(payload?.error?.message ?? "Failed to delete conversation.");
+        setAssignError(payload?.error?.message ?? "Gagal menghapus percakapan.");
         return;
       }
 
       await loadConversationsBackground();
     } catch {
-      setAssignError("Network error while deleting conversation.");
+      setAssignError("Terjadi masalah jaringan saat menghapus percakapan.");
     }
   }, [loadConversationsBackground, orgId, selectedConversationId, setAssignError]);
 
@@ -263,13 +315,13 @@ export function useInboxWorkspaceActions(state: InboxWorkspaceState, loaders: In
 
       const payload = (await response.json().catch(() => null)) as SendMessageResponse | null;
       if (!response.ok) {
-        setMessageError(payload?.error?.message ?? "Failed to retry outbound message.");
+        setMessageError(payload?.error?.message ?? "Gagal mengirim ulang pesan outbound.");
         return;
       }
 
-      await Promise.all([loadMessages(selectedConversationId), loadConversationsBackground()]);
+      await reconcileSendWithoutRealtime();
     },
-    [loadConversationsBackground, loadMessages, orgId, selectedConversationId, setMessageError]
+    [orgId, reconcileSendWithoutRealtime, selectedConversationId, setMessageError]
   );
 
   const assignSelectedConversationToMe = useCallback(async () => {
@@ -288,13 +340,13 @@ export function useInboxWorkspaceActions(state: InboxWorkspaceState, loaders: In
 
       const payload = (await response.json().catch(() => null)) as AssignConversationResponse | null;
       if (!response.ok) {
-        setAssignError(payload?.error?.message ?? "Failed to assign conversation.");
+        setAssignError(payload?.error?.message ?? "Gagal meng-assign percakapan.");
         return;
       }
 
       await loadConversationsBackground();
     } catch {
-      setAssignError("Network error while assigning conversation.");
+      setAssignError("Terjadi masalah jaringan saat meng-assign percakapan.");
     } finally {
       setIsAssigning(false);
     }

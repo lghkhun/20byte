@@ -28,6 +28,8 @@ export function InboxWorkspace() {
     hasLoadedOrganizations,
     error,
     isLoadingList,
+    isLoadingMoreConversations,
+    hasMoreConversations,
     conversations,
     selectedConversationId,
     setSelectedConversationId,
@@ -37,12 +39,18 @@ export function InboxWorkspace() {
     statusFilter,
     setFilter,
     setStatusFilter,
+    conversationSearchQuery,
+    setConversationSearchQuery,
     loadConversation,
     loadConversations,
+    loadMoreConversations,
     selectedConversation,
     isUpdatingConversationStatus,
     messages,
     isLoadingMessages,
+    isLoadingOlderMessages,
+    hasMoreMessages,
+    loadOlderMessages,
     messageError,
     sendTextMessage,
     createConversation,
@@ -78,7 +86,8 @@ export function InboxWorkspace() {
     isProofShortcutModalOpen,
     setIsProofShortcutModalOpen,
     isInvoiceDrawerOpen,
-    setIsInvoiceDrawerOpen
+    setIsInvoiceDrawerOpen,
+    realtimeConnectionState
   } = useInboxWorkspaceController();
 
   useInboxSelectedConversationPersistence({
@@ -175,21 +184,43 @@ export function InboxWorkspace() {
     ? "grid h-full min-h-0 gap-2 lg:gap-3 lg:grid-cols-[var(--inbox-list-panel-width,340px)_minmax(0,1fr)_minmax(260px,var(--crm-panel-width))]"
     : "grid h-full min-h-0 gap-2 lg:gap-3 lg:grid-cols-[var(--inbox-list-panel-width,340px)_minmax(0,1fr)]";
 
+  const realtimeBanner =
+    realtimeConnectionState === "connected"
+      ? null
+      : realtimeConnectionState === "fallback"
+        ? {
+            text: "Realtime terputus, saat ini memakai fallback polling.",
+            className: "border-amber-500/30 bg-amber-500/10 text-amber-700 dark:text-amber-300"
+          }
+        : realtimeConnectionState === "connecting" || realtimeConnectionState === "initialized"
+          ? {
+              text: "Menyambungkan realtime inbox...",
+              className: "border-sky-500/30 bg-sky-500/10 text-sky-700 dark:text-sky-300"
+            }
+          : {
+              text: "Koneksi realtime bermasalah, mencoba reconnect otomatis.",
+              className: "border-destructive/30 bg-destructive/10 text-destructive"
+            };
+
   return (
     <section className="flex h-full min-h-0 flex-1 overflow-hidden">
       {!orgId && hasLoadedOrganizations && !error ? (
         <EmptyStatePanel
-          title="No Business Found"
-          message="No business is linked to this account yet."
+          title="Bisnis Belum Tersedia"
+          message="Belum ada bisnis yang terhubung ke akun ini."
         />
       ) : null}
 
       {orgId && error && !isLoadingList ? (
-        <ErrorStatePanel title="Inbox Load Error" message={error} />
+        <ErrorStatePanel title="Gagal Memuat Inbox" message={error} />
       ) : null}
 
       {orgId ? (
         <div className="flex h-full min-h-0 flex-1 flex-col overflow-hidden">
+          {realtimeBanner ? (
+            <div className={`mb-2 rounded-xl border px-3 py-2 text-sm ${realtimeBanner.className}`}>{realtimeBanner.text}</div>
+          ) : null}
+
           <div className="mb-2 flex items-center gap-2 rounded-xl border border-border/80 bg-card/85 p-1.5 shadow-sm lg:hidden">
             <Button
               type="button"
@@ -198,7 +229,7 @@ export function InboxWorkspace() {
               className="h-8 flex-1 rounded-lg"
               onClick={() => setMobilePane("list")}
             >
-              Conversations
+              Percakapan
             </Button>
             <Button
               type="button"
@@ -223,16 +254,23 @@ export function InboxWorkspace() {
                 selectedConversationId={selectedConversationId}
                 filter={filter}
                 status={statusFilter}
+                searchQuery={conversationSearchQuery}
                 isLoading={isLoadingList}
+                isLoadingMore={isLoadingMoreConversations}
+                hasMore={hasMoreConversations}
                 error={error}
                 onFilterChange={(nextFilter) => setFilter(nextFilter)}
                 onStatusChange={(nextStatus) => setStatusFilter(nextStatus)}
+                onSearchQueryChange={(nextQuery) => setConversationSearchQuery(nextQuery)}
                 onSelectConversation={(conversationId) => {
                   selectConversation(conversationId);
                   setMobilePane("chat");
                 }}
                 onRefresh={() => {
                   void loadConversations();
+                }}
+                onLoadMore={() => {
+                  void loadMoreConversations();
                 }}
                 onCreateConversation={createConversation}
               />
@@ -241,7 +279,7 @@ export function InboxWorkspace() {
             <div className={`inbox-scroll min-h-0 min-w-0 max-h-full overflow-y-auto overscroll-contain ${mobilePane === "list" ? "hidden lg:block" : ""} ${mobilePane === "chat" ? "inbox-fade-slide" : ""}`}>
               <div className="mb-2 flex items-center justify-between gap-2 lg:hidden">
                 <Button type="button" variant="ghost" size="sm" className="h-8" onClick={() => setMobilePane("list")}>
-                  Back to conversations
+                  Kembali ke percakapan
                 </Button>
                 <Button
                   type="button"
@@ -260,6 +298,8 @@ export function InboxWorkspace() {
                 isUpdatingConversationStatus={isUpdatingConversationStatus}
                 messages={messages}
                 isLoading={isLoadingMessages}
+                isLoadingOlderMessages={isLoadingOlderMessages}
+                hasMoreMessages={hasMoreMessages}
                 isConversationSelected={Boolean(selectedConversationId)}
                 isCustomerTyping={Boolean(selectedConversationId && typingConversationId === selectedConversationId)}
                 error={messageError}
@@ -270,6 +310,7 @@ export function InboxWorkspace() {
                 onToggleConversationStatus={toggleSelectedConversationStatus}
                 onDeleteConversation={deleteSelectedConversation}
                 onRetryOutboundMessage={retryOutboundMessage}
+                onLoadOlderMessages={loadOlderMessages}
                 onSelectProofMessage={(messageId) => {
                   setSelectedProofMessageId(messageId);
                   setProofFeedback(null);

@@ -1,5 +1,6 @@
 export type CoreEventType =
   | "message.new"
+  | "message.status"
   | "conversation.updated"
   | "conversation.typing"
   | "assignment.changed"
@@ -22,6 +23,19 @@ export type MessageNewEventPayload = BaseEventPayload & {
   conversationId: string;
   messageId: string;
   direction: "INBOUND" | "OUTBOUND";
+};
+
+export type MessageStatusEventPayload = BaseEventPayload & {
+  type: "message.status";
+  conversationId: string;
+  messageId: string;
+  sendStatus: "PENDING" | "SENT" | "FAILED" | null;
+  deliveryStatus: "SENT" | "DELIVERED" | "READ" | null;
+  sendError: string | null;
+  retryable: boolean;
+  sendAttemptCount: number;
+  deliveredAt: string | null;
+  readAt: string | null;
 };
 
 export type ConversationUpdatedEventPayload = BaseEventPayload & {
@@ -102,6 +116,35 @@ export function buildMessageNewEventPayload(input: {
     conversationId: requireTrimmed(input.conversationId, "conversationId"),
     messageId: requireTrimmed(input.messageId, "messageId"),
     direction: input.direction
+  };
+}
+
+export function buildMessageStatusEventPayload(input: {
+  orgId: string;
+  conversationId: string;
+  messageId: string;
+  sendStatus: "PENDING" | "SENT" | "FAILED" | null;
+  deliveryStatus: "SENT" | "DELIVERED" | "READ" | null;
+  sendError: string | null;
+  retryable: boolean;
+  sendAttemptCount: number;
+  deliveredAt?: Date | string | null;
+  readAt?: Date | string | null;
+}): MessageStatusEventPayload {
+  return {
+    type: "message.status",
+    orgId: requireTrimmed(input.orgId, "orgId"),
+    entityId: requireTrimmed(input.messageId, "messageId"),
+    timestamp: nowIso(),
+    conversationId: requireTrimmed(input.conversationId, "conversationId"),
+    messageId: requireTrimmed(input.messageId, "messageId"),
+    sendStatus: input.sendStatus,
+    deliveryStatus: input.deliveryStatus,
+    sendError: input.sendError,
+    retryable: Boolean(input.retryable),
+    sendAttemptCount: Math.max(0, Math.floor(input.sendAttemptCount)),
+    deliveredAt: input.deliveredAt ? new Date(input.deliveredAt).toISOString() : null,
+    readAt: input.readAt ? new Date(input.readAt).toISOString() : null
   };
 }
 

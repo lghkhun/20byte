@@ -1,4 +1,5 @@
 import { ConversationStatus } from "@prisma/client";
+import type { Prisma } from "@prisma/client";
 
 import { prisma } from "@/lib/db/prisma";
 import { requireInboxMembership } from "@/server/services/conversation/access";
@@ -17,13 +18,10 @@ export async function listConversations(input: ListConversationsInput): Promise<
   const limit = normalizeLimit(input.limit);
   const filter = input.filter ?? "UNASSIGNED";
   const status = input.status ?? ConversationStatus.OPEN;
+  const query = normalizeValue(input.query ?? "");
   const actorMembership = await requireInboxMembership(input.actorUserId, orgId);
 
-  const where: {
-    orgId: string;
-    status: ConversationStatus;
-    assignedToMemberId?: string | null;
-  } = {
+  const where: Prisma.ConversationWhereInput = {
     orgId,
     status
   };
@@ -32,6 +30,34 @@ export async function listConversations(input: ListConversationsInput): Promise<
     where.assignedToMemberId = null;
   } else if (filter === "MY") {
     where.assignedToMemberId = actorMembership.id;
+  }
+
+  if (query) {
+    where.OR = [
+      {
+        customer: {
+          displayName: {
+            contains: query
+          }
+        }
+      },
+      {
+        customer: {
+          phoneE164: {
+            contains: query
+          }
+        }
+      },
+      {
+        messages: {
+          some: {
+            text: {
+              contains: query
+            }
+          }
+        }
+      }
+    ];
   }
 
   const [groupedCustomers, rows] = await prisma.$transaction([

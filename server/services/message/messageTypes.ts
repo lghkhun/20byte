@@ -60,7 +60,7 @@ export type ListMessagesInput = {
   actorUserId: string;
   orgId: string;
   conversationId: string;
-  page?: number;
+  beforeMessageId?: string;
   limit?: number;
 };
 
@@ -89,9 +89,27 @@ export type MessageListItem = {
 
 export type MessageListResult = {
   messages: MessageListItem[];
-  page: number;
   limit: number;
+  hasMore: boolean;
+  nextBeforeMessageId: string | null;
   total: number;
+};
+
+export type SearchConversationMessagesInput = {
+  actorUserId: string;
+  orgId: string;
+  conversationId: string;
+  query: string;
+  limit?: number;
+};
+
+export type SearchConversationMessagesResult = {
+  messages: Array<{
+    id: string;
+    text: string;
+    createdAt: Date;
+  }>;
+  limit: number;
 };
 
 export type ResolvedAttribution = {

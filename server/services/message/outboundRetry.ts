@@ -1,16 +1,20 @@
 import { MessageDirection, MessageType } from "@prisma/client";
 
 import { prisma } from "@/lib/db/prisma";
+import { readBaileysMediaFile } from "@/server/services/baileysService";
 import type { OutboundStoreResult, RetryOutboundMessageInput } from "@/server/services/message/messageTypes";
 import { normalize, normalizeSendError, normalizeTemplateLanguageCode, parseTemplateComponentsJson } from "@/server/services/message/messageUtils";
+import { isRetryableOutboundType } from "@/server/services/message/retryPolicy";
 import { ServiceError } from "@/server/services/serviceError";
 import {
   getOrgWaConnection,
   requireInboxMembership,
+  sendOutboundMediaWithRetry,
   sendOutboundTemplateWithRetry,
   sendOutboundTextWithRetry,
   updateOutboundSendResult
 } from "@/server/services/message/outboundShared";
+export { isRetryableOutboundType } from "@/server/services/message/retryPolicy";
 
 export async function retryOutboundMessage(input: RetryOutboundMessageInput): Promise<OutboundStoreResult> {
   const orgId = normalize(input.orgId);
@@ -39,6 +43,9 @@ export async function retryOutboundMessage(input: RetryOutboundMessageInput): Pr
       conversationId: true,
       type: true,
       text: true,
+      mediaId: true,
+      fileName: true,
+      mimeType: true,
       templateName: true,
       templateCategory: true,
       templateLanguageCode: true,
@@ -59,8 +66,9 @@ export async function retryOutboundMessage(input: RetryOutboundMessageInput): Pr
     throw new ServiceError(404, "FAILED_MESSAGE_NOT_FOUND", "Failed outbound message not found.");
   }
 
-  if (message.type !== MessageType.TEXT && message.type !== MessageType.TEMPLATE) {
-    throw new ServiceError(400, "MESSAGE_NOT_RETRYABLE", "Only TEXT or TEMPLATE messages can be retried.");
+  const isRetryableType = isRetryableOutboundType(message.type);
+  if (!isRetryableType) {
+    throw new ServiceError(400, "MESSAGE_NOT_RETRYABLE", "Only TEXT, TEMPLATE, or media outbound messages can be retried.");
   }
 
   const connection = await getOrgWaConnection(orgId);
@@ -78,7 +86,7 @@ export async function retryOutboundMessage(input: RetryOutboundMessageInput): Pr
         to: message.conversation.customer.phoneE164,
         text
       });
-    } else {
+    } else if (message.type === MessageType.TEMPLATE) {
       const templateName = normalize(message.templateName ?? "");
       if (!templateName) {
         throw new ServiceError(400, "INVALID_TEMPLATE_NAME", "Template name is empty.");
@@ -90,6 +98,21 @@ export async function retryOutboundMessage(input: RetryOutboundMessageInput): Pr
         templateName,
         languageCode: normalizeTemplateLanguageCode(message.templateLanguageCode ?? "en"),
         components: parseTemplateComponentsJson(message.templateComponentsJson)
+      });
+    } else {
+      if (!message.mediaId || !message.fileName) {
+        throw new ServiceError(400, "INVALID_MEDIA_ATTACHMENT", "Attachment media payload is incomplete.");
+      }
+
+      const mediaBuffer = await readBaileysMediaFile(orgId, message.mediaId);
+      waMessageId = await sendOutboundMediaWithRetry({
+        orgId: connection.orgId,
+        to: message.conversation.customer.phoneE164,
+        type: message.type as "IMAGE" | "VIDEO" | "AUDIO" | "DOCUMENT",
+        fileName: message.fileName,
+        mimeType: message.mimeType ?? undefined,
+        caption: message.text ?? undefined,
+        buffer: mediaBuffer
       });
     }
 
@@ -105,7 +128,7 @@ export async function retryOutboundMessage(input: RetryOutboundMessageInput): Pr
     return {
       messageId: message.id,
       waMessageId,
-      type: message.type as "TEXT" | "TEMPLATE" | "SYSTEM",
+      type: message.type as "TEXT" | "IMAGE" | "VIDEO" | "AUDIO" | "DOCUMENT" | "TEMPLATE" | "SYSTEM",
       sendStatus: "SENT",
       deliveryStatus: "SENT",
       sendError: null,

@@ -9,6 +9,7 @@ import {
   buildCustomerUpdatedEventPayload,
   buildInvoiceEventPayload,
   buildMessageNewEventPayload,
+  buildMessageStatusEventPayload,
   buildOrgChannelName,
   buildProofAttachedEventPayload,
   buildStorageUpdatedEventPayload
@@ -59,6 +60,28 @@ export async function publishMessageNewEvent(input: {
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unknown realtime publish error";
     console.error(`[realtime] failed to publish message.new: ${message}`);
+  }
+}
+
+export async function publishMessageStatusEvent(input: {
+  orgId: string;
+  conversationId: string;
+  messageId: string;
+  sendStatus: "PENDING" | "SENT" | "FAILED" | null;
+  deliveryStatus: "SENT" | "DELIVERED" | "READ" | null;
+  sendError: string | null;
+  retryable: boolean;
+  sendAttemptCount: number;
+  deliveredAt?: Date | string | null;
+  readAt?: Date | string | null;
+}): Promise<void> {
+  const payload = buildMessageStatusEventPayload(input);
+
+  try {
+    await publishOrgEvent(payload);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Unknown realtime publish error";
+    console.error(`[realtime] failed to publish message.status: ${message}`);
   }
 }
 

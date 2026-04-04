@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Plus, RefreshCw, Search } from "lucide-react";
+import { Loader2, Plus, RefreshCw, Search } from "lucide-react";
 
 import { ConversationRow } from "@/components/inbox/conversation-list/ConversationRow";
 import { ConversationListSkeleton } from "@/components/inbox/conversation-list/ConversationListSkeleton";
@@ -16,12 +16,17 @@ type ConversationListPanelProps = {
   selectedConversationId: string | null;
   filter: ConversationListFilter;
   status: ConversationStatusFilter;
+  searchQuery: string;
   isLoading: boolean;
+  isLoadingMore: boolean;
+  hasMore: boolean;
   error: string | null;
   onFilterChange: (nextFilter: ConversationListFilter) => void;
   onStatusChange: (nextStatus: ConversationStatusFilter) => void;
+  onSearchQueryChange: (nextQuery: string) => void;
   onSelectConversation: (conversationId: string) => void;
   onRefresh: () => void;
+  onLoadMore: () => void;
   onCreateConversation: (input: { phoneE164: string; customerDisplayName?: string }) => Promise<void>;
 };
 
@@ -31,15 +36,19 @@ export function ConversationListPanel({
   selectedConversationId,
   filter,
   status,
+  searchQuery,
   isLoading,
+  isLoadingMore,
+  hasMore,
   error,
   onFilterChange,
   onStatusChange,
+  onSearchQueryChange,
   onSelectConversation,
   onRefresh,
+  onLoadMore,
   onCreateConversation
 }: ConversationListPanelProps) {
-  const [searchText, setSearchText] = useState("");
   const [isNewMessageOpen, setIsNewMessageOpen] = useState(false);
   const [newPhone, setNewPhone] = useState("");
   const [newName, setNewName] = useState("");
@@ -48,26 +57,21 @@ export function ConversationListPanel({
   const [showUnreadOnly, setShowUnreadOnly] = useState(false);
   const [nowMs, setNowMs] = useState(() => Date.now());
   const searchInputRef = useRef<HTMLInputElement | null>(null);
+
   const filteredConversations = useMemo(() => {
-    const query = searchText.trim().toLowerCase();
     const nextItems = conversations.filter((conversation) => {
       if (showUnreadOnly && conversation.unreadCount <= 0) {
         return false;
       }
-
-      if (!query) {
-        return true;
-      }
-
-      const haystacks = [conversation.customerDisplayName ?? "", conversation.customerPhoneE164, conversation.lastMessagePreview ?? ""];
-      return haystacks.some((value) => value.toLowerCase().includes(query));
+      return true;
     });
+
     return nextItems.sort((left, right) => {
       const leftTime = new Date(left.lastMessageAt ?? left.updatedAt).getTime();
       const rightTime = new Date(right.lastMessageAt ?? right.updatedAt).getTime();
       return rightTime - leftTime;
     });
-  }, [conversations, searchText, showUnreadOnly]);
+  }, [conversations, showUnreadOnly]);
 
   useEffect(() => {
     const timer = window.setInterval(() => {
@@ -79,7 +83,7 @@ export function ConversationListPanel({
   const tabItems = [
     {
       key: "all",
-      label: "All",
+      label: "Semua",
       count: conversations.length,
       isActive: filter === "ALL" && status === "OPEN" && !showUnreadOnly,
       onClick: () => {
@@ -90,7 +94,7 @@ export function ConversationListPanel({
     },
     {
       key: "unassigned",
-      label: "Unassigned",
+      label: "Belum Assign",
       count: conversations.filter((item) => item.assignedToMemberId === null && item.status === "OPEN").length,
       isActive: filter === "UNASSIGNED" && status === "OPEN" && !showUnreadOnly,
       onClick: () => {
@@ -101,7 +105,7 @@ export function ConversationListPanel({
     },
     {
       key: "unread",
-      label: "Unread",
+      label: "Belum Dibaca",
       count: conversations.filter((item) => item.unreadCount > 0 && item.status === "OPEN").length,
       isActive: showUnreadOnly && status === "OPEN",
       onClick: () => {
@@ -112,7 +116,7 @@ export function ConversationListPanel({
     },
     {
       key: "resolved",
-      label: "Resolved",
+      label: "Selesai",
       count: status === "CLOSED" ? conversations.length : 0,
       isActive: status === "CLOSED",
       onClick: () => {
@@ -129,7 +133,7 @@ export function ConversationListPanel({
         <div className="flex items-center justify-between gap-3">
           <div className="space-y-1">
             <h2 className="text-lg font-semibold tracking-tight text-foreground">Inbox</h2>
-            <p className="text-xs text-muted-foreground">{filteredConversations.length} active conversations</p>
+            <p className="text-xs text-muted-foreground">{filteredConversations.length} percakapan aktif</p>
           </div>
           <IndicatorLegend compact />
         </div>
@@ -154,9 +158,9 @@ export function ConversationListPanel({
             <Input
               ref={searchInputRef}
               type="text"
-              value={searchText}
-              onChange={(event) => setSearchText(event.target.value)}
-              placeholder="Search..."
+              value={searchQuery}
+              onChange={(event) => onSearchQueryChange(event.target.value)}
+              placeholder="Cari nama, nomor, atau isi chat..."
               className="h-10 rounded-xl border-border/80 bg-background/80 pl-9"
             />
           </label>
@@ -164,8 +168,8 @@ export function ConversationListPanel({
             type="button"
             variant="default"
             size="sm"
-            className="h-10 gap-2 rounded-xl border border-primary/70 bg-primary px-3 text-primary-foreground hover:bg-primary/90"
-            title="Start new chat workflow"
+            className="h-10 gap-2 rounded-xl border border-primary/70 bg-primary px-3 text-primary-foreground shadow-md shadow-primary/20 hover:bg-primary/90"
+            title="Mulai chat baru"
             onClick={() => {
               setCreateError(null);
               setNewPhone("");
@@ -174,7 +178,7 @@ export function ConversationListPanel({
             }}
           >
             <Plus className="h-4 w-4" />
-            <span className="hidden sm:inline">New</span>
+            <span className="hidden sm:inline">Baru</span>
           </Button>
           <Button
             type="button"
@@ -184,17 +188,17 @@ export function ConversationListPanel({
             onClick={onRefresh}
           >
             <RefreshCw className="h-4 w-4" />
-            <span className="sr-only">Refresh conversations</span>
+            <span className="sr-only">Muat ulang percakapan</span>
           </Button>
         </div>
       </div>
 
       <div className="inbox-scroll min-h-0 flex-1 overflow-y-auto overscroll-contain border-t border-border/70 bg-[linear-gradient(180deg,hsl(var(--background))/0.88,hsl(var(--muted))/0.2)]">
         {isLoading ? <ConversationListSkeleton /> : null}
-        {!isLoading && error ? <ErrorStatePanel title="Failed to Load Conversations" message={error} /> : null}
+        {!isLoading && error ? <ErrorStatePanel title="Gagal Memuat Percakapan" message={error} /> : null}
 
         {!isLoading && !error && filteredConversations.length === 0 ? (
-          <EmptyStatePanel title="No Conversations" message="No conversations found for selected filter." />
+          <EmptyStatePanel title="Belum Ada Percakapan" message="Tidak ada percakapan untuk filter yang dipilih." />
         ) : null}
 
         {!isLoading && !error && filteredConversations.length > 0 ? (
@@ -211,6 +215,31 @@ export function ConversationListPanel({
             ))}
           </div>
         ) : null}
+
+        {!isLoading && !error && filteredConversations.length > 0 ? (
+          <div className="px-4 py-3 sm:px-5">
+            {hasMore ? (
+              <Button
+                type="button"
+                variant="outline"
+                className="h-9 w-full rounded-xl"
+                disabled={isLoadingMore}
+                onClick={onLoadMore}
+              >
+                {isLoadingMore ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    Memuat chat lama...
+                  </>
+                ) : (
+                  "Muat Percakapan Lain"
+                )}
+              </Button>
+            ) : (
+              <p className="text-center text-xs text-muted-foreground">Semua percakapan sudah ditampilkan.</p>
+            )}
+          </div>
+        ) : null}
       </div>
 
       {isNewMessageOpen ? (
@@ -218,11 +247,11 @@ export function ConversationListPanel({
           <div className="w-full max-w-md rounded-[28px] border border-border/80 bg-card p-5 shadow-2xl">
             <div className="flex items-center justify-between gap-3">
               <div>
-                <h3 className="text-lg font-semibold text-foreground">New Message</h3>
+                <h3 className="text-lg font-semibold text-foreground">Chat Baru</h3>
                 <p className="text-sm text-muted-foreground">Masukkan nomor WhatsApp tujuan untuk mulai percakapan baru.</p>
               </div>
               <Button type="button" variant="ghost" size="sm" className="h-9 rounded-lg" onClick={() => setIsNewMessageOpen(false)}>
-                Close
+                Tutup
               </Button>
             </div>
             <div className="mt-4 space-y-3">
@@ -242,7 +271,7 @@ export function ConversationListPanel({
             </div>
             <div className="mt-5 flex justify-end gap-2">
               <Button type="button" variant="ghost" onClick={() => setIsNewMessageOpen(false)}>
-                Cancel
+                Batal
               </Button>
               <Button
                 type="button"
@@ -265,14 +294,14 @@ export function ConversationListPanel({
                     });
                     setIsNewMessageOpen(false);
                   } catch (error) {
-                    setCreateError(error instanceof Error ? error.message : "Failed to create conversation.");
+                    setCreateError(error instanceof Error ? error.message : "Gagal membuat percakapan.");
                   } finally {
                     setIsCreating(false);
                   }
                 }}
                 disabled={!newPhone.trim() || isCreating}
               >
-                {isCreating ? "Creating..." : "Start Chat"}
+                {isCreating ? "Membuat..." : "Mulai Chat"}
               </Button>
             </div>
           </div>

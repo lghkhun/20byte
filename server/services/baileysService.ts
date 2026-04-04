@@ -5,7 +5,6 @@ import { randomUUID } from "crypto";
 import makeWASocket, {
   Browsers,
   DisconnectReason,
-  WAMessageStatus,
   bindWaitForConnectionUpdate,
   downloadMediaMessage,
   fetchLatestWaWebVersion,
@@ -18,13 +17,13 @@ import makeWASocket, {
   type WAMessage
 } from "baileys";
 
-import { publishConversationTypingEvent, publishConversationUpdatedEvent } from "@/lib/ably/publisher";
+import { publishConversationTypingEvent } from "@/lib/ably/publisher";
 import { prisma } from "@/lib/db/prisma";
 import { canAccessOrganizationSettings } from "@/lib/permissions/orgPermissions";
 import { normalizePossibleE164 } from "@/lib/whatsapp/e164";
 import { assertOrgBillingAccess } from "@/server/services/billingService";
+import { processBaileysOutboundStatusUpdate } from "@/server/services/message/baileysOutboundStatus";
 import { storeInboundMessage } from "@/server/services/message/inbound";
-import { updateOutboundDeliveryStatusByWaMessageId } from "@/server/services/message/outboundInfra/persistence";
 import { ServiceError } from "@/server/services/serviceError";
 import { writeAuditLogSafe } from "@/server/services/auditLogService";
 
@@ -667,26 +666,6 @@ async function processInboundMessage(orgId: string, message: WAMessage, socket: 
   }
 }
 
-function mapBaileysStatusToDeliveryStatus(
-  status: number | null | undefined
-): "SENT" | "DELIVERED" | "READ" | null {
-  if (typeof status !== "number") {
-    return null;
-  }
-
-  if (status >= WAMessageStatus.READ) {
-    return "READ";
-  }
-  if (status >= WAMessageStatus.DELIVERY_ACK) {
-    return "DELIVERED";
-  }
-  if (status >= WAMessageStatus.SERVER_ACK) {
-    return "SENT";
-  }
-
-  return null;
-}
-
 async function processOutboundStatusUpdate(
   orgId: string,
   update: {
@@ -699,36 +678,10 @@ async function processOutboundStatusUpdate(
     } | null;
   }
 ): Promise<void> {
-  if (!update?.key?.fromMe) {
-    return;
-  }
-
-  const waMessageId = normalize(update.key?.id ?? undefined);
-  if (!waMessageId) {
-    return;
-  }
-
-  const deliveryStatus = mapBaileysStatusToDeliveryStatus(update.update?.status ?? null);
-  if (!deliveryStatus) {
-    return;
-  }
-
-  const updated = await updateOutboundDeliveryStatusByWaMessageId({
-    orgId,
-    waMessageId,
-    deliveryStatus
-  });
-
+  const updated = await processBaileysOutboundStatusUpdate(orgId, update);
   if (!updated) {
     return;
   }
-
-  void publishConversationUpdatedEvent({
-    orgId,
-    conversationId: updated.conversationId,
-    assignedToMemberId: updated.assignedToMemberId,
-    status: updated.conversationStatus
-  });
 }
 
 async function resolveOpenConversationIdByCustomerPhone(orgId: string, customerPhoneE164: string): Promise<string | null> {

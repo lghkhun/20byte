@@ -9,12 +9,36 @@ import type {
   ListConversationsResponse,
   ListMessagesResponse
 } from "@/components/inbox/workspace/types";
-import type { ConversationItem } from "@/components/inbox/types";
+import type { ConversationItem, MessageItem } from "@/components/inbox/types";
 import { fetchJsonCached } from "@/lib/client/fetchCache";
 import { fetchOrganizationsCached } from "@/lib/client/orgsCache";
 import { subscribeToOrgMessageEvents } from "@/lib/ably/client";
+import { recordInboxTelemetry } from "@/components/inbox/workspace/controller/inboxTelemetry";
+import { isRequestVersionCurrent, issueRequestVersion } from "@/components/inbox/workspace/controller/requestVersionGuard";
 
 import type { InboxWorkspaceState } from "./useInboxWorkspaceState";
+
+type MessageStoreEntry = {
+  rows: MessageItem[];
+  hasMore: boolean;
+  nextBeforeMessageId: string | null;
+  snapshot: string;
+};
+
+type LoadMessagesOptions = {
+  background?: boolean;
+  beforeMessageId?: string;
+  appendOlder?: boolean;
+};
+
+type LoadConversationsOptions = {
+  background?: boolean;
+  append?: boolean;
+  query?: string;
+};
+
+const CONVERSATION_PAGE_LIMIT = 20;
+const MESSAGE_PAGE_LIMIT = 30;
 
 export function useInboxWorkspaceLoaders(state: InboxWorkspaceState) {
   const {
@@ -26,14 +50,19 @@ export function useInboxWorkspaceLoaders(state: InboxWorkspaceState) {
     setOrgId,
     filter,
     statusFilter,
+    conversationSearchQuery,
     selectedConversationId,
     isConversationManuallyCleared,
     setSelectedConversationId,
     setSelectedConversation,
     setIsLoadingList,
+    setIsLoadingMoreConversations,
+    setHasMoreConversations,
     setIsLoadingConversation,
     setMessages,
     setIsLoadingMessages,
+    setIsLoadingOlderMessages,
+    setHasMoreMessages,
     setError,
     setMessageError,
     setCrmError,
@@ -47,7 +76,8 @@ export function useInboxWorkspaceLoaders(state: InboxWorkspaceState) {
     messages,
     setMetaTotal,
     setConversations,
-    setTypingConversationId
+    setTypingConversationId,
+    setRealtimeConnectionState
   } = state;
 
   const hasLoadedConversationListRef = useRef(false);
@@ -56,18 +86,27 @@ export function useInboxWorkspaceLoaders(state: InboxWorkspaceState) {
   const lastNotificationAtRef = useRef(0);
   const previousUnreadTotalRef = useRef(0);
   const conversationSnapshotRef = useRef<string>("");
-  const messagesSnapshotRef = useRef<string>("");
   const conversationsRef = useRef(conversations);
   const selectedConversationIdRef = useRef(selectedConversationId);
   const messagesLengthRef = useRef(messages.length);
-  const isLoadingConversationsRef = useRef(false);
-  const conversationsInFlightRef = useRef<{
-    key: string;
-    promise: Promise<void>;
-  } | null>(null);
-  const lastBackgroundConversationsLoadAtRef = useRef(0);
   const markReadInFlightRef = useRef(new Set<string>());
+  const markReadDebounceTimersRef = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
   const typingResetTimersRef = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
+  const loadMessagesAbortRef = useRef<AbortController | null>(null);
+  const loadMessagesRequestVersionsRef = useRef<Map<string, number>>(new Map());
+  const loadConversationAbortRef = useRef<AbortController | null>(null);
+  const loadConversationRequestVersionsRef = useRef<Map<string, number>>(new Map());
+  const loadConversationsAbortRef = useRef<AbortController | null>(null);
+  const loadConversationsRequestIdRef = useRef(0);
+  const loadConversationCrmContextRequestVersionsRef = useRef<Map<string, number>>(new Map());
+  const currentConversationsPageRef = useRef(1);
+  const lastBackgroundConversationsLoadAtRef = useRef(0);
+  const conversationSearchDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const conversationSearchQueryRef = useRef(conversationSearchQuery);
+  const realtimeFallbackCountRef = useRef(0);
+  const realtimeMessageStatusMismatchCountRef = useRef(0);
+  const realtimeConnectionAttemptCountRef = useRef(0);
+  const messageStoreRef = useRef<Map<string, MessageStoreEntry>>(new Map());
 
   const recalculateConversationSnapshot = useCallback((rows: ConversationItem[] | null | undefined) => {
     const safeRows = rows ?? [];
@@ -86,6 +125,37 @@ export function useInboxWorkspaceLoaders(state: InboxWorkspaceState) {
     previousUnreadTotalRef.current = safeRows.reduce((total, row) => total + row.unreadCount, 0);
   }, []);
 
+  const buildMessagesSnapshot = useCallback((rows: MessageItem[] | null | undefined) => {
+    const safeRows = rows ?? [];
+    return JSON.stringify(
+      safeRows.map((message) => ({
+        id: message.id,
+        sendStatus: message.sendStatus,
+        deliveryStatus: message.deliveryStatus,
+        sendError: message.sendError,
+        retryable: message.retryable,
+        sendAttemptCount: message.sendAttemptCount,
+        deliveredAt: message.deliveredAt,
+        readAt: message.readAt,
+        createdAt: message.createdAt
+      }))
+    );
+  }, []);
+
+  const upsertMessageStore = useCallback(
+    (conversationId: string, rows: MessageItem[], hasMore: boolean, nextBeforeMessageId: string | null) => {
+      const snapshot = buildMessagesSnapshot(rows);
+      messageStoreRef.current.set(conversationId, {
+        rows,
+        hasMore,
+        nextBeforeMessageId,
+        snapshot
+      });
+      return snapshot;
+    },
+    [buildMessagesSnapshot]
+  );
+
   useEffect(() => {
     conversationsRef.current = conversations;
   }, [conversations]);
@@ -98,6 +168,18 @@ export function useInboxWorkspaceLoaders(state: InboxWorkspaceState) {
     messagesLengthRef.current = messages.length;
   }, [messages.length]);
 
+  useEffect(() => {
+    conversationSearchQueryRef.current = conversationSearchQuery;
+  }, [conversationSearchQuery]);
+
+  useEffect(() => {
+    return () => {
+      loadMessagesAbortRef.current?.abort();
+      loadConversationAbortRef.current?.abort();
+      loadConversationsAbortRef.current?.abort();
+    };
+  }, []);
+
   const playInboundNotification = useCallback(() => {
     if (typeof window === "undefined") {
       return;
@@ -108,7 +190,9 @@ export function useInboxWorkspaceLoaders(state: InboxWorkspaceState) {
     }
     lastNotificationAtRef.current = Date.now();
 
-    const AudioContextCtor = window.AudioContext ?? (window as typeof window & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+    const AudioContextCtor =
+      window.AudioContext ??
+      (window as typeof window & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
     if (!AudioContextCtor) {
       return;
     }
@@ -144,118 +228,6 @@ export function useInboxWorkspaceLoaders(state: InboxWorkspaceState) {
       // ignore audio failures
     }
   }, []);
-
-  const loadMessages = useCallback(
-    async (conversationId: string, options?: { background?: boolean }) => {
-      if (!orgId) {
-        return;
-      }
-
-      if (!options?.background) {
-        setIsLoadingMessages(true);
-        setMessageError(null);
-      }
-      try {
-        const response = await fetch(
-          `/api/messages?conversationId=${encodeURIComponent(conversationId)}&page=1&limit=30&orgId=${encodeURIComponent(orgId)}`
-        );
-        const payload = (await response.json().catch(() => null)) as ListMessagesResponse | null;
-        if (!response.ok) {
-          if (!options?.background) {
-            setMessageError(payload?.error?.message ?? "Failed to load messages.");
-          }
-          return;
-        }
-
-        const nextMessages = payload?.data?.messages ?? [];
-        const previousLength = messagesLengthRef.current;
-        const latestMessage = nextMessages[nextMessages.length - 1] ?? null;
-        const nextSnapshot = JSON.stringify(
-          nextMessages.map((message) => ({
-            id: message.id,
-            sendStatus: message.sendStatus,
-            deliveryStatus: message.deliveryStatus,
-            sendError: message.sendError,
-            deliveredAt: message.deliveredAt,
-            readAt: message.readAt,
-            createdAt: message.createdAt
-          }))
-        );
-        const changed = nextSnapshot !== messagesSnapshotRef.current;
-
-        if (!options?.background || changed) {
-          setMessages(nextMessages);
-          messagesSnapshotRef.current = nextSnapshot;
-        }
-        if (selectedConversationIdRef.current === conversationId && hasLoadedMessagesRef.current && changed) {
-          if (nextMessages.length > previousLength && latestMessage?.direction === "INBOUND") {
-            playInboundNotification();
-          }
-        }
-        hasLoadedMessagesRef.current = true;
-      } catch {
-        if (!options?.background) {
-          setMessageError("Network error while loading messages.");
-        }
-      } finally {
-        if (!options?.background) {
-          setIsLoadingMessages(false);
-        }
-      }
-    },
-    [orgId, playInboundNotification, setIsLoadingMessages, setMessageError, setMessages]
-  );
-
-  const loadCustomerCrmContext = useCallback(
-    async (customerId: string) => {
-      if (!orgId) {
-        return;
-      }
-
-      setIsLoadingCrm(true);
-      setCrmError(null);
-      try {
-        const tagsPayload = await fetchJsonCached<CustomerTagsResponse>(
-          `/api/customers/${encodeURIComponent(customerId)}/tags?orgId=${encodeURIComponent(orgId)}`,
-          {
-            ttlMs: 12_000,
-            init: { cache: "no-store" }
-          }
-        );
-        setTags(tagsPayload?.data?.tags ?? []);
-      } catch {
-        setCrmError("Network error while loading CRM context.");
-      } finally {
-        setIsLoadingCrm(false);
-      }
-    },
-    [orgId, setCrmError, setIsLoadingCrm, setTags]
-  );
-
-  const loadConversationCrmContext = useCallback(
-    async (conversationId: string) => {
-      if (!orgId) {
-        return;
-      }
-
-      try {
-        const payload = await fetchJsonCached<ConversationCrmContextResponse>(
-          `/api/conversations/${encodeURIComponent(conversationId)}/crm-context?orgId=${encodeURIComponent(orgId)}`,
-          {
-            ttlMs: 12_000,
-            init: { cache: "no-store" }
-          }
-        );
-        setCrmInvoices(payload?.data?.invoices ?? []);
-        setCrmActivity(payload?.data?.events ?? []);
-      } catch {
-        setCrmError("Network error while loading invoice timeline.");
-        setCrmInvoices([]);
-        setCrmActivity([]);
-      }
-    },
-    [orgId, setCrmActivity, setCrmError, setCrmInvoices]
-  );
 
   const clearUnreadLocally = useCallback(
     (conversationId: string) => {
@@ -316,6 +288,224 @@ export function useInboxWorkspaceLoaders(state: InboxWorkspaceState) {
     [clearUnreadLocally, orgId]
   );
 
+  const scheduleMarkConversationRead = useCallback(
+    (conversationId: string, delayMs = 420) => {
+      const existingTimer = markReadDebounceTimersRef.current.get(conversationId);
+      if (existingTimer) {
+        clearTimeout(existingTimer);
+      }
+
+      const timer = setTimeout(() => {
+        markReadDebounceTimersRef.current.delete(conversationId);
+        void markConversationRead(conversationId);
+      }, delayMs);
+
+      markReadDebounceTimersRef.current.set(conversationId, timer);
+    },
+    [markConversationRead]
+  );
+
+  const loadMessages = useCallback(
+    async (conversationId: string, options?: LoadMessagesOptions) => {
+      if (!orgId) {
+        return;
+      }
+
+      const isAppendOlder = Boolean(options?.appendOlder);
+      const requestKey = `${conversationId}:${isAppendOlder ? "older" : "latest"}`;
+      const requestVersion = issueRequestVersion(loadMessagesRequestVersionsRef.current, requestKey);
+
+      let abortController: AbortController | null = null;
+      if (!options?.background && !isAppendOlder) {
+        loadMessagesAbortRef.current?.abort();
+        abortController = new AbortController();
+        loadMessagesAbortRef.current = abortController;
+      }
+
+      if (isAppendOlder) {
+        setIsLoadingOlderMessages(true);
+      } else if (!options?.background) {
+        setIsLoadingMessages(true);
+        setMessageError(null);
+      }
+
+      try {
+        const query = new URLSearchParams({
+          conversationId,
+          limit: String(MESSAGE_PAGE_LIMIT),
+          orgId
+        });
+        if (options?.beforeMessageId) {
+          query.set("beforeMessageId", options.beforeMessageId);
+        }
+
+        const response = await fetch(`/api/messages?${query.toString()}`, {
+          signal: abortController?.signal
+        });
+        const payload = (await response.json().catch(() => null)) as ListMessagesResponse | null;
+        if (!isRequestVersionCurrent(loadMessagesRequestVersionsRef.current, requestKey, requestVersion)) {
+          return;
+        }
+
+        if (!response.ok) {
+          if (!options?.background && !isAppendOlder) {
+            setMessageError(payload?.error?.message ?? "Gagal memuat pesan.");
+          }
+          return;
+        }
+
+        const nextRows = payload?.data?.messages ?? [];
+        const hasMore = Boolean(payload?.meta?.hasMore);
+        const nextBeforeMessageId = payload?.meta?.nextBeforeMessageId ?? null;
+
+        if (isAppendOlder) {
+          const currentEntry = messageStoreRef.current.get(conversationId);
+          const merged = [...nextRows, ...(currentEntry?.rows ?? [])];
+          const dedupedMap = new Map<string, MessageItem>();
+          merged.forEach((item) => {
+            if (!dedupedMap.has(item.id)) {
+              dedupedMap.set(item.id, item);
+            }
+          });
+          const deduped = [...dedupedMap.values()].sort((left, right) => {
+            const timeDiff = new Date(left.createdAt).getTime() - new Date(right.createdAt).getTime();
+            if (timeDiff !== 0) {
+              return timeDiff;
+            }
+            return left.id.localeCompare(right.id);
+          });
+
+          upsertMessageStore(conversationId, deduped, hasMore, nextBeforeMessageId);
+          if (selectedConversationIdRef.current === conversationId) {
+            setMessages(deduped);
+            setHasMoreMessages(hasMore);
+          }
+          return;
+        }
+
+        upsertMessageStore(conversationId, nextRows, hasMore, nextBeforeMessageId);
+
+        const shouldApplyToUi = options?.background ? selectedConversationIdRef.current === conversationId : true;
+        if (!shouldApplyToUi) {
+          return;
+        }
+
+        const previousLength = messagesLengthRef.current;
+        setMessages(nextRows);
+        setHasMoreMessages(hasMore);
+
+        if (hasLoadedMessagesRef.current && nextRows.length > previousLength) {
+          const latestMessage = nextRows[nextRows.length - 1] ?? null;
+          if (latestMessage?.direction === "INBOUND" && !options?.background) {
+            playInboundNotification();
+          }
+        }
+        hasLoadedMessagesRef.current = true;
+      } catch (error) {
+        if (error instanceof DOMException && error.name === "AbortError") {
+          return;
+        }
+        if (!options?.background && !isAppendOlder) {
+          setMessageError("Network error while loading messages.");
+        }
+      } finally {
+        if (isAppendOlder) {
+          setIsLoadingOlderMessages(false);
+        } else if (!options?.background) {
+          setIsLoadingMessages(false);
+        }
+      }
+    },
+    [
+      orgId,
+      playInboundNotification,
+      setHasMoreMessages,
+      setIsLoadingMessages,
+      setIsLoadingOlderMessages,
+      setMessageError,
+      setMessages,
+      upsertMessageStore
+    ]
+  );
+
+  const loadOlderMessages = useCallback(async () => {
+    const conversationId = selectedConversationIdRef.current;
+    if (!conversationId) {
+      return;
+    }
+
+    const cached = messageStoreRef.current.get(conversationId);
+    const beforeMessageId = cached?.nextBeforeMessageId ?? cached?.rows[0]?.id ?? null;
+    if (!beforeMessageId || !cached?.hasMore) {
+      return;
+    }
+
+    await loadMessages(conversationId, {
+      background: true,
+      appendOlder: true,
+      beforeMessageId
+    });
+  }, [loadMessages]);
+
+  const loadCustomerCrmContext = useCallback(
+    async (customerId: string) => {
+      if (!orgId) {
+        return;
+      }
+
+      setIsLoadingCrm(true);
+      setCrmError(null);
+      try {
+        const tagsPayload = await fetchJsonCached<CustomerTagsResponse>(
+          `/api/customers/${encodeURIComponent(customerId)}/tags?orgId=${encodeURIComponent(orgId)}`,
+          {
+            ttlMs: 12_000,
+            init: { cache: "no-store" }
+          }
+        );
+        setTags(tagsPayload?.data?.tags ?? []);
+      } catch {
+        setCrmError("Network error while loading CRM context.");
+      } finally {
+        setIsLoadingCrm(false);
+      }
+    },
+    [orgId, setCrmError, setIsLoadingCrm, setTags]
+  );
+
+  const loadConversationCrmContext = useCallback(
+    async (conversationId: string) => {
+      if (!orgId) {
+        return;
+      }
+
+      const requestVersion = issueRequestVersion(loadConversationCrmContextRequestVersionsRef.current, conversationId);
+      try {
+        const response = await fetch(
+          `/api/conversations/${encodeURIComponent(conversationId)}/crm-context?orgId=${encodeURIComponent(orgId)}`,
+          { cache: "no-store" }
+        );
+        const payload = (await response.json().catch(() => null)) as ConversationCrmContextResponse | null;
+        if (!isRequestVersionCurrent(loadConversationCrmContextRequestVersionsRef.current, conversationId, requestVersion)) {
+          return;
+        }
+        if (!response.ok) {
+          throw new Error(payload?.error?.message ?? "Gagal memuat konteks invoice.");
+        }
+        setCrmInvoices(payload?.data?.invoices ?? []);
+        setCrmActivity(payload?.data?.events ?? []);
+      } catch {
+        if (!isRequestVersionCurrent(loadConversationCrmContextRequestVersionsRef.current, conversationId, requestVersion)) {
+          return;
+        }
+        setCrmError("Network error while loading invoice timeline.");
+        setCrmInvoices([]);
+        setCrmActivity([]);
+      }
+    },
+    [orgId, setCrmActivity, setCrmError, setCrmInvoices]
+  );
+
   const loadConversation = useCallback(
     async (conversationId: string, options?: { background?: boolean }) => {
       if (!orgId) {
@@ -323,27 +513,61 @@ export function useInboxWorkspaceLoaders(state: InboxWorkspaceState) {
       }
 
       if (!options?.background) {
-        void markConversationRead(conversationId);
-      }
-
-      if (!options?.background) {
         setIsLoadingConversation(true);
         setError(null);
       }
+
+      if (!options?.background) {
+        const cached = messageStoreRef.current.get(conversationId);
+        if (cached) {
+          setMessages(cached.rows);
+          setHasMoreMessages(cached.hasMore);
+        }
+      }
+
+      if (!options?.background) {
+        scheduleMarkConversationRead(conversationId, 0);
+      }
+
+      const requestVersion = issueRequestVersion(loadConversationRequestVersionsRef.current, conversationId);
+
+      let abortController: AbortController | null = null;
+      if (!options?.background) {
+        loadConversationAbortRef.current?.abort();
+        abortController = new AbortController();
+        loadConversationAbortRef.current = abortController;
+      }
+
       try {
-        const response = await fetch(`/api/conversations/${encodeURIComponent(conversationId)}?orgId=${encodeURIComponent(orgId)}`);
+        const response = await fetch(
+          `/api/conversations/${encodeURIComponent(conversationId)}?orgId=${encodeURIComponent(orgId)}`,
+          {
+            signal: abortController?.signal
+          }
+        );
         const payload = (await response.json().catch(() => null)) as ConversationFetchResponse | null;
+        if (!isRequestVersionCurrent(loadConversationRequestVersionsRef.current, conversationId, requestVersion)) {
+          return;
+        }
+
+        const shouldApplyToUi = options?.background ? selectedConversationIdRef.current === conversationId : true;
+        if (!shouldApplyToUi) {
+          return;
+        }
+
         if (!response.ok) {
           if (response.status === 404) {
             setSelectedConversationId(null);
             setSelectedConversation(null);
             setMessages([]);
+            setHasMoreMessages(false);
             setSelectedProofMessageId(null);
             setTags([]);
             setCrmInvoices([]);
             setCrmActivity([]);
             return;
           }
+
           if (!options?.background) {
             setError(payload?.error?.message ?? "Failed to fetch conversation.");
           }
@@ -358,22 +582,28 @@ export function useInboxWorkspaceLoaders(state: InboxWorkspaceState) {
                 unreadCount: 0
               }
             : rawConversation;
-        setSelectedConversation(conversation);
-        const shouldHydrateCrmContext = !options?.background;
-        const crmHydrationPromise =
-          shouldHydrateCrmContext && conversation?.customerId
-            ? Promise.all([loadCustomerCrmContext(conversation.customerId), loadConversationCrmContext(conversation.id)])
-              : shouldHydrateCrmContext
-              ? Promise.resolve().then(() => {
-                  setTags([]);
-                  setCrmInvoices([]);
-                  setCrmActivity([]);
-                })
-              : Promise.resolve();
 
-        await loadMessages(conversationId, options);
-        void crmHydrationPromise;
-      } catch {
+        setSelectedConversation(conversation);
+
+        if (!options?.background) {
+          if (conversation?.customerId) {
+            void Promise.all([
+              loadCustomerCrmContext(conversation.customerId),
+              loadConversationCrmContext(conversation.id)
+            ]);
+          } else {
+            setTags([]);
+            setCrmInvoices([]);
+            setCrmActivity([]);
+          }
+        }
+
+        await loadMessages(conversationId, { background: options?.background });
+      } catch (error) {
+        if (error instanceof DOMException && error.name === "AbortError") {
+          return;
+        }
+
         if (!options?.background) {
           setError("Network error while fetching conversation.");
         }
@@ -387,11 +617,12 @@ export function useInboxWorkspaceLoaders(state: InboxWorkspaceState) {
       loadConversationCrmContext,
       loadCustomerCrmContext,
       loadMessages,
-      markConversationRead,
       orgId,
+      scheduleMarkConversationRead,
       setCrmActivity,
       setCrmInvoices,
       setError,
+      setHasMoreMessages,
       setIsLoadingConversation,
       setMessages,
       setSelectedConversation,
@@ -401,56 +632,86 @@ export function useInboxWorkspaceLoaders(state: InboxWorkspaceState) {
     ]
   );
 
-  const loadConversations = useCallback(async (options?: { background?: boolean }) => {
-    if (!orgId) {
-      return;
-    }
-    const requestKey = `${orgId}::${filter}::${statusFilter}`;
-    const isBackground = Boolean(options?.background);
-    if (isBackground && Date.now() - lastBackgroundConversationsLoadAtRef.current < 1200) {
-      return;
-    }
-    if (conversationsInFlightRef.current?.key === requestKey) {
-      await conversationsInFlightRef.current.promise;
-      return;
-    }
-    if (isLoadingConversationsRef.current && options?.background) {
-      return;
-    }
+  const loadConversations = useCallback(
+    async (options?: LoadConversationsOptions) => {
+      if (!orgId) {
+        return;
+      }
 
-    isLoadingConversationsRef.current = true;
+      const isBackground = Boolean(options?.background);
+      const isAppend = Boolean(options?.append);
+      const effectiveQuery = (options?.query ?? conversationSearchQueryRef.current).trim();
 
-    if (!options?.background) {
-      setIsLoadingList(true);
-      setError(null);
-    }
-    const requestPromise = (async () => {
+      if (isBackground && Date.now() - lastBackgroundConversationsLoadAtRef.current < 1200) {
+        return;
+      }
+
+      const targetPage = isAppend ? currentConversationsPageRef.current + 1 : 1;
+      const requestId = loadConversationsRequestIdRef.current + 1;
+      loadConversationsRequestIdRef.current = requestId;
+
+      let abortController: AbortController | null = null;
+      if (!isBackground) {
+        loadConversationsAbortRef.current?.abort();
+        abortController = new AbortController();
+        loadConversationsAbortRef.current = abortController;
+      }
+
+      if (isAppend) {
+        setIsLoadingMoreConversations(true);
+      } else if (!isBackground) {
+        setIsLoadingList(true);
+        setError(null);
+      }
+
       try {
-        const response = await fetch(
-          `/api/conversations?filter=${encodeURIComponent(filter)}&status=${encodeURIComponent(statusFilter)}&page=1&limit=20&orgId=${encodeURIComponent(orgId)}`
-        );
+        const params = new URLSearchParams({
+          filter,
+          status: statusFilter,
+          page: String(targetPage),
+          limit: String(CONVERSATION_PAGE_LIMIT),
+          orgId
+        });
+
+        if (effectiveQuery) {
+          params.set("query", effectiveQuery);
+        }
+
+        const response = await fetch(`/api/conversations?${params.toString()}`, {
+          signal: abortController?.signal
+        });
+
         const payload = (await response.json().catch(() => null)) as ListConversationsResponse | null;
         if (!response.ok) {
           if (response.status === 404 && payload?.error?.code === "ORG_NOT_FOUND") {
             setConversations([]);
             setMetaTotal(0);
+            setHasMoreConversations(false);
             setSelectedConversationId(null);
             setSelectedConversation(null);
             setMessages([]);
+            setHasMoreMessages(false);
             setSelectedProofMessageId(null);
             setTags([]);
             setCrmInvoices([]);
             setCrmActivity([]);
             return;
           }
-          if (!options?.background) {
+
+          if (!isBackground) {
             setError(payload?.error?.message ?? "Failed to load conversations.");
           }
           return;
         }
 
+        if (requestId !== loadConversationsRequestIdRef.current) {
+          return;
+        }
+
         const incomingRows = payload?.data?.conversations ?? [];
-        const rows = incomingRows.map((row) =>
+        const total = payload?.meta?.total ?? incomingRows.length;
+
+        const normalizedIncomingRows = incomingRows.map((row) =>
           row.id === selectedConversationIdRef.current && row.unreadCount > 0
             ? {
                 ...row,
@@ -458,16 +719,27 @@ export function useInboxWorkspaceLoaders(state: InboxWorkspaceState) {
               }
             : row
         );
-        const nextUnreadTotal = rows.reduce((total, row) => total + row.unreadCount, 0);
-        const currentSelectedConversationId = selectedConversationIdRef.current;
-        const nextConversationId =
-          currentSelectedConversationId && rows.some((row) => row.id === currentSelectedConversationId)
-            ? currentSelectedConversationId
-            : isConversationManuallyCleared
-              ? null
-              : rows[0]?.id ?? null;
+
+        const nextRows = isAppend
+          ? (() => {
+              const dedup = new Map<string, ConversationItem>();
+              [...conversationsRef.current, ...normalizedIncomingRows].forEach((row) => {
+                dedup.set(row.id, row);
+              });
+              return [...dedup.values()].sort((left, right) => {
+                const leftMs = new Date(left.lastMessageAt ?? left.updatedAt).getTime();
+                const rightMs = new Date(right.lastMessageAt ?? right.updatedAt).getTime();
+                if (leftMs !== rightMs) {
+                  return rightMs - leftMs;
+                }
+                return right.id.localeCompare(left.id);
+              });
+            })()
+          : normalizedIncomingRows;
+
+        const nextUnreadTotal = nextRows.reduce((totalUnread, row) => totalUnread + row.unreadCount, 0);
         const nextSnapshot = JSON.stringify(
-          rows.map((row) => ({
+          nextRows.map((row) => ({
             id: row.id,
             unreadCount: row.unreadCount,
             lastMessageAt: row.lastMessageAt,
@@ -478,18 +750,10 @@ export function useInboxWorkspaceLoaders(state: InboxWorkspaceState) {
             updatedAt: row.updatedAt
           }))
         );
-        const snapshotChanged = nextSnapshot !== conversationSnapshotRef.current;
-        const selectedConversationChanged =
-          Boolean(nextConversationId) &&
-          rows.some(
-            (row) =>
-              row.id === nextConversationId &&
-              row.lastMessageAt !== (conversationsRef.current.find((item) => item.id === nextConversationId)?.lastMessageAt ?? null)
-          );
 
-        if (!options?.background || snapshotChanged) {
-          setConversations(rows);
-          setMetaTotal(payload?.meta?.total ?? rows.length);
+        if (!isBackground || nextSnapshot !== conversationSnapshotRef.current || isAppend) {
+          setConversations(nextRows);
+          setMetaTotal(total);
           conversationSnapshotRef.current = nextSnapshot;
         }
 
@@ -499,10 +763,14 @@ export function useInboxWorkspaceLoaders(state: InboxWorkspaceState) {
         previousUnreadTotalRef.current = nextUnreadTotal;
         hasLoadedConversationListRef.current = true;
 
-        if (rows.length === 0) {
+        currentConversationsPageRef.current = targetPage;
+        setHasMoreConversations(nextRows.length < total);
+
+        if (nextRows.length === 0) {
           setSelectedConversationId(null);
           setSelectedConversation(null);
           setMessages([]);
+          setHasMoreMessages(false);
           setSelectedProofMessageId(null);
           setTags([]);
           setCrmInvoices([]);
@@ -510,52 +778,76 @@ export function useInboxWorkspaceLoaders(state: InboxWorkspaceState) {
           return;
         }
 
-        setSelectedConversationId(nextConversationId);
-        if (nextConversationId && (!options?.background || currentSelectedConversationId !== nextConversationId || selectedConversationChanged)) {
-          void loadConversation(nextConversationId, options);
+        if (isAppend) {
+          return;
         }
-      } catch {
-        if (!options?.background) {
+
+        const currentSelectedConversationId = selectedConversationIdRef.current;
+        const nextConversationId =
+          currentSelectedConversationId && nextRows.some((row) => row.id === currentSelectedConversationId)
+            ? currentSelectedConversationId
+            : isConversationManuallyCleared
+              ? null
+              : nextRows[0]?.id ?? null;
+
+        setSelectedConversationId(nextConversationId);
+
+        if (nextConversationId) {
+          if (currentSelectedConversationId !== nextConversationId || !isBackground) {
+            void loadConversation(nextConversationId, {
+              background: isBackground
+            });
+          }
+        }
+      } catch (error) {
+        if (error instanceof DOMException && error.name === "AbortError") {
+          return;
+        }
+
+        if (!isBackground) {
           setError("Network error while loading conversations.");
         }
       } finally {
         if (isBackground) {
           lastBackgroundConversationsLoadAtRef.current = Date.now();
         }
-        if (conversationsInFlightRef.current?.key === requestKey) {
-          conversationsInFlightRef.current = null;
-        }
-        isLoadingConversationsRef.current = false;
-        if (!options?.background) {
+
+        if (isAppend) {
+          setIsLoadingMoreConversations(false);
+        } else if (!isBackground) {
           setIsLoadingList(false);
         }
       }
-    })();
+    },
+    [
+      filter,
+      isConversationManuallyCleared,
+      loadConversation,
+      orgId,
+      playInboundNotification,
+      setConversations,
+      setCrmActivity,
+      setCrmInvoices,
+      setError,
+      setHasMoreConversations,
+      setHasMoreMessages,
+      setIsLoadingList,
+      setIsLoadingMoreConversations,
+      setMessages,
+      setMetaTotal,
+      setSelectedConversation,
+      setSelectedConversationId,
+      setSelectedProofMessageId,
+      setTags,
+      statusFilter
+    ]
+  );
 
-    conversationsInFlightRef.current = {
-      key: requestKey,
-      promise: requestPromise
-    };
-    await requestPromise;
-  }, [
-    filter,
-    loadConversation,
-    orgId,
-    playInboundNotification,
-    setConversations,
-    setCrmActivity,
-    setCrmInvoices,
-    setError,
-    setIsLoadingList,
-    setMessages,
-    setMetaTotal,
-    setSelectedConversation,
-    setSelectedConversationId,
-    setSelectedProofMessageId,
-    setTags,
-    statusFilter,
-    isConversationManuallyCleared
-  ]);
+  const loadMoreConversations = useCallback(async () => {
+    await loadConversations({
+      append: true
+    });
+  }, [loadConversations]);
 
   useEffect(() => {
     let active = true;
@@ -588,18 +880,79 @@ export function useInboxWorkspaceLoaders(state: InboxWorkspaceState) {
     if (!hasLoadedOrganizations) {
       return;
     }
+
+    currentConversationsPageRef.current = 1;
     void loadConversations();
-  }, [hasLoadedOrganizations, loadConversations]);
+  }, [filter, hasLoadedOrganizations, loadConversations, orgId, statusFilter]);
+
+  useEffect(() => {
+    if (!hasLoadedOrganizations) {
+      return;
+    }
+
+    if (conversationSearchDebounceRef.current) {
+      clearTimeout(conversationSearchDebounceRef.current);
+    }
+
+    conversationSearchDebounceRef.current = setTimeout(() => {
+      currentConversationsPageRef.current = 1;
+      void loadConversations({
+        query: conversationSearchQuery
+      });
+    }, 280);
+
+    return () => {
+      if (conversationSearchDebounceRef.current) {
+        clearTimeout(conversationSearchDebounceRef.current);
+        conversationSearchDebounceRef.current = null;
+      }
+    };
+  }, [conversationSearchQuery, hasLoadedOrganizations, loadConversations]);
 
   useEffect(() => {
     if (!hasLoadedOrganizations || !orgId) {
       return;
     }
 
+    const typingTimers = typingResetTimersRef.current;
+    const markReadTimers = markReadDebounceTimersRef.current;
     let active = true;
     let cleanup: (() => void) | null = null;
     let refreshTimer: ReturnType<typeof setTimeout> | null = null;
     let fallbackTimer: ReturnType<typeof setInterval> | null = null;
+
+    const stopFallbackPolling = () => {
+      if (fallbackTimer) {
+        clearInterval(fallbackTimer);
+        fallbackTimer = null;
+      }
+    };
+
+    const startFallbackPolling = () => {
+      if (fallbackTimer) {
+        return;
+      }
+
+      realtimeFallbackCountRef.current += 1;
+      recordInboxTelemetry("realtime_fallback_activation_count", 1, { orgId });
+      const attemptCount = Math.max(1, realtimeConnectionAttemptCountRef.current);
+      recordInboxTelemetry("realtime_fallback_activation_rate", realtimeFallbackCountRef.current / attemptCount, {
+        orgId
+      });
+      setRealtimeConnectionState("fallback");
+
+      fallbackTimer = setInterval(() => {
+        if (!active) {
+          return;
+        }
+
+        void loadConversations({ background: true });
+        const currentSelectedId = selectedConversationIdRef.current;
+        if (currentSelectedId) {
+          void loadMessages(currentSelectedId, { background: true });
+        }
+      }, 15000);
+    };
 
     const scheduleRefresh = () => {
       if (refreshTimer) {
@@ -616,13 +969,36 @@ export function useInboxWorkspaceLoaders(state: InboxWorkspaceState) {
     };
 
     const startSubscription = async () => {
+      realtimeConnectionAttemptCountRef.current += 1;
+      setRealtimeConnectionState("connecting");
+
       try {
         cleanup = await subscribeToOrgMessageEvents({
           orgId,
+          onConnectionStateChange: (connectionState) => {
+            if (!active) {
+              return;
+            }
+
+            if (connectionState === "connected") {
+              setRealtimeConnectionState("connected");
+              stopFallbackPolling();
+              return;
+            }
+
+            if (connectionState === "connecting" || connectionState === "initialized") {
+              setRealtimeConnectionState(connectionState);
+              return;
+            }
+
+            setRealtimeConnectionState(connectionState);
+            startFallbackPolling();
+          },
           onMessageNew: (payload) => {
             const parsedTimestamp = new Date(payload.timestamp);
             const eventTs = Number.isNaN(parsedTimestamp.getTime()) ? new Date().toISOString() : parsedTimestamp.toISOString();
             const selectedId = selectedConversationIdRef.current;
+
             setConversations((previousRows) => {
               const targetIndex = previousRows.findIndex((row) => row.id === payload.conversationId);
               if (targetIndex < 0) {
@@ -639,9 +1015,9 @@ export function useInboxWorkspaceLoaders(state: InboxWorkspaceState) {
                     : target.unreadCount + 1
                   : target.unreadCount;
 
-              const nextTarget = {
+              const nextTarget: ConversationItem = {
                 ...target,
-                status: "OPEN" as const,
+                status: "OPEN",
                 unreadCount: nextUnreadCount,
                 lastMessageAt: eventTsMs >= currentLastMessageAtMs ? eventTs : target.lastMessageAt,
                 updatedAt: eventTsMs >= currentLastMessageAtMs ? eventTs : target.updatedAt,
@@ -670,13 +1046,84 @@ export function useInboxWorkspaceLoaders(state: InboxWorkspaceState) {
                   lastMessageDirection: payload.direction
                 };
               });
+              if (payload.direction === "INBOUND") {
+                scheduleMarkConversationRead(payload.conversationId);
+              }
               void loadMessages(payload.conversationId, { background: true });
             }
 
-            if (payload.direction === "INBOUND") {
+            if (payload.direction === "INBOUND" && payload.conversationId !== selectedId) {
               playInboundNotification();
             }
+
             scheduleRefresh();
+          },
+          onMessageStatus: (payload) => {
+            let messageFound = false;
+
+            const storeEntry = messageStoreRef.current.get(payload.conversationId);
+            if (storeEntry) {
+              const nextRows = storeEntry.rows.map((row) => {
+                if (row.id !== payload.messageId) {
+                  return row;
+                }
+                messageFound = true;
+                return {
+                  ...row,
+                  sendStatus: payload.sendStatus,
+                  deliveryStatus: payload.deliveryStatus,
+                  sendError: payload.sendError,
+                  retryable: payload.retryable,
+                  sendAttemptCount: payload.sendAttemptCount,
+                  deliveredAt: payload.deliveredAt,
+                  readAt: payload.readAt
+                };
+              });
+
+              if (messageFound) {
+                upsertMessageStore(payload.conversationId, nextRows, storeEntry.hasMore, storeEntry.nextBeforeMessageId);
+              }
+            }
+
+            if (selectedConversationIdRef.current === payload.conversationId) {
+              setMessages((previousRows) => {
+                let updated = false;
+                const nextRows = previousRows.map((row) => {
+                  if (row.id !== payload.messageId) {
+                    return row;
+                  }
+                  updated = true;
+                  return {
+                    ...row,
+                    sendStatus: payload.sendStatus,
+                    deliveryStatus: payload.deliveryStatus,
+                    sendError: payload.sendError,
+                    retryable: payload.retryable,
+                    sendAttemptCount: payload.sendAttemptCount,
+                    deliveredAt: payload.deliveredAt,
+                    readAt: payload.readAt
+                  };
+                });
+
+                if (updated) {
+                  messageFound = true;
+                  return nextRows;
+                }
+                return previousRows;
+              });
+
+              if (!messageFound) {
+                realtimeMessageStatusMismatchCountRef.current += 1;
+                recordInboxTelemetry("realtime_status_mismatch_count", 1, {
+                  orgId,
+                  conversationId: payload.conversationId
+                });
+                if (realtimeMessageStatusMismatchCountRef.current % 5 === 0) {
+                  console.info(`[realtime] message.status mismatch count=${realtimeMessageStatusMismatchCountRef.current}`);
+                }
+                void loadMessages(payload.conversationId, { background: true });
+              }
+            }
           },
           onConversationUpdated: (payload) => {
             setConversations((previousRows) => {
@@ -709,10 +1156,6 @@ export function useInboxWorkspaceLoaders(state: InboxWorkspaceState) {
                 updatedAt: payload.timestamp
               };
             });
-            if (selectedConversationIdRef.current === payload.conversationId) {
-              void loadMessages(payload.conversationId, { background: true });
-            }
-            scheduleRefresh();
           },
           onAssignmentChanged: (payload) => {
             setConversations((previousRows) => {
@@ -745,53 +1188,69 @@ export function useInboxWorkspaceLoaders(state: InboxWorkspaceState) {
                 updatedAt: payload.timestamp
               };
             });
-            if (selectedConversationIdRef.current === payload.conversationId) {
-              void loadMessages(payload.conversationId, { background: true });
-            }
-            scheduleRefresh();
           },
           onConversationTyping: (payload) => {
             const timerKey = payload.conversationId;
-            const existingTimer = typingResetTimersRef.current.get(timerKey);
+            const existingTimer = typingTimers.get(timerKey);
             if (existingTimer) {
               clearTimeout(existingTimer);
-              typingResetTimersRef.current.delete(timerKey);
+              typingTimers.delete(timerKey);
             }
 
             if (payload.isTyping) {
               setTypingConversationId(payload.conversationId);
               const resetTimer = setTimeout(() => {
                 setTypingConversationId((current) => (current === payload.conversationId ? null : current));
-                typingResetTimersRef.current.delete(timerKey);
+                typingTimers.delete(timerKey);
               }, 6500);
-              typingResetTimersRef.current.set(timerKey, resetTimer);
+              typingTimers.set(timerKey, resetTimer);
               return;
             }
 
             setTypingConversationId((current) => (current === payload.conversationId ? null : current));
           },
-          onInvoiceCreated: scheduleRefresh,
-          onInvoiceUpdated: scheduleRefresh,
-          onInvoicePaid: scheduleRefresh,
-          onProofAttached: scheduleRefresh,
+          onInvoiceCreated: () => {
+            scheduleRefresh();
+            const currentConversationId = selectedConversationIdRef.current;
+            if (currentConversationId) {
+              void loadConversationCrmContext(currentConversationId);
+              void loadConversation(currentConversationId, { background: true });
+            }
+          },
+          onInvoiceUpdated: () => {
+            scheduleRefresh();
+            const currentConversationId = selectedConversationIdRef.current;
+            if (currentConversationId) {
+              void loadConversationCrmContext(currentConversationId);
+              void loadConversation(currentConversationId, { background: true });
+            }
+          },
+          onInvoicePaid: () => {
+            scheduleRefresh();
+            const currentConversationId = selectedConversationIdRef.current;
+            if (currentConversationId) {
+              void loadConversationCrmContext(currentConversationId);
+              void loadConversation(currentConversationId, { background: true });
+            }
+          },
+          onProofAttached: () => {
+            scheduleRefresh();
+            const currentConversationId = selectedConversationIdRef.current;
+            if (currentConversationId) {
+              void loadConversationCrmContext(currentConversationId);
+            }
+          },
           onCustomerUpdated: scheduleRefresh,
           onStorageUpdated: scheduleRefresh
         });
       } catch (subscriptionError) {
         const message = subscriptionError instanceof Error ? subscriptionError.message : "Unknown realtime subscribe error";
         console.error(`[realtime] inbox subscription failed: ${message}`);
+        startFallbackPolling();
       }
     };
 
     void startSubscription();
-
-    fallbackTimer = setInterval(() => {
-      if (!active) {
-        return;
-      }
-
-      void loadConversations({ background: true });
-    }, 15000);
 
     return () => {
       active = false;
@@ -799,37 +1258,46 @@ export function useInboxWorkspaceLoaders(state: InboxWorkspaceState) {
         clearTimeout(refreshTimer);
       }
 
-      if (fallbackTimer) {
-        clearInterval(fallbackTimer);
-      }
+      stopFallbackPolling();
 
       if (cleanup) {
         cleanup();
       }
 
-      typingResetTimersRef.current.forEach((timer) => {
+      typingTimers.forEach((timer) => {
         clearTimeout(timer);
       });
-      typingResetTimersRef.current.clear();
+      typingTimers.clear();
+
+      markReadTimers.forEach((timer) => {
+        clearTimeout(timer);
+      });
+      markReadTimers.clear();
     };
   }, [
     hasLoadedOrganizations,
+    loadConversation,
+    loadConversationCrmContext,
     loadConversations,
     loadMessages,
     orgId,
     playInboundNotification,
     recalculateConversationSnapshot,
+    scheduleMarkConversationRead,
     setConversations,
+    setRealtimeConnectionState,
     setSelectedConversation,
-    setTypingConversationId
+    setTypingConversationId,
+    upsertMessageStore,
+    setMessages
   ]);
 
   const workspaceSubtitle = useMemo(() => {
     if (!orgId) {
-      return "No business available.";
+      return "Belum ada bisnis tersedia.";
     }
 
-    return `${metaTotal} conversations`;
+    return `${metaTotal} percakapan`;
   }, [metaTotal, orgId]);
 
   const activeOrgRole = useMemo(() => {
@@ -844,8 +1312,10 @@ export function useInboxWorkspaceLoaders(state: InboxWorkspaceState) {
     workspaceSubtitle,
     activeOrgRole,
     loadMessages,
+    loadOlderMessages,
     loadConversation,
     loadConversations,
+    loadMoreConversations,
     loadCustomerCrmContext,
     loadConversationCrmContext
   };

@@ -39,8 +39,8 @@ test("chat utils produce stable avatar tone and day key behavior", () => {
   assert.equal(toDayKey("invalid"), "unknown");
   assert.equal(toDayKey("2026-03-06T00:00:00.000Z"), "2026-03-06");
 
-  assert.equal(formatDayLabel("unknown"), "Unknown date");
-  assert.match(formatDayLabel("2026-99-99"), /[A-Za-z]{3} \d{2}, \d{4}/);
+  assert.equal(formatDayLabel("unknown"), "Tanggal tidak diketahui");
+  assert.match(formatDayLabel("2026-99-99"), /\d{2}.*\d{4}/);
 });
 
 test("conversation list utils handle initials, source badge, timestamp fallback", () => {
@@ -57,6 +57,7 @@ test("conversation list utils handle initials, source badge, timestamp fallback"
 
   assert.equal(formatTimestamp(null), "-");
   assert.equal(formatTimestamp("invalid"), "-");
+  assert.equal(formatTimestamp("2026-03-05T10:00:00.000Z", new Date("2026-03-06T10:00:00.000Z").getTime()), "Kemarin");
 
   assert.equal(toConversationAvatarTone("seed"), toConversationAvatarTone("seed"));
 });
@@ -76,12 +77,12 @@ test("input utils enforce file type allowlist and file size format", () => {
 });
 
 test("bubble utils map media label and time fallback", () => {
-  assert.equal(renderMediaLabel(mockMessage("IMAGE")), "Image");
+  assert.equal(renderMediaLabel(mockMessage("IMAGE")), "Gambar");
   assert.equal(renderMediaLabel(mockMessage("VIDEO")), "Video");
   assert.equal(renderMediaLabel(mockMessage("AUDIO")), "Audio");
-  assert.equal(renderMediaLabel(mockMessage("DOCUMENT", "proof.pdf")), "Document: proof.pdf");
+  assert.equal(renderMediaLabel(mockMessage("DOCUMENT", "proof.pdf")), "Dokumen: proof.pdf");
   assert.equal(renderMediaLabel(mockMessage("TEXT")), null);
 
   assert.equal(formatTime("invalid"), "-");
-  assert.match(formatTime("2026-03-06T10:00:00.000Z"), /\d{1,2}:\d{2}/);
+  assert.match(formatTime("2026-03-06T10:00:00.000Z"), /\d{1,2}[:.]\d{2}/);
 });

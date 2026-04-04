@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { MessageCircleMore, ShoppingBag } from "lucide-react";
+import { Loader2, MessageCircleMore, ShoppingBag } from "lucide-react";
 
 import { ChatHeader } from "@/components/inbox/chat/ChatHeader";
 import { ChatMessagesSkeleton } from "@/components/inbox/chat/ChatMessagesSkeleton";
@@ -9,6 +9,7 @@ import { formatDayLabel, toDayKey } from "@/components/inbox/chat/chatUtils";
 import { MessageBubble } from "@/components/inbox/MessageBubble";
 import { MessageInput } from "@/components/inbox/MessageInput";
 import type { ConversationItem, MessageItem } from "@/components/inbox/types";
+import type { SearchMessagesResponse } from "@/components/inbox/workspace/types";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { EmptyStatePanel, ErrorStatePanel } from "@/components/ui/state-panels";
@@ -19,6 +20,8 @@ type ChatWindowProps = {
   isUpdatingConversationStatus: boolean;
   messages: MessageItem[];
   isLoading: boolean;
+  isLoadingOlderMessages: boolean;
+  hasMoreMessages: boolean;
   isConversationSelected: boolean;
   isCustomerTyping: boolean;
   error: string | null;
@@ -34,6 +37,7 @@ type ChatWindowProps = {
   onToggleConversationStatus: () => Promise<void>;
   onDeleteConversation: () => Promise<void>;
   onRetryOutboundMessage: (messageId: string) => Promise<void>;
+  onLoadOlderMessages: () => Promise<void>;
   onSelectProofMessage: (messageId: string) => void;
   onUnselectConversation: () => void;
 };
@@ -44,6 +48,8 @@ export function ChatWindow({
   isUpdatingConversationStatus,
   messages,
   isLoading,
+  isLoadingOlderMessages,
+  hasMoreMessages,
   isConversationSelected,
   isCustomerTyping,
   error,
@@ -54,6 +60,7 @@ export function ChatWindow({
   onToggleConversationStatus,
   onDeleteConversation,
   onRetryOutboundMessage,
+  onLoadOlderMessages,
   onSelectProofMessage,
   onUnselectConversation
 }: ChatWindowProps) {
@@ -62,11 +69,16 @@ export function ChatWindow({
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const previousConversationIdRef = useRef<string | null>(null);
   const previousLastMessageIdRef = useRef<string | null>(null);
-  const [activeDayLabel, setActiveDayLabel] = useState<string>("Today");
+  const pendingOlderScrollRestoreRef = useRef<{ previousHeight: number; previousTop: number } | null>(null);
+  const loadOlderLockRef = useRef(false);
+  const [activeDayLabel, setActiveDayLabel] = useState<string>("Hari ini");
   const [showScrollToLatest, setShowScrollToLatest] = useState(false);
   const [animatedMessageId, setAnimatedMessageId] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [isSearchOpen, setIsSearchOpen] = useState(false);
+  const [isSearchingMessages, setIsSearchingMessages] = useState(false);
+  const [searchError, setSearchError] = useState<string | null>(null);
+  const [searchMatches, setSearchMatches] = useState<Array<{ id: string; text: string; createdAt: string }>>([]);
   const [isTransferOpen, setIsTransferOpen] = useState(false);
   const [isResolveOpen, setIsResolveOpen] = useState(false);
   const [transferMembers, setTransferMembers] = useState<Array<{ userId: string; name: string | null; email: string; role: string }>>([]);
@@ -76,16 +88,12 @@ export function ChatWindow({
   const [resolveMessage, setResolveMessage] = useState("Terima kasih, percakapan ini kami tutup. Jika Anda butuh bantuan lagi, balas pesan ini kapan saja.");
   const [isResolving, setIsResolving] = useState(false);
   const [resolveError, setResolveError] = useState<string | null>(null);
+  const [draftByConversation, setDraftByConversation] = useState<Record<string, string>>({});
   const lastMessageId = messages.length > 0 ? messages[messages.length - 1]?.id ?? null : null;
-  const normalizedSearchQuery = searchQuery.trim().toLowerCase();
-  const matchingMessageIds = useMemo(
-    () =>
-      normalizedSearchQuery
-        ? messages.filter((message) => (message.text ?? "").toLowerCase().includes(normalizedSearchQuery)).map((message) => message.id)
-        : [],
-    [messages, normalizedSearchQuery]
-  );
-  const matchedCount = matchingMessageIds.length;
+  const trimmedSearchQuery = searchQuery.trim();
+  const normalizedSearchQuery = trimmedSearchQuery.toLowerCase();
+  const activeDraft = conversation ? draftByConversation[conversation.id] ?? "" : "";
+  const matchedCount = searchMatches.length;
   const unreadStartIndex = useMemo(() => {
     const unreadCount = conversation?.unreadCount ?? 0;
     if (unreadCount <= 0 || unreadCount >= messages.length) {
@@ -94,6 +102,13 @@ export function ChatWindow({
 
     return Math.max(0, messages.length - unreadCount);
   }, [conversation?.unreadCount, messages.length]);
+
+  useEffect(() => {
+    setSearchQuery("");
+    setSearchMatches([]);
+    setSearchError(null);
+    setIsSearchingMessages(false);
+  }, [conversation?.id]);
 
   useEffect(() => {
     if (!isConversationSelected || !scrollRef.current) {
@@ -130,6 +145,21 @@ export function ChatWindow({
     }
 
     const updateScrollState = () => {
+      if (
+        isConversationSelected &&
+        hasMoreMessages &&
+        !isLoadingOlderMessages &&
+        !loadOlderLockRef.current &&
+        element.scrollTop < 80
+      ) {
+        loadOlderLockRef.current = true;
+        pendingOlderScrollRestoreRef.current = {
+          previousHeight: element.scrollHeight,
+          previousTop: element.scrollTop
+        };
+        void onLoadOlderMessages();
+      }
+
       const nearBottom = element.scrollHeight - element.scrollTop - element.clientHeight < 80;
       setShowScrollToLatest(!nearBottom);
 
@@ -149,7 +179,79 @@ export function ChatWindow({
     updateScrollState();
     element.addEventListener("scroll", updateScrollState, { passive: true });
     return () => element.removeEventListener("scroll", updateScrollState);
-  }, [messages.length, conversation?.id]);
+  }, [conversation?.id, hasMoreMessages, isConversationSelected, isLoadingOlderMessages, messages.length, onLoadOlderMessages]);
+
+  useEffect(() => {
+    if (isLoadingOlderMessages) {
+      return;
+    }
+    loadOlderLockRef.current = false;
+  }, [isLoadingOlderMessages]);
+
+  useEffect(() => {
+    const element = scrollRef.current;
+    const pending = pendingOlderScrollRestoreRef.current;
+    if (!element || !pending || isLoadingOlderMessages) {
+      return;
+    }
+
+    const nextTop = element.scrollHeight - pending.previousHeight + pending.previousTop;
+    element.scrollTop = Math.max(0, nextTop);
+    pendingOlderScrollRestoreRef.current = null;
+  }, [isLoadingOlderMessages, messages.length]);
+
+  useEffect(() => {
+    if (!isSearchOpen || !conversation) {
+      setSearchMatches([]);
+      setSearchError(null);
+      setIsSearchingMessages(false);
+      return;
+    }
+
+    if (!normalizedSearchQuery) {
+      setSearchMatches([]);
+      setSearchError(null);
+      setIsSearchingMessages(false);
+      return;
+    }
+
+    const controller = new AbortController();
+    const timer = window.setTimeout(async () => {
+      setIsSearchingMessages(true);
+      setSearchError(null);
+      try {
+        const params = new URLSearchParams({
+          conversationId: conversation.id,
+          query: trimmedSearchQuery,
+          limit: "20",
+          orgId: conversation.orgId
+        });
+        const response = await fetch(`/api/messages/search?${params.toString()}`, {
+          signal: controller.signal
+        });
+        const payload = (await response.json().catch(() => null)) as SearchMessagesResponse | null;
+        if (!response.ok) {
+          setSearchError(payload?.error?.message ?? "Gagal mencari pesan.");
+          setSearchMatches([]);
+          return;
+        }
+        setSearchMatches(payload?.data?.messages ?? []);
+      } catch (error) {
+        if (error instanceof DOMException && error.name === "AbortError") {
+          return;
+        }
+        setSearchError("Terjadi masalah jaringan saat mencari pesan.");
+        setSearchMatches([]);
+      } finally {
+        setIsSearchingMessages(false);
+      }
+    }, 220);
+
+    return () => {
+      clearTimeout(timer);
+      controller.abort();
+    };
+  }, [conversation, isSearchOpen, normalizedSearchQuery, trimmedSearchQuery]);
 
   async function handleOpenTransfer() {
     if (!conversation) {
@@ -170,7 +272,7 @@ export function ChatWindow({
         | null;
 
       if (!response.ok) {
-        setTransferError(payload?.error?.message ?? "Failed to load team members.");
+        setTransferError(payload?.error?.message ?? "Gagal memuat daftar anggota tim.");
         return;
       }
 
@@ -178,7 +280,7 @@ export function ChatWindow({
       setTransferMembers(members);
       setSelectedAssignee(members[0]?.userId ?? "");
     } catch {
-      setTransferError("Network error while loading business members.");
+      setTransferError("Terjadi masalah jaringan saat memuat anggota bisnis.");
     }
   }
 
@@ -201,13 +303,13 @@ export function ChatWindow({
 
       const payload = (await response.json().catch(() => null)) as { error?: { message?: string } } | null;
       if (!response.ok) {
-        setTransferError(payload?.error?.message ?? "Failed to transfer conversation.");
+        setTransferError(payload?.error?.message ?? "Gagal memindahkan percakapan.");
         return;
       }
 
       setIsTransferOpen(false);
     } catch {
-      setTransferError("Network error while transferring conversation.");
+      setTransferError("Terjadi masalah jaringan saat memindahkan percakapan.");
     } finally {
       setIsSubmittingTransfer(false);
     }
@@ -229,15 +331,39 @@ export function ChatWindow({
       await onToggleConversationStatus();
       setIsResolveOpen(false);
     } catch {
-      setResolveError("Failed to resolve conversation.");
+      setResolveError("Gagal menutup percakapan.");
     } finally {
       setIsResolving(false);
     }
   }
 
-  function jumpToMatchedMessage(messageId: string) {
+  function setDraftValue(nextValue: string) {
+    if (!conversation) {
+      return;
+    }
+    setDraftByConversation((current) => ({
+      ...current,
+      [conversation.id]: nextValue
+    }));
+  }
+
+  async function handleSendText(text: string) {
+    await onSendText(text);
+    if (!conversation) {
+      return;
+    }
+    setDraftByConversation((current) => ({
+      ...current,
+      [conversation.id]: ""
+    }));
+  }
+
+  async function jumpToMatchedMessage(messageId: string) {
     const element = scrollRef.current?.querySelector<HTMLElement>(`[data-message-id="${messageId}"]`);
     if (!element) {
+      if (hasMoreMessages) {
+        await onLoadOlderMessages();
+      }
       return;
     }
 
@@ -248,90 +374,74 @@ export function ChatWindow({
 
   return (
     <section data-panel="chat-window" className="inbox-scroll relative flex h-full min-h-0 max-h-full flex-col overflow-y-auto overscroll-contain rounded-[24px] border border-border/70 bg-card/95 shadow-md shadow-black/5 backdrop-blur-sm">
-      <ChatHeader
-        conversation={conversation}
-        displayName={displayName}
-        isCustomerTyping={isCustomerTyping}
-        isOpen={isOpen}
-        isCrmPanelOpen={isCrmPanelOpen}
-        isUpdatingConversationStatus={isUpdatingConversationStatus}
-        onOpenSearch={() => setIsSearchOpen(true)}
-        onOpenTransfer={() => {
-          void handleOpenTransfer();
-        }}
-        onOpenResolve={() => setIsResolveOpen(true)}
-        onDeleteConversation={() => {
-          if (!conversation) {
-            return;
-          }
-          const confirmed = window.confirm("Hapus chat ini? Semua pesan pada chat ini akan dihapus.");
-          if (!confirmed) {
-            return;
-          }
-          void onDeleteConversation();
-        }}
-        onUnselectConversation={onUnselectConversation}
-        onToggleCrmPanel={onToggleCrmPanel}
-      />
+      {isConversationSelected ? (
+        <ChatHeader
+          conversation={conversation}
+          displayName={displayName}
+          isCustomerTyping={isCustomerTyping}
+          isOpen={isOpen}
+          isCrmPanelOpen={isCrmPanelOpen}
+          isUpdatingConversationStatus={isUpdatingConversationStatus}
+          onOpenSearch={() => setIsSearchOpen(true)}
+          onOpenTransfer={() => {
+            void handleOpenTransfer();
+          }}
+          onOpenResolve={() => setIsResolveOpen(true)}
+          onDeleteConversation={() => {
+            if (!conversation) {
+              return;
+            }
+            const confirmed = window.confirm("Hapus chat ini? Semua pesan pada chat ini akan dihapus.");
+            if (!confirmed) {
+              return;
+            }
+            void onDeleteConversation();
+          }}
+          onUnselectConversation={onUnselectConversation}
+          onToggleCrmPanel={onToggleCrmPanel}
+        />
+      ) : null}
 
-      <div
-        ref={scrollRef}
-        className={`inbox-scroll min-h-0 flex-1 overflow-y-auto overscroll-contain ${
-          isConversationSelected
-            ? "bg-[linear-gradient(180deg,hsl(40_30%_90%),hsl(40_24%_88%))] dark:bg-[linear-gradient(180deg,hsl(33_12%_16%),hsl(33_10%_14%))]"
-            : "bg-[radial-gradient(circle_at_50%_0%,hsl(var(--accent)/0.24),transparent_40%),linear-gradient(to_bottom,hsl(var(--background)/0.97),hsl(var(--background)/0.78))]"
-        } ${
-          density === "compact" ? "space-y-2 px-4 py-4 sm:px-5 sm:py-5" : "space-y-3 px-4 py-4 sm:px-6 sm:py-6"
-        }`}
-      >
-        {isConversationSelected && messages.length > 0 ? (
-          <div className="pointer-events-none sticky top-2 z-[2] flex justify-center">
-            <span className="rounded-full border border-border bg-card/95 px-3 py-1 text-[11px] font-medium text-muted-foreground shadow-sm backdrop-blur-sm">
-              {activeDayLabel}
-            </span>
-          </div>
-        ) : null}
-
-        {!isConversationSelected ? (
-          <div className="flex min-h-full items-center justify-center px-4 py-10">
-            <div className="w-full max-w-[560px] rounded-[32px] border border-border/70 bg-card/95 p-7 text-center shadow-xl shadow-black/5">
-              <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-[20px] bg-primary text-primary-foreground shadow-lg shadow-primary/30">
-                <ShoppingBag className="h-7 w-7" />
-              </div>
-              <h3 className="mt-6 text-3xl font-semibold tracking-tight text-foreground">
-                WhatsApp <span className="text-primary">Inbox</span>
-              </h3>
-              <p className="mx-auto mt-3 max-w-sm text-sm leading-6 text-muted-foreground">
-                Channel yang aktif saat ini adalah WhatsApp. Pilih percakapan di panel kiri untuk mulai membalas customer.
-              </p>
-
-              <div className="mt-8 rounded-[24px] border border-emerald-500/25 bg-emerald-500/[0.08] p-5 text-left">
-                <div className="flex items-center gap-3">
-                  <div className="flex h-11 w-11 items-center justify-center rounded-2xl border border-emerald-500/30 bg-background shadow-sm">
-                    <MessageCircleMore className="h-5 w-5 text-emerald-600" />
-                  </div>
-                  <div>
-                    <p className="text-sm font-semibold text-foreground">WhatsApp Connected</p>
-                    <p className="text-xs text-muted-foreground">Inbox siap dipakai untuk chat customer dari WhatsApp.</p>
-                  </div>
-                </div>
-              </div>
-
-              <div className="mt-5 flex items-center justify-center gap-2">
-                <span className="rounded-full border border-border/80 bg-background px-3 py-1 text-xs text-muted-foreground">Belum ada kontak dipilih</span>
-                {matchedCount > 0 ? (
-                  <span className="rounded-full border border-primary/20 bg-primary/10 px-3 py-1 text-xs text-primary">{matchedCount} search matches</span>
-                ) : null}
-              </div>
-
-              <p className="mt-7 text-xs text-muted-foreground">Pilih percakapan di panel kiri untuk mulai membalas pelanggan.</p>
+      {!isConversationSelected ? (
+        <div className="relative flex flex-1 flex-col items-center justify-center bg-[radial-gradient(ellipse_at_top,hsl(var(--primary)/0.05),transparent_80%),linear-gradient(to_bottom,hsl(var(--background)/0.96),hsl(var(--muted)/0.4))] p-8">
+          <div className="flex w-full max-w-md flex-col items-center text-center">
+            <div className="relative mb-10 flex h-36 w-36 items-center justify-center rounded-[2rem] bg-background shadow-sm border border-border/80">
+              <MessageCircleMore className="relative z-10 h-16 w-16 text-primary" />
+              <div className="absolute inset-0 rounded-[2rem] border border-primary/20 bg-gradient-to-tr from-primary/10 to-transparent"></div>
             </div>
+            <h3 className="text-[32px] font-light text-foreground/90 tracking-tight">
+              20byte <span className="font-semibold text-primary">WhatsApp CRM</span>
+            </h3>
+            <p className="mt-4 text-[15px] leading-relaxed text-muted-foreground/80">
+              Pusat kendali interaksi pelanggan Anda. Kembangkan, atur, dan kelola kelancaran bisnis Anda di satu tempat.
+            </p>
           </div>
-        ) : null}
+          
+          <div className="absolute bottom-8 flex w-full justify-center">
+             <p className="inline-flex items-center gap-2 text-xs font-medium text-muted-foreground/60">
+              <svg width="10" height="12" viewBox="0 0 10 12" fill="none" xmlns="http://www.w3.org/2000/svg" className="opacity-70"><path fillRule="evenodd" clipRule="evenodd" d="M1.99616 5.17647V3.52941C1.99616 1.86877 3.34241 0.522522 5.00305 0.522522C6.66369 0.522522 8.00994 1.86877 8.00994 3.52941V5.17647H8.50305C9.05534 5.17647 9.50305 5.62419 9.50305 6.17647V10.1765C9.50305 10.7288 9.05534 11.1765 8.50305 11.1765H1.50305C0.950767 11.1765 0.503052 10.7288 0.503052 10.1765V6.17647C0.503052 5.62419 0.950767 5.17647 1.50305 5.17647H1.99616ZM3.17263 5.17647V3.52941C3.17263 2.51866 3.99221 1.69908 5.00296 1.69908C6.01371 1.69908 6.83329 2.51866 6.83329 3.52941V5.17647H3.17263ZM5.00296 7.64706C4.58875 7.64706 4.25296 7.98285 4.25296 8.39706C4.25296 8.81127 4.58875 9.14706 5.00296 9.14706C5.41717 9.14706 5.75296 8.81127 5.75296 8.39706C5.75296 7.98285 5.41717 7.64706 5.00296 7.64706Z" fill="currentColor"/></svg>
+              Sistem Anda terintegrasi penuh secara real-time
+            </p>
+          </div>
+        </div>
+      ) : (
+        <div
+          ref={scrollRef}
+          className={`inbox-scroll min-h-0 flex-1 overflow-y-auto overscroll-contain bg-[radial-gradient(ellipse_at_top,hsl(var(--primary)/0.05),transparent_80%),linear-gradient(to_bottom,hsl(var(--background)/0.96),hsl(var(--muted)/0.4))] ${
+            density === "compact" ? "space-y-2 px-4 py-4 sm:px-5 sm:py-5" : "space-y-3 px-4 py-4 sm:px-6 sm:py-6"
+          }`}
+        >
+          {messages.length > 0 ? (
+            <div className="pointer-events-none sticky top-2 z-[2] flex justify-center">
+              <span className="rounded-full border border-border bg-card/95 px-3 py-1 text-[11px] font-medium text-muted-foreground shadow-sm backdrop-blur-sm">
+                {activeDayLabel}
+              </span>
+            </div>
+          ) : null}
 
         {isConversationSelected && isLoading ? <ChatMessagesSkeleton /> : null}
 
-        {isConversationSelected && !isLoading && error ? <ErrorStatePanel title="Failed to Load Messages" message={error} /> : null}
+        {isConversationSelected && !isLoading && error ? <ErrorStatePanel title="Gagal Memuat Pesan" message={error} /> : null}
 
         {isConversationSelected && !isLoading && !error && messages.length === 0 ? (
           <EmptyStatePanel title="Belum Ada Pesan" message="Mulai percakapan dengan mengirim pesan pertama." />
@@ -339,6 +449,13 @@ export function ChatWindow({
 
         {isConversationSelected && !isLoading && !error && messages.length > 0 ? (
           <div key={`${conversation?.id ?? "none"}-${messages.length}`} className="inbox-fade-slide space-y-3">
+            {hasMoreMessages ? (
+              <div className="flex justify-center">
+                <span className="rounded-full border border-border bg-card/90 px-3 py-1 text-[11px] text-muted-foreground">
+                  {isLoadingOlderMessages ? "Memuat riwayat lama..." : "Gulir ke atas untuk memuat pesan lama"}
+                </span>
+              </div>
+            ) : null}
             {messages.map((message, index) => {
               const currentDayKey = toDayKey(message.createdAt);
               const previousDayKey = index > 0 ? toDayKey(messages[index - 1]?.createdAt ?? "") : null;
@@ -361,7 +478,7 @@ export function ChatWindow({
                     <div className="flex items-center gap-2">
                       <div className="h-px flex-1 bg-border" />
                       <span className="rounded-full border border-primary/30 bg-primary/10 px-2.5 py-0.5 text-[11px] font-medium text-primary">
-                        New messages
+                        Pesan baru
                       </span>
                       <div className="h-px flex-1 bg-border" />
                     </div>
@@ -381,8 +498,9 @@ export function ChatWindow({
           </div>
         ) : null}
       </div>
+      )}
 
-      {showScrollToLatest ? (
+      {showScrollToLatest && isConversationSelected ? (
         <div className="pointer-events-none absolute bottom-24 right-4 z-[3] sm:right-7">
           <Button
             type="button"
@@ -400,54 +518,67 @@ export function ChatWindow({
               });
             }}
           >
-            Latest
+            Terbaru
           </Button>
         </div>
       ) : null}
 
-      <MessageInput
-        density={density}
-        disabled={!isConversationSelected}
-        onSendText={onSendText}
-        onSendAttachment={onSendAttachment}
-      />
+      {isConversationSelected ? (
+        <MessageInput
+          density={density}
+          disabled={!isConversationSelected}
+          textValue={activeDraft}
+          onTextValueChange={setDraftValue}
+          onSendText={handleSendText}
+          onSendAttachment={onSendAttachment}
+        />
+      ) : null}
 
       {isSearchOpen ? (
         <div className="absolute inset-0 z-20 flex items-start justify-center bg-black/35 px-4 py-10 backdrop-blur-sm">
           <div className="w-full max-w-xl rounded-[28px] border border-border/80 bg-card p-5 shadow-2xl">
             <div className="flex items-center justify-between gap-3">
               <div>
-                <h3 className="text-lg font-semibold text-foreground">Search in conversation</h3>
+                <h3 className="text-lg font-semibold text-foreground">Cari Dalam Percakapan</h3>
                 <p className="text-sm text-muted-foreground">Cari kata di riwayat WhatsApp customer ini.</p>
               </div>
               <Button type="button" variant="ghost" size="sm" className="h-9 rounded-lg" onClick={() => setIsSearchOpen(false)}>
-                Close
+                Tutup
               </Button>
             </div>
             <Input
               value={searchQuery}
               onChange={(event) => setSearchQuery(event.target.value)}
-              placeholder="Type a keyword..."
+              placeholder="Ketik kata kunci..."
               className="mt-4 h-11 rounded-xl"
             />
             <div className="mt-4 space-y-2">
-              <p className="text-xs uppercase tracking-[0.22em] text-muted-foreground">Matches</p>
-              {matchedCount === 0 ? <p className="text-sm text-muted-foreground">No messages found.</p> : null}
-              {matchingMessageIds.slice(0, 8).map((messageId) => {
-                const match = messages.find((message) => message.id === messageId);
-                if (!match) {
-                  return null;
-                }
-
+              <p className="text-xs uppercase tracking-[0.22em] text-muted-foreground">Hasil</p>
+              {isSearchingMessages ? (
+                <p className="inline-flex items-center text-sm text-muted-foreground">
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Mencari pesan...
+                </p>
+              ) : null}
+              {!isSearchingMessages && searchError ? <p className="text-sm text-destructive">{searchError}</p> : null}
+              {!isSearchingMessages && !searchError && normalizedSearchQuery && matchedCount === 0 ? (
+                <p className="text-sm text-muted-foreground">Tidak ada pesan yang cocok.</p>
+              ) : null}
+              {!isSearchingMessages && !searchError && !normalizedSearchQuery ? (
+                <p className="text-sm text-muted-foreground">Ketik kata kunci untuk mulai mencari.</p>
+              ) : null}
+              {searchMatches.slice(0, 10).map((match) => {
                 return (
                   <button
-                    key={messageId}
+                    key={match.id}
                     type="button"
-                    onClick={() => jumpToMatchedMessage(messageId)}
+                    onClick={() => {
+                      void jumpToMatchedMessage(match.id);
+                    }}
                     className="w-full rounded-2xl border border-border/80 bg-background/70 px-3 py-3 text-left hover:bg-accent/40"
                   >
-                    <p className="line-clamp-2 text-sm text-foreground">{match.text ?? "Media message"}</p>
-                    <p className="mt-1 text-xs text-muted-foreground">{new Date(match.createdAt).toLocaleString()}</p>
+                    <p className="line-clamp-2 text-sm text-foreground">{match.text ?? "Pesan media"}</p>
+                    <p className="mt-1 text-xs text-muted-foreground">{new Date(match.createdAt).toLocaleString("id-ID")}</p>
                   </button>
                 );
               })}
@@ -465,11 +596,11 @@ export function ChatWindow({
                 <p className="text-sm text-muted-foreground">Pindahkan chat ke anggota bisnis atau CS lain.</p>
               </div>
               <Button type="button" variant="ghost" size="sm" className="h-9 rounded-lg" onClick={() => setIsTransferOpen(false)}>
-                Close
+                Tutup
               </Button>
             </div>
             <div className="mt-4 space-y-2">
-              <p className="text-xs uppercase tracking-[0.22em] text-muted-foreground">Assign to</p>
+              <p className="text-xs uppercase tracking-[0.22em] text-muted-foreground">Pilih Tujuan</p>
               <select
                 value={selectedAssignee}
                 onChange={(event) => setSelectedAssignee(event.target.value)}
@@ -485,10 +616,10 @@ export function ChatWindow({
             </div>
             <div className="mt-5 flex justify-end gap-2">
               <Button type="button" variant="ghost" onClick={() => setIsTransferOpen(false)}>
-                Cancel
+                Batal
               </Button>
               <Button type="button" onClick={() => void handleTransferConversation()} disabled={!selectedAssignee || isSubmittingTransfer}>
-                {isSubmittingTransfer ? "Transferring..." : "Transfer Chat"}
+                {isSubmittingTransfer ? "Memindahkan..." : "Pindahkan Chat"}
               </Button>
             </div>
           </div>
@@ -499,17 +630,17 @@ export function ChatWindow({
         <div className="absolute inset-0 z-20 flex items-center justify-center bg-black/35 px-4 py-10 backdrop-blur-sm">
           <div className="w-full max-w-2xl rounded-[28px] border border-border/80 bg-card p-0 shadow-2xl">
             <div className="flex items-center justify-between border-b border-border/80 px-5 py-4">
-              <h3 className="text-2xl font-semibold text-foreground">Resolve Conversation</h3>
+              <h3 className="text-2xl font-semibold text-foreground">Tutup Percakapan</h3>
               <Button type="button" variant="ghost" size="sm" className="h-9 rounded-lg" onClick={() => setIsResolveOpen(false)}>
-                Close
+                Tutup
               </Button>
             </div>
             <div className="space-y-4 px-5 py-5">
               <p className="text-sm leading-6 text-muted-foreground">
-                This will mark the chat as closed and optionally send a closing message to the customer.
+                Aksi ini akan menandai chat sebagai selesai dan opsional mengirim pesan penutup ke customer.
               </p>
               <div className="space-y-2">
-                <p className="text-xs font-semibold uppercase tracking-[0.22em] text-muted-foreground">Closing message</p>
+                <p className="text-xs font-semibold uppercase tracking-[0.22em] text-muted-foreground">Pesan Penutup</p>
                 <textarea
                   value={resolveMessage}
                   onChange={(event) => setResolveMessage(event.target.value)}
@@ -519,10 +650,10 @@ export function ChatWindow({
               {resolveError ? <p className="text-sm text-destructive">{resolveError}</p> : null}
               <div className="flex justify-end gap-2">
                 <Button type="button" variant="ghost" onClick={() => setIsResolveOpen(false)}>
-                  Cancel
+                  Batal
                 </Button>
                 <Button type="button" className="bg-primary text-primary-foreground" onClick={() => void handleResolveConversation()} disabled={isResolving}>
-                  {isResolving ? "Resolving..." : "Resolve & Close"}
+                  {isResolving ? "Menutup..." : "Tutup Percakapan"}
                 </Button>
               </div>
             </div>

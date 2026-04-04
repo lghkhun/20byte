@@ -566,7 +566,7 @@ export function InvoiceDrawer({
 
   return (
     <Drawer open={open} onOpenChange={(nextOpen) => (!nextOpen ? onClose() : undefined)} direction="right">
-      <DrawerContent className="data-[vaul-drawer-direction=right]:border-l-border">
+      <DrawerContent className="data-[vaul-drawer-direction=right]:border-l-border lg:max-w-4xl xl:max-w-[1100px]">
         <DrawerHeader className="shrink-0 border-b border-border/70 px-5 py-4 md:px-6">
           <div className="flex items-start justify-between gap-4">
             <div className="space-y-3">
@@ -581,7 +581,7 @@ export function InvoiceDrawer({
                   className={cn(
                     "rounded-md border px-3 py-2 text-xs font-medium transition",
                     kind === InvoiceKind.FULL
-                      ? "border-primary/20 bg-primary text-primary-foreground"
+                      ? "border-transparent bg-foreground text-background shadow-md shadow-foreground/5"
                       : "border-border bg-background text-muted-foreground hover:bg-accent"
                   )}
                 >
@@ -593,7 +593,7 @@ export function InvoiceDrawer({
                   className={cn(
                     "rounded-md border px-3 py-2 text-xs font-medium transition",
                     kind === InvoiceKind.DP_AND_FINAL
-                      ? "border-sky-500/20 bg-sky-500 text-white"
+                      ? "border-transparent bg-primary text-primary-foreground shadow-md shadow-primary/20"
                       : "border-border bg-background text-muted-foreground hover:bg-accent"
                   )}
                 >
@@ -685,7 +685,7 @@ export function InvoiceDrawer({
                   </div>
 
                   {kind === InvoiceKind.DP_AND_FINAL ? (
-                    <div className="grid gap-4 rounded-md border border-sky-100 bg-sky-50/70 p-4 lg:grid-cols-[minmax(0,1fr)_140px]">
+                    <div className="grid gap-4 rounded-md border border-primary/20 bg-primary/5 p-4 lg:grid-cols-[minmax(0,1fr)_140px]">
                       <div className="space-y-1">
                         <p className="text-sm font-medium text-foreground">Skema Down Payment</p>
                         <p className="text-xs text-muted-foreground">
@@ -693,14 +693,14 @@ export function InvoiceDrawer({
                         </p>
                       </div>
                       <label className="space-y-2">
-                        <span className="text-xs font-medium uppercase tracking-[0.18em] text-sky-700">DP (%)</span>
+                        <span className="text-xs font-medium uppercase tracking-[0.18em] text-primary/80">DP (%)</span>
                         <Input
                           type="number"
                           min={1}
                           max={100}
                           value={dpPercentage}
                           onChange={(event) => setDpPercentage(Number(event.target.value))}
-                          className="h-11 rounded-md border-sky-200 bg-white"
+                          className="h-11 rounded-md border-border bg-background"
                         />
                       </label>
                     </div>
@@ -710,14 +710,14 @@ export function InvoiceDrawer({
               </section>
 
               <section className="space-y-4">
-                <div className="overflow-hidden rounded-md border border-slate-200 bg-white">
+                <div className="overflow-hidden">
                   <div className="overflow-x-auto">
                     <div className="min-w-[1180px]">
-                      <div className="grid grid-cols-[1.35fr_1.3fr_110px_140px_148px_160px_150px_36px] gap-x-4 bg-slate-700 px-4 text-xs font-semibold text-white">
-                        <div className="flex items-center gap-1 py-3">Produk <span className="text-rose-300">*</span></div>
-                        <div className="flex items-center gap-1 py-3">Deskripsi <span className="text-rose-300">*</span></div>
-                        <div className="flex items-center gap-1 py-3">Kuantitas <span className="text-rose-300">*</span></div>
-                        <div className="flex items-center gap-1 py-3">Harga <span className="text-rose-300">*</span></div>
+                      <div className="grid grid-cols-[1.35fr_1.3fr_110px_140px_148px_160px_150px_36px] gap-x-4 rounded-xl border border-border/80 bg-muted/40 px-4 text-[11px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">
+                        <div className="flex items-center gap-1 py-3">Produk <span className="text-rose-500">*</span></div>
+                        <div className="flex items-center gap-1 py-3">Deskripsi</div>
+                        <div className="flex items-center gap-1 py-3">Kuantitas <span className="text-rose-500">*</span></div>
+                        <div className="flex items-center gap-1 py-3">Harga <span className="text-rose-500">*</span></div>
                         <div className="py-3">Diskon</div>
                         <div className="flex items-center gap-1 py-3">
                           Pajak
@@ -727,26 +727,26 @@ export function InvoiceDrawer({
                         <div className="py-3" />
                       </div>
 
-                      <div className="bg-white">
+                      <div className="mt-2 space-y-2">
                         {items.map((item, index) => {
                           const lineSummary = lineSummaries[index];
 
                           return (
                             <div
                               key={item.id}
-                              className="grid grid-cols-[1.35fr_1.3fr_110px_140px_148px_160px_150px_36px] gap-x-4 border-t border-slate-200 px-4 py-4 first:border-t-0"
+                              className="grid grid-cols-[1.35fr_1.3fr_110px_140px_148px_160px_150px_36px] gap-x-4 px-4 py-2"
                             >
                               <Input
                                 value={item.name}
                                 placeholder="Nama produk"
                                 onChange={(event) => updateItem(index, { name: event.target.value })}
-                                className="h-11 rounded-none border-0 border-b border-slate-300 bg-slate-100 px-3 shadow-none focus-visible:ring-0"
+                                className="h-11 rounded-md border border-border bg-muted/40 px-3 shadow-none focus-visible:ring-1 focus-visible:ring-primary/40 focus-visible:border-primary/60"
                               />
                               <Input
                                 value={item.description}
-                                placeholder="Deskripsi produk"
+                                placeholder="Opsional"
                                 onChange={(event) => updateItem(index, { description: event.target.value })}
-                                className="h-11 rounded-none border-0 border-b border-slate-300 bg-slate-100 px-3 shadow-none focus-visible:ring-0"
+                                className="h-11 rounded-md border border-border bg-muted/40 px-3 shadow-none focus-visible:ring-1 focus-visible:ring-primary/40 focus-visible:border-primary/60"
                               />
                               <Input
                                 type="number"
@@ -761,7 +761,7 @@ export function InvoiceDrawer({
                                     qty: Number.isFinite(nextQty) ? Math.max(1, Math.floor(nextQty)) : 1
                                   });
                                 }}
-                                className="h-11 rounded-none border-0 border-b border-slate-300 bg-slate-100 px-3 text-left font-medium tabular-nums shadow-none focus-visible:ring-0"
+                                className="h-11 rounded-md border border-border bg-muted/40 px-3 text-left font-medium tabular-nums shadow-none focus-visible:ring-1 focus-visible:ring-primary/40 focus-visible:border-primary/60"
                               />
                               <Input
                                 type="number"
@@ -769,10 +769,10 @@ export function InvoiceDrawer({
                                 value={item.priceCents}
                                 placeholder="0"
                                 onChange={(event) => updateItem(index, { priceCents: Number(event.target.value) })}
-                                className="h-11 rounded-none border-0 border-b border-slate-300 bg-slate-100 px-3 text-left font-medium tabular-nums shadow-none focus-visible:ring-0"
+                                className="h-11 rounded-md border border-border bg-muted/40 px-3 text-left font-medium tabular-nums shadow-none focus-visible:ring-1 focus-visible:ring-primary/40 focus-visible:border-primary/60"
                               />
-                              <div className="grid h-11 grid-cols-[60px_1fr_24px] rounded-none border-0 border-b border-slate-300 bg-slate-100">
-                                <div className="relative">
+                              <div className="grid h-11 grid-cols-[60px_1fr_24px] overflow-hidden rounded-md border border-border bg-muted/40">
+                                <div className="relative border-r border-border">
                                   <select
                                     value={item.discountType}
                                     onChange={(event) => updateItem(index, { discountType: event.target.value as "%" | "IDR" })}
@@ -781,24 +781,24 @@ export function InvoiceDrawer({
                                     <option value="%">%</option>
                                     <option value="IDR">Rp</option>
                                   </select>
-                                  <ChevronDown className="pointer-events-none absolute right-1 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-500" />
+                                  <ChevronDown className="pointer-events-none absolute right-1 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
                                 </div>
                                 <input
                                   type="number"
                                   min={0}
                                   value={item.discountValue}
                                   onChange={(event) => updateItem(index, { discountValue: Number(event.target.value) })}
-                                  className="border-l border-slate-300 bg-transparent px-3 text-sm outline-none"
+                                  className="bg-transparent px-3 text-sm outline-none"
                                 />
-                                <div className="flex items-center justify-center text-sm text-slate-500">
+                                <div className="flex items-center justify-center text-sm text-muted-foreground">
                                   {item.discountType === "%" ? "%" : ""}
                                 </div>
                               </div>
-                              <div className="relative h-11 border-0 border-b border-slate-300 bg-slate-100">
+                              <div className="relative h-11 overflow-hidden rounded-md border border-border bg-muted/40">
                                 <select
                                   value={item.taxLabel}
                                   onChange={(event) => updateItem(index, { taxLabel: event.target.value })}
-                                  className="h-full w-full appearance-none bg-transparent px-3 pr-8 text-sm text-slate-500 outline-none"
+                                  className="h-full w-full appearance-none bg-transparent px-3 pr-8 text-sm text-foreground outline-none"
                                 >
                                   {INVOICE_TAX_OPTIONS.map((option) => (
                                     <option key={option.value || "NONE"} value={option.value}>
@@ -806,10 +806,10 @@ export function InvoiceDrawer({
                                     </option>
                                   ))}
                                 </select>
-                                <ChevronDown className="pointer-events-none absolute right-2 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-500" />
+                                <ChevronDown className="pointer-events-none absolute right-2 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
                               </div>
                               <div className="flex h-11 items-center justify-end py-1 text-right">
-                                <div className="text-sm font-medium tabular-nums text-slate-600">
+                                <div className="text-sm font-medium tabular-nums text-foreground">
                                   {toPlainNumberLabel(lineSummary?.totalCents ?? 0)}
                                 </div>
                               </div>
@@ -835,16 +835,16 @@ export function InvoiceDrawer({
                 <div className="flex flex-wrap gap-3">
                   <Button
                     type="button"
-                    variant="secondary"
-                    className="rounded-md bg-lime-500 px-5 text-white shadow hover:bg-lime-600"
+                    variant="outline"
+                    className="rounded-md border-border bg-background shadow-sm hover:bg-muted"
                     onClick={addItem}
                   >
                     Tambah Baris
                   </Button>
                   <Button
                     type="button"
-                    variant="secondary"
-                    className="rounded-md bg-sky-500 px-5 text-white shadow hover:bg-sky-600"
+                    variant="outline"
+                    className="rounded-md border-border bg-background shadow-sm hover:bg-muted"
                     onClick={() => setIsCatalogModalOpen(true)}
                   >
                     Katalog Produk
@@ -904,38 +904,38 @@ export function InvoiceDrawer({
                       />
                     </div>
 
-                    <div className="space-y-3 text-sm">
-                      <div className="flex items-center justify-between border-b border-slate-200 pb-3">
+                    <div className="space-y-3 text-sm px-1">
+                      <div className="flex items-center justify-between border-b border-border/50 pb-3 text-muted-foreground">
                         <span>Subtotal</span>
                         <span>{toRupiahLabel(summary.subtotalCents)}</span>
                       </div>
-                      <div className="flex items-center justify-between border-b border-slate-200 pb-3">
+                      <div className="flex items-center justify-between border-b border-border/50 pb-3 text-muted-foreground">
                         <span>Total Diskon Item</span>
                         <span>- {toRupiahLabel(summary.lineDiscountCents)}</span>
                       </div>
-                      <div className="flex items-center justify-between border-b border-slate-200 pb-3">
+                      <div className="flex items-center justify-between border-b border-border/50 pb-3 text-muted-foreground">
                         <span>Diskon Invoice</span>
                         <span>- {toRupiahLabel(summary.invoiceDiscountCents)}</span>
                       </div>
-                      <div className="flex items-center justify-between border-b border-slate-200 pb-3">
+                      <div className="flex items-center justify-between border-b border-border/50 pb-3 text-muted-foreground">
                         <span>Total Pajak</span>
                         <span>{toRupiahLabel(summary.taxCents)}</span>
                       </div>
-                      <div className="flex items-center justify-between text-base font-semibold">
+                      <div className="flex items-center justify-between text-base font-bold text-foreground">
                         <span>Total Tagihan</span>
-                        <span>{toRupiahLabel(summary.totalCents)}</span>
+                        <span className="text-primary">{toRupiahLabel(summary.totalCents)}</span>
                       </div>
                     </div>
 
                     {kind === InvoiceKind.DP_AND_FINAL ? (
-                      <div className="grid gap-3 rounded-md bg-sky-50 p-4 text-sm sm:grid-cols-2">
-                        <div className="rounded-md bg-white p-4">
-                          <p className="text-xs uppercase tracking-[0.2em] text-sky-700">DP</p>
+                      <div className="grid gap-3 rounded-md bg-primary/5 p-4 text-sm sm:grid-cols-2">
+                        <div className="rounded-md border border-border/50 bg-background/60 p-4 backdrop-blur-sm">
+                          <p className="text-xs uppercase tracking-[0.2em] text-primary/80">DP</p>
                           <p className="mt-2 text-xl font-semibold text-foreground">{toRupiahLabel(dpAmountCents)}</p>
                           <p className="mt-1 text-xs text-muted-foreground">{dpPercentage}% dari total invoice</p>
                         </div>
-                        <div className="rounded-md bg-white p-4">
-                          <p className="text-xs uppercase tracking-[0.2em] text-sky-700">Pelunasan</p>
+                        <div className="rounded-md border border-border/50 bg-background/60 p-4 backdrop-blur-sm">
+                          <p className="text-xs uppercase tracking-[0.2em] text-primary/80">Pelunasan</p>
                           <p className="mt-2 text-xl font-semibold text-foreground">{toRupiahLabel(finalAmountCents)}</p>
                           <p className="mt-1 text-xs text-muted-foreground">Sisa tagihan setelah DP dibayar</p>
                         </div>
@@ -1203,33 +1203,33 @@ export function InvoiceDrawer({
           </DialogContent>
         </Dialog>
 
-        <DrawerFooter className="shrink-0 border-t border-border/70 bg-background px-5 py-4 shadow-[0_-12px_24px_hsl(var(--foreground)/0.04)] md:px-6">
+        <DrawerFooter className="shrink-0 border-t border-border/70 bg-background/60 backdrop-blur-md px-5 py-4 shadow-[0_-12px_24px_hsl(var(--foreground)/0.04)] md:px-6">
           <div className="flex flex-wrap items-center justify-end gap-3">
             <DrawerClose asChild>
-              <Button type="button" variant="secondary" className="rounded-md bg-rose-400 px-6 text-white hover:bg-rose-500">
+              <Button type="button" variant="ghost" className="rounded-md text-foreground hover:bg-muted">
                 Batalkan
               </Button>
             </DrawerClose>
-            <Button type="submit" form="invoice-drawer-form" className="rounded-md bg-sky-500 px-6 text-white hover:bg-sky-600" disabled={!canCreateDraft}>
+            <Button type="submit" form="invoice-drawer-form" className="rounded-md px-6 shadow-md shadow-primary/10" disabled={!canCreateDraft}>
               {isSubmitting ? "Menyimpan..." : "Simpan Invoice"}
             </Button>
-            <Button type="button" variant="secondary" className="rounded-md" onClick={() => void handleUpdateItems()} disabled={!canUpdateDraft}>
+            <Button type="button" variant="secondary" className="rounded-md border border-border/80 bg-background shadow-sm" onClick={() => void handleUpdateItems()} disabled={!canUpdateDraft}>
               {isUpdatingItems ? "Updating..." : "Update Draft Items"}
             </Button>
-            <Button type="button" variant="secondary" className="rounded-md" onClick={() => void handleSendInvoice()} disabled={!canSendInvoice}>
+            <Button type="button" variant="secondary" className="rounded-md border border-border/80 bg-background shadow-sm" onClick={() => void handleSendInvoice()} disabled={!canSendInvoice}>
               {isSendingInvoice ? "Sending..." : "Send Invoice"}
             </Button>
             {kind === InvoiceKind.DP_AND_FINAL ? (
               <>
-                <Button type="button" variant="secondary" className="rounded-md" onClick={() => void handleMarkPaid(PaymentMilestoneType.DP)} disabled={!canMarkPaid}>
+                <Button type="button" variant="secondary" className="rounded-md border border-border/80 bg-background shadow-sm" onClick={() => void handleMarkPaid(PaymentMilestoneType.DP)} disabled={!canMarkPaid}>
                   {isMarkingPaid ? "Updating..." : "Mark DP Paid"}
                 </Button>
-                <Button type="button" variant="secondary" className="rounded-md" onClick={() => void handleMarkPaid(PaymentMilestoneType.FINAL)} disabled={!canMarkPaid}>
+                <Button type="button" variant="secondary" className="rounded-md border border-border/80 bg-background shadow-sm" onClick={() => void handleMarkPaid(PaymentMilestoneType.FINAL)} disabled={!canMarkPaid}>
                   {isMarkingPaid ? "Updating..." : "Mark Final Paid"}
                 </Button>
               </>
             ) : (
-              <Button type="button" variant="secondary" className="rounded-md" onClick={() => void handleMarkPaid(PaymentMilestoneType.FULL)} disabled={!canMarkPaid}>
+              <Button type="button" variant="secondary" className="rounded-md border border-border/80 bg-background shadow-sm" onClick={() => void handleMarkPaid(PaymentMilestoneType.FULL)} disabled={!canMarkPaid}>
                 {isMarkingPaid ? "Updating..." : "Mark Paid"}
               </Button>
             )}

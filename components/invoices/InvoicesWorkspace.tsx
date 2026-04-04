@@ -19,11 +19,21 @@ import { InvoiceDrawer } from "@/components/invoices/InvoiceDrawer";
 import { InvoiceStatusBadge } from "@/components/invoices/InvoiceStatusBadge";
 import type { ApiError, InvoiceItem, InvoiceTimeline, OrgItem } from "@/components/invoices/workspace/types";
 import { toErrorMessage } from "@/components/invoices/workspace/utils";
+import { subscribeToOrgMessageEvents } from "@/lib/ably/client";
 import { fetchOrganizationsCached } from "@/lib/client/orgsCache";
 import { notifyError, notifySuccess } from "@/lib/ui/notify";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import {
+  Drawer,
+  DrawerClose,
+  DrawerContent,
+  DrawerDescription,
+  DrawerFooter,
+  DrawerHeader,
+  DrawerTitle
+} from "@/components/ui/drawer";
 import { DropdownMenu, DropdownMenuCheckboxItem, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -56,6 +66,9 @@ type CustomersResponse = {
   data?: {
     customers?: CustomerOption[];
   };
+  meta?: {
+    hasMore?: boolean;
+  };
   error?: {
     message?: string;
   };
@@ -63,8 +76,11 @@ type CustomersResponse = {
 
 type CustomerOptionsCacheEntry = {
   rows: CustomerOption[];
+  hasMore: boolean;
   cachedAt: number;
 };
+
+type RealtimeConnectionState = "idle" | "initialized" | "connecting" | "connected" | "disconnected" | "suspended" | "failed" | "fallback";
 
 const CUSTOMER_PICKER_CACHE_TTL_MS = 60_000;
 const INVOICES_DATE_FORMATTER = new Intl.DateTimeFormat("id-ID", {
@@ -153,6 +169,45 @@ function toPublicInvoicePath(publicToken: string): string {
   return `/i/${publicToken}`;
 }
 
+function realtimeBadgeTone(state: RealtimeConnectionState): string {
+  switch (state) {
+    case "connected":
+      return "border-emerald-300 bg-emerald-50 text-emerald-700";
+    case "fallback":
+      return "border-amber-300 bg-amber-50 text-amber-700";
+    case "connecting":
+    case "initialized":
+      return "border-blue-300 bg-blue-50 text-blue-700";
+    case "failed":
+    case "disconnected":
+    case "suspended":
+      return "border-rose-300 bg-rose-50 text-rose-700";
+    default:
+      return "border-zinc-300 bg-zinc-50 text-zinc-700";
+  }
+}
+
+function realtimeBadgeLabel(state: RealtimeConnectionState): string {
+  switch (state) {
+    case "connected":
+      return "Realtime tersambung";
+    case "fallback":
+      return "Realtime terganggu (fallback polling)";
+    case "connecting":
+      return "Menyambungkan realtime...";
+    case "initialized":
+      return "Menyiapkan realtime...";
+    case "failed":
+      return "Realtime gagal tersambung";
+    case "disconnected":
+      return "Realtime terputus";
+    case "suspended":
+      return "Realtime ditangguhkan";
+    default:
+      return "Realtime belum aktif";
+  }
+}
+
 function headerSortLabel(title: string, onClick: () => void) {
   return (
     <Button type="button" variant="ghost" className="h-8 -ml-2 px-2 text-xs uppercase tracking-[0.18em] text-muted-foreground" onClick={onClick}>
@@ -192,6 +247,8 @@ export function InvoicesWorkspace() {
   const [isManualCustomerModalOpen, setIsManualCustomerModalOpen] = useState(false);
   const [customerOptions, setCustomerOptions] = useState<CustomerOption[]>([]);
   const [isLoadingCustomers, setIsLoadingCustomers] = useState(false);
+  const [hasMoreCustomers, setHasMoreCustomers] = useState(false);
+  const [customerPage, setCustomerPage] = useState(1);
   const [selectedCustomerId, setSelectedCustomerId] = useState<string>("");
   const [customerSearchText, setCustomerSearchText] = useState("");
   const [customerSearchQuery, setCustomerSearchQuery] = useState("");
@@ -200,6 +257,8 @@ export function InvoicesWorkspace() {
   const [newCustomerPhone, setNewCustomerPhone] = useState("");
   const customerOptionsCacheRef = useRef<Map<string, CustomerOptionsCacheEntry>>(new Map());
   const customerLoadRequestIdRef = useRef(0);
+  const customerPageRef = useRef(1);
+  const customerQueryRef = useRef("");
   const isMountedRef = useRef(true);
   const invoicesRequestIdRef = useRef(0);
   const timelineRequestIdRef = useRef(0);
@@ -222,9 +281,12 @@ export function InvoicesWorkspace() {
     customerPhoneE164: string;
   } | null>(null);
   const [isInvoiceDrawerOpen, setIsInvoiceDrawerOpen] = useState(false);
+  const [realtimeConnectionState, setRealtimeConnectionState] = useState<RealtimeConnectionState>("idle");
 
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
+  const realtimePendingInvoiceIdsRef = useRef<Set<string>>(new Set());
+  const realtimeRefreshTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const selectedInvoice = useMemo(() => invoices.find((item) => item.id === selectedInvoiceId) ?? null, [invoices, selectedInvoiceId]);
   const activeBusiness = useMemo(() => orgs[0] ?? null, [orgs]);
@@ -280,7 +342,7 @@ export function InvoicesWorkspace() {
         const response = await fetch(`/api/invoices?${requestKey}`, { cache: "no-store", signal: abortController.signal });
         const payload = (await response.json()) as { data?: { invoices?: InvoiceItem[] }; meta?: { total?: number } } & ApiError;
         if (!response.ok) {
-          throw new Error(payload.error?.message ?? "Failed to load invoices.");
+          throw new Error(payload.error?.message ?? "Gagal memuat daftar invoice.");
         }
         if (!isMountedRef.current || requestId !== invoicesRequestIdRef.current) {
           return;
@@ -333,7 +395,7 @@ export function InvoicesWorkspace() {
       const response = await fetch(`/api/invoices/${encodeURIComponent(selectedInvoiceId)}/timeline`, { cache: "no-store", signal: abortController.signal });
       const payload = (await response.json()) as { data?: { timeline?: InvoiceTimeline } } & ApiError;
       if (!response.ok) {
-        throw new Error(payload.error?.message ?? "Failed to load invoice timeline.");
+        throw new Error(payload.error?.message ?? "Gagal memuat linimasa invoice.");
       }
       if (!isMountedRef.current || requestId !== timelineRequestIdRef.current) {
         return;
@@ -359,7 +421,7 @@ export function InvoicesWorkspace() {
       const response = await fetch(`/api/invoices/${encodeURIComponent(invoiceId)}`, { cache: "no-store", signal: abortController.signal });
       const payload = (await response.json().catch(() => null)) as InvoiceDetailResponse | null;
       if (!response.ok || !payload?.data?.invoice) {
-        throw new Error(payload?.error?.message ?? "Failed to load invoice detail.");
+        throw new Error(payload?.error?.message ?? "Gagal memuat detail invoice.");
       }
       if (!isMountedRef.current || requestId !== detailRequestIdRef.current) {
         return;
@@ -373,7 +435,7 @@ export function InvoicesWorkspace() {
       if (!isMountedRef.current || requestId !== detailRequestIdRef.current) {
         return;
       }
-      setError(toErrorMessage(detailError, "Failed to load invoice detail."));
+      setError(toErrorMessage(detailError, "Gagal memuat detail invoice."));
     } finally {
       if (detailAbortControllerRef.current === abortController) {
         detailAbortControllerRef.current = null;
@@ -385,19 +447,71 @@ export function InvoicesWorkspace() {
     }
   }, []);
 
+  const flushRealtimeRefresh = useCallback(async () => {
+    const pendingIds = Array.from(realtimePendingInvoiceIdsRef.current);
+    realtimePendingInvoiceIdsRef.current.clear();
+
+    try {
+      await loadInvoices();
+      if (!isMountedRef.current) {
+        return;
+      }
+
+      if (selectedInvoiceId && (pendingIds.length === 0 || pendingIds.includes(selectedInvoiceId))) {
+        await loadTimeline();
+      }
+
+      if (isDetailModalOpen && invoiceDetail?.id && (pendingIds.length === 0 || pendingIds.includes(invoiceDetail.id))) {
+        await loadInvoiceDetail(invoiceDetail.id);
+      }
+    } catch (refreshError) {
+      if (!isMountedRef.current) {
+        return;
+      }
+      setError(toErrorMessage(refreshError, "Gagal menyegarkan data invoice realtime."));
+    }
+  }, [invoiceDetail?.id, isDetailModalOpen, loadInvoiceDetail, loadInvoices, loadTimeline, selectedInvoiceId]);
+
+  const scheduleRealtimeRefresh = useCallback(
+    (invoiceId?: string) => {
+      if (invoiceId) {
+        realtimePendingInvoiceIdsRef.current.add(invoiceId);
+      }
+      if (realtimeRefreshTimeoutRef.current) {
+        return;
+      }
+      realtimeRefreshTimeoutRef.current = setTimeout(() => {
+        realtimeRefreshTimeoutRef.current = null;
+        void flushRealtimeRefresh();
+      }, 250);
+    },
+    [flushRealtimeRefresh]
+  );
+
   const loadCustomers = useCallback(
-    async (queryText: string, options?: { force?: boolean }) => {
+    async (queryText: string, options?: { force?: boolean; append?: boolean }) => {
       if (!isMountedRef.current) {
         return;
       }
       const query = queryText.trim();
+      customerQueryRef.current = query;
+      const append = Boolean(options?.append);
+      const targetPage = append ? customerPageRef.current + 1 : 1;
       setCustomerFetchError(null);
       const requestId = ++customerLoadRequestIdRef.current;
 
-      const cached = customerOptionsCacheRef.current.get(query);
+      const cached = append ? null : customerOptionsCacheRef.current.get(query);
       const isCacheFresh = Boolean(cached && Date.now() - cached.cachedAt < CUSTOMER_PICKER_CACHE_TTL_MS);
       if (cached?.rows) {
         setCustomerOptions(cached.rows);
+        setHasMoreCustomers(cached.hasMore);
+        setCustomerPage(1);
+        customerPageRef.current = 1;
+      } else if (!append) {
+        setCustomerOptions([]);
+        setHasMoreCustomers(false);
+        setCustomerPage(1);
+        customerPageRef.current = 1;
       }
       if (!options?.force && isCacheFresh) {
         return;
@@ -409,7 +523,7 @@ export function InvoicesWorkspace() {
       customersAbortControllerRef.current = abortController;
       try {
         const params = new URLSearchParams({
-          page: "1",
+          page: String(targetPage),
           limit: "20",
           picker: "1"
         });
@@ -423,15 +537,32 @@ export function InvoicesWorkspace() {
           return;
         }
         if (!response.ok) {
-          throw new Error(payload?.error?.message ?? "Failed to load customers.");
+          throw new Error(payload?.error?.message ?? "Gagal memuat pelanggan.");
         }
 
         const rows = payload?.data?.customers ?? [];
+        const hasMore = Boolean(payload?.meta?.hasMore);
+        if (append) {
+          setCustomerOptions((current) => {
+            const knownIds = new Set(current.map((item) => item.id));
+            const uniqueRows = rows.filter((item) => !knownIds.has(item.id));
+            return [...current, ...uniqueRows];
+          });
+          setCustomerPage(targetPage);
+          customerPageRef.current = targetPage;
+          setHasMoreCustomers(hasMore);
+          return;
+        }
+
         customerOptionsCacheRef.current.set(query, {
           rows,
+          hasMore,
           cachedAt: Date.now()
         });
         setCustomerOptions(rows);
+        setHasMoreCustomers(hasMore);
+        setCustomerPage(1);
+        customerPageRef.current = 1;
       } catch (loadError) {
         if (loadError instanceof DOMException && loadError.name === "AbortError") {
           return;
@@ -439,7 +570,7 @@ export function InvoicesWorkspace() {
         if (!isMountedRef.current || requestId !== customerLoadRequestIdRef.current) {
           return;
         }
-        setCustomerFetchError(toErrorMessage(loadError, "Failed to load customers."));
+        setCustomerFetchError(toErrorMessage(loadError, "Gagal memuat pelanggan."));
       } finally {
         if (customersAbortControllerRef.current === abortController) {
           customersAbortControllerRef.current = null;
@@ -461,6 +592,13 @@ export function InvoicesWorkspace() {
     await loadCustomers("");
   }, [loadCustomers]);
 
+  const loadMoreCustomers = useCallback(async () => {
+    if (isLoadingCustomers || !hasMoreCustomers) {
+      return;
+    }
+    await loadCustomers(customerQueryRef.current, { append: true });
+  }, [hasMoreCustomers, isLoadingCustomers, loadCustomers]);
+
   const sendInvoiceById = useCallback(
     async (invoiceId: string) => {
       if (!invoiceId || isSending) {
@@ -474,10 +612,10 @@ export function InvoicesWorkspace() {
         const response = await fetch(`/api/invoices/${encodeURIComponent(invoiceId)}/send`, { method: "POST" });
         const payload = (await response.json()) as { data?: { invoice?: { publicLink?: string } } } & ApiError;
         if (!response.ok) {
-          throw new Error(payload.error?.message ?? "Failed to send invoice.");
+          throw new Error(payload.error?.message ?? "Gagal mengirim invoice.");
         }
 
-        setSuccess(`Invoice sent. ${payload.data?.invoice?.publicLink ?? ""}`.trim());
+        setSuccess(`Invoice berhasil dikirim. ${payload.data?.invoice?.publicLink ?? ""}`.trim());
         if (page !== 1) {
           setPage(1);
         } else {
@@ -488,7 +626,7 @@ export function InvoicesWorkspace() {
           await loadInvoiceDetail(invoiceId);
         }
       } catch (err) {
-        setError(toErrorMessage(err, "Failed to send invoice."));
+        setError(toErrorMessage(err, "Gagal mengirim invoice."));
       } finally {
         setIsSending(false);
       }
@@ -512,7 +650,7 @@ export function InvoicesWorkspace() {
         });
         const payload = (await response.json().catch(() => null)) as ApiError | null;
         if (!response.ok) {
-          throw new Error(payload?.error?.message ?? "Failed to delete invoice.");
+          throw new Error(payload?.error?.message ?? "Gagal menghapus invoice.");
         }
 
         setSuccess("Invoice berhasil dihapus.");
@@ -524,7 +662,7 @@ export function InvoicesWorkspace() {
         }
         setIsDetailModalOpen(false);
       } catch (deleteError) {
-        setError(toErrorMessage(deleteError, "Failed to delete invoice."));
+        setError(toErrorMessage(deleteError, "Gagal menghapus invoice."));
       } finally {
         setIsDeleting(false);
       }
@@ -549,7 +687,7 @@ export function InvoicesWorkspace() {
       }
 
       if (failures.length > 0) {
-        throw new Error(`Failed to send ${failures.length} draft invoice(s).`);
+        throw new Error(`Gagal mengirim ${failures.length} draft invoice.`);
       }
     },
     []
@@ -572,7 +710,7 @@ export function InvoicesWorkspace() {
       }
 
       if (failures.length > 0) {
-        throw new Error(`Failed to delete ${failures.length} draft invoice(s).`);
+        throw new Error(`Gagal menghapus ${failures.length} draft invoice.`);
       }
     },
     []
@@ -585,7 +723,7 @@ export function InvoicesWorkspace() {
         await loadOrganizations();
       } catch (err) {
         if (mounted) {
-          setError(toErrorMessage(err, "Failed to initialize invoice system."));
+          setError(toErrorMessage(err, "Gagal menginisialisasi sistem invoice."));
         }
       }
     })();
@@ -600,7 +738,7 @@ export function InvoicesWorkspace() {
       if (!isMountedRef.current) {
         return;
       }
-      setError(toErrorMessage(err, "Failed to refresh invoices."));
+      setError(toErrorMessage(err, "Gagal menyegarkan daftar invoice."));
     });
   }, [loadInvoices]);
 
@@ -612,9 +750,94 @@ export function InvoicesWorkspace() {
       if (!isMountedRef.current) {
         return;
       }
-      setError(toErrorMessage(err, "Failed to refresh invoice timeline."));
+      setError(toErrorMessage(err, "Gagal menyegarkan linimasa invoice."));
     });
   }, [loadTimeline]);
+
+  useEffect(() => {
+    const orgId = activeBusiness?.id ?? null;
+    if (!orgId) {
+      setRealtimeConnectionState("idle");
+      return;
+    }
+
+    let active = true;
+    let cleanup: (() => void) | null = null;
+    let fallbackTimer: ReturnType<typeof setInterval> | null = null;
+
+    const stopFallbackPolling = () => {
+      if (fallbackTimer) {
+        clearInterval(fallbackTimer);
+        fallbackTimer = null;
+      }
+    };
+
+    const startFallbackPolling = () => {
+      if (fallbackTimer || !active) {
+        return;
+      }
+      setRealtimeConnectionState("fallback");
+      fallbackTimer = setInterval(() => {
+        if (!active) {
+          return;
+        }
+        scheduleRealtimeRefresh();
+      }, 15000);
+    };
+
+    const startSubscription = async () => {
+      setRealtimeConnectionState("connecting");
+      try {
+        cleanup = await subscribeToOrgMessageEvents({
+          orgId,
+          onConnectionStateChange: (connectionState) => {
+            if (!active) {
+              return;
+            }
+            if (connectionState === "connected") {
+              setRealtimeConnectionState("connected");
+              stopFallbackPolling();
+              return;
+            }
+            if (connectionState === "connecting" || connectionState === "initialized") {
+              setRealtimeConnectionState(connectionState);
+              return;
+            }
+            setRealtimeConnectionState(connectionState);
+            startFallbackPolling();
+          },
+          onInvoiceCreated: (payload) => {
+            scheduleRealtimeRefresh(payload.invoiceId);
+          },
+          onInvoiceUpdated: (payload) => {
+            scheduleRealtimeRefresh(payload.invoiceId);
+          },
+          onInvoicePaid: (payload) => {
+            scheduleRealtimeRefresh(payload.invoiceId);
+          },
+          onProofAttached: (payload) => {
+            scheduleRealtimeRefresh(payload.invoiceId);
+          }
+        });
+      } catch (subscriptionError) {
+        if (!active) {
+          return;
+        }
+        setError(toErrorMessage(subscriptionError, "Realtime invoice gagal terhubung."));
+        startFallbackPolling();
+      }
+    };
+
+    void startSubscription();
+
+    return () => {
+      active = false;
+      stopFallbackPolling();
+      if (cleanup) {
+        cleanup();
+      }
+    };
+  }, [activeBusiness?.id, scheduleRealtimeRefresh]);
 
   useEffect(() => {
     if (!isCreateInvoiceModalOpen) {
@@ -653,6 +876,11 @@ export function InvoicesWorkspace() {
       timelineAbortControllerRef.current?.abort();
       detailAbortControllerRef.current?.abort();
       customersAbortControllerRef.current?.abort();
+      if (realtimeRefreshTimeoutRef.current) {
+        clearTimeout(realtimeRefreshTimeoutRef.current);
+        realtimeRefreshTimeoutRef.current = null;
+      }
+      realtimePendingInvoiceIdsRef.current.clear();
     };
   }, []);
 
@@ -728,7 +956,7 @@ export function InvoicesWorkspace() {
       },
       {
         accessorKey: "invoiceNo",
-        header: ({ column }) => headerSortLabel("Number", () => column.toggleSorting(column.getIsSorted() === "asc")),
+        header: ({ column }) => headerSortLabel("Nomor", () => column.toggleSorting(column.getIsSorted() === "asc")),
         cell: ({ row }) => (
           <button
             type="button"
@@ -746,7 +974,7 @@ export function InvoicesWorkspace() {
       {
         id: "customer",
         accessorFn: (row) => `${row.customerName ?? ""} ${row.customerPhoneE164}`,
-        header: ({ column }) => headerSortLabel("Customer", () => column.toggleSorting(column.getIsSorted() === "asc")),
+        header: ({ column }) => headerSortLabel("Pelanggan", () => column.toggleSorting(column.getIsSorted() === "asc")),
         cell: ({ row }) => (
           <div>
             <p className="font-medium text-foreground">{row.original.customerName?.trim() || row.original.customerPhoneE164}</p>
@@ -756,7 +984,7 @@ export function InvoicesWorkspace() {
       },
       {
         accessorKey: "publicToken",
-        header: ({ column }) => headerSortLabel("Public Link", () => column.toggleSorting(column.getIsSorted() === "asc")),
+        header: ({ column }) => headerSortLabel("Link Publik", () => column.toggleSorting(column.getIsSorted() === "asc")),
         cell: ({ row }) => {
           const path = toPublicInvoicePath(row.original.publicToken);
           return (
@@ -778,12 +1006,12 @@ export function InvoicesWorkspace() {
       },
       {
         accessorKey: "createdAt",
-        header: ({ column }) => headerSortLabel("Date", () => column.toggleSorting(column.getIsSorted() === "asc")),
+        header: ({ column }) => headerSortLabel("Tanggal", () => column.toggleSorting(column.getIsSorted() === "asc")),
         cell: ({ row }) => <span className="text-sm text-muted-foreground">{formatDateLabel(row.original.createdAt)}</span>
       },
       {
         accessorKey: "totalCents",
-        header: ({ column }) => headerSortLabel("Amount", () => column.toggleSorting(column.getIsSorted() === "asc")),
+        header: ({ column }) => headerSortLabel("Nilai", () => column.toggleSorting(column.getIsSorted() === "asc")),
         cell: ({ row }) => <span className="font-semibold text-foreground">{formatMoney(row.original.totalCents, row.original.currency)}</span>
       },
       {
@@ -801,12 +1029,12 @@ export function InvoicesWorkspace() {
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
                   <Button type="button" variant="ghost" className="h-8 w-8 p-0" onClick={(event) => event.stopPropagation()}>
-                    <span className="sr-only">Open actions</span>
+                    <span className="sr-only">Buka aksi</span>
                     <MoreHorizontal className="h-4 w-4" />
                   </Button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end">
-                  <DropdownMenuLabel>Invoice Actions</DropdownMenuLabel>
+                  <DropdownMenuLabel>Aksi Invoice</DropdownMenuLabel>
                   <DropdownMenuItem
                     onClick={() => {
                       setSelectedInvoiceId(invoice.id);
@@ -814,7 +1042,7 @@ export function InvoicesWorkspace() {
                       void loadInvoiceDetail(invoice.id);
                     }}
                   >
-                    View detail
+                    Lihat detail
                   </DropdownMenuItem>
                   <DropdownMenuItem
                     disabled={invoice.status !== "DRAFT" && invoice.status !== "SENT"}
@@ -822,11 +1050,11 @@ export function InvoicesWorkspace() {
                       void sendInvoiceById(invoice.id);
                     }}
                   >
-                    Send invoice
+                    Kirim invoice
                   </DropdownMenuItem>
                   <DropdownMenuItem asChild>
                     <Link prefetch={false} href={invoice.conversationId ? `/inbox?conversationId=${encodeURIComponent(invoice.conversationId)}` : "/inbox"}>
-                      Open CRM Panel
+                      Buka Panel CRM
                     </Link>
                   </DropdownMenuItem>
                   <DropdownMenuSeparator />
@@ -837,7 +1065,7 @@ export function InvoicesWorkspace() {
                       void deleteInvoiceById(invoice.id);
                     }}
                   >
-                    Delete draft/void
+                    Hapus draft/void
                   </DropdownMenuItem>
                 </DropdownMenuContent>
               </DropdownMenu>
@@ -895,7 +1123,7 @@ export function InvoicesWorkspace() {
       }
       setRowSelection({});
     } catch (bulkError) {
-      setError(toErrorMessage(bulkError, "Bulk send failed."));
+      setError(toErrorMessage(bulkError, "Aksi kirim massal gagal."));
     } finally {
       setIsBulkActing(false);
     }
@@ -925,7 +1153,7 @@ export function InvoicesWorkspace() {
       }
       setRowSelection({});
     } catch (bulkError) {
-      setError(toErrorMessage(bulkError, "Bulk delete failed."));
+      setError(toErrorMessage(bulkError, "Aksi hapus massal gagal."));
     } finally {
       setIsBulkActing(false);
     }
@@ -947,7 +1175,7 @@ export function InvoicesWorkspace() {
       });
       const payload = (await response.json()) as ApiError;
       if (!response.ok) {
-        throw new Error(payload.error?.message ?? "Failed to mark invoice paid.");
+        throw new Error(payload.error?.message ?? "Gagal menandai invoice lunas.");
       }
 
       setSuccess("Invoice payment status updated.");
@@ -955,7 +1183,7 @@ export function InvoicesWorkspace() {
       await loadTimeline();
       await loadInvoiceDetail(selectedInvoice.id);
     } catch (err) {
-      setError(toErrorMessage(err, "Failed to mark invoice paid."));
+      setError(toErrorMessage(err, "Gagal menandai invoice lunas."));
     } finally {
       setIsMarkingPaid(false);
     }
@@ -988,7 +1216,7 @@ export function InvoicesWorkspace() {
     });
     const payload = (await response.json().catch(() => null)) as CreateConversationResponse | null;
     if (!response.ok) {
-      throw new Error(payload?.error?.message ?? "Failed to prepare customer conversation.");
+      throw new Error(payload?.error?.message ?? "Gagal menyiapkan percakapan pelanggan.");
     }
 
     const conversation = payload?.data?.conversation;
@@ -1044,7 +1272,7 @@ export function InvoicesWorkspace() {
         });
         const payload = (await response.json().catch(() => null)) as CreateConversationResponse | null;
         if (!response.ok) {
-          throw new Error(payload?.error?.message ?? "Failed to prepare customer conversation.");
+          throw new Error(payload?.error?.message ?? "Gagal menyiapkan percakapan pelanggan.");
         }
 
         const conversation = payload?.data?.conversation;
@@ -1063,9 +1291,9 @@ export function InvoicesWorkspace() {
       setInvoiceDraftContext(context);
       setIsCreateInvoiceModalOpen(false);
       setIsInvoiceDrawerOpen(true);
-      setSuccess("Customer conversation ready. Lanjutkan susun invoice draft.");
+      setSuccess("Percakapan pelanggan siap. Lanjutkan menyusun draft invoice.");
     } catch (err) {
-      setError(toErrorMessage(err, "Failed to start invoice creation."));
+      setError(toErrorMessage(err, "Gagal memulai pembuatan invoice."));
     } finally {
       setIsPreparingInvoiceDrawer(false);
     }
@@ -1076,9 +1304,9 @@ export function InvoicesWorkspace() {
       const path = toPublicInvoicePath(publicToken);
       const absoluteLink = `${window.location.origin}${path}`;
       await navigator.clipboard.writeText(absoluteLink);
-      setSuccess("Public invoice link copied.");
+      setSuccess("Link invoice publik berhasil disalin.");
     } catch {
-      setError("Failed to copy public invoice link.");
+      setError("Gagal menyalin link invoice publik.");
     }
   }
 
@@ -1091,8 +1319,11 @@ export function InvoicesWorkspace() {
               <FileText className="h-5 w-5" />
             </div>
             <div>
-              <h1 className="text-xl font-semibold tracking-tight text-foreground md:text-3xl">Invoice System</h1>
+              <h1 className="text-xl font-semibold tracking-tight text-foreground md:text-3xl">Manajemen Invoice</h1>
               <p className="text-xs text-muted-foreground md:text-sm">Kelola invoice, pengiriman, pelunasan, dan sinkronisasi stage CRM dari satu workspace.</p>
+              <p className={`mt-2 inline-flex items-center rounded-full border px-2.5 py-1 text-[11px] font-medium ${realtimeBadgeTone(realtimeConnectionState)}`}>
+                {realtimeBadgeLabel(realtimeConnectionState)}
+              </p>
             </div>
           </div>
           <Button
@@ -1108,27 +1339,33 @@ export function InvoicesWorkspace() {
               void primeCustomerPicker();
               setSelectedCustomerId("");
               setCustomerSearchText("");
+              setCustomerSearchQuery("");
+              setCustomerOptions([]);
+              setHasMoreCustomers(false);
+              setCustomerPage(1);
+              customerPageRef.current = 1;
+              customerQueryRef.current = "";
               setNewCustomerName("");
               setNewCustomerPhone("");
               setIsCreateInvoiceModalOpen(true);
             }}
           >
-            Create Invoice
+            Buat Invoice
           </Button>
         </div>
       </div>
 
       <div className="grid gap-3 md:grid-cols-3 md:gap-4">
         <article className="rounded-xl border border-emerald-200 bg-emerald-50/70 p-4 md:rounded-2xl md:p-5">
-          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-emerald-600 md:text-sm">Paid invoices</p>
+          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-emerald-600 md:text-sm">Invoice Lunas</p>
           <p className="mt-2 text-2xl font-semibold text-emerald-700 md:mt-3 md:text-4xl">{summary.paid}</p>
         </article>
         <article className="rounded-xl border border-rose-200 bg-rose-50/70 p-4 md:rounded-2xl md:p-5">
-          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-rose-600 md:text-sm">Unpaid invoices</p>
+          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-rose-600 md:text-sm">Invoice Belum Lunas</p>
           <p className="mt-2 text-2xl font-semibold text-rose-700 md:mt-3 md:text-4xl">{summary.unpaid}</p>
         </article>
         <article className="rounded-xl border border-blue-200 bg-blue-50/70 p-4 md:rounded-2xl md:p-5">
-          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-blue-600 md:text-sm">Total revenue</p>
+          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-blue-600 md:text-sm">Total Pendapatan</p>
           <p className="mt-2 text-2xl font-semibold text-blue-700 md:mt-3 md:text-4xl">{formatMoney(summary.revenue, "IDR")}</p>
         </article>
       </div>
@@ -1136,8 +1373,8 @@ export function InvoicesWorkspace() {
       <section className="flex min-h-0 flex-1 flex-col rounded-2xl border border-border/70 bg-card/95 p-3 shadow-sm md:p-5">
         <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
           <div>
-            <h2 className="text-xl font-semibold tracking-tight text-foreground md:text-3xl">Invoices</h2>
-            <p className="text-xs text-muted-foreground md:text-sm">{activeBusiness?.name ?? "Business"} invoice registry</p>
+            <h2 className="text-xl font-semibold tracking-tight text-foreground md:text-3xl">Daftar Invoice</h2>
+            <p className="text-xs text-muted-foreground md:text-sm">Register invoice {activeBusiness?.name ?? "Bisnis"}</p>
           </div>
           <div className="flex w-full flex-wrap items-center gap-2 md:w-auto">
             <label className="relative block w-full md:w-auto">
@@ -1145,7 +1382,7 @@ export function InvoicesWorkspace() {
               <Input
                 value={searchInput}
                 onChange={(event) => setSearchInput(event.target.value)}
-                placeholder="Search..."
+                placeholder="Cari invoice/customer..."
                 className="h-9 rounded-lg pl-10 md:h-10 md:rounded-xl"
               />
             </label>
@@ -1171,7 +1408,7 @@ export function InvoicesWorkspace() {
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <Button type="button" variant="secondary" className="h-9 rounded-lg border border-border/80 bg-background md:h-10 md:rounded-xl">
-                  Columns
+                  Kolom
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end">
@@ -1195,9 +1432,9 @@ export function InvoicesWorkspace() {
 
         {selectedRows.length > 0 ? (
           <div className="mb-3 flex flex-wrap items-center gap-2 rounded-xl border border-border/80 bg-background/60 px-3 py-2">
-            <p className="text-sm text-muted-foreground">{selectedRows.length} selected</p>
+            <p className="text-sm text-muted-foreground">{selectedRows.length} dipilih</p>
             <Button type="button" size="sm" onClick={() => void handleBulkSend()} disabled={isBulkActing || selectedDraftIds.length === 0}>
-              Send Draft ({selectedDraftIds.length})
+              Kirim Draft ({selectedDraftIds.length})
             </Button>
             <Button
               type="button"
@@ -1206,7 +1443,7 @@ export function InvoicesWorkspace() {
               onClick={() => void handleBulkDelete()}
               disabled={isBulkActing || selectedDraftIds.length === 0}
             >
-              Delete Draft ({selectedDraftIds.length})
+              Hapus Draft ({selectedDraftIds.length})
             </Button>
           </div>
         ) : null}
@@ -1228,7 +1465,7 @@ export function InvoicesWorkspace() {
               {isLoading ? (
                 <TableRow>
                   <TableCell colSpan={columns.length} className="h-24 text-center text-muted-foreground">
-                    Loading invoices...
+                    Memuat invoice...
                   </TableCell>
                 </TableRow>
               ) : table.getRowModel().rows.length ? (
@@ -1251,7 +1488,7 @@ export function InvoicesWorkspace() {
               ) : (
                 <TableRow>
                   <TableCell colSpan={columns.length} className="h-24 text-center text-muted-foreground">
-                    No invoices found.
+                    Invoice tidak ditemukan.
                   </TableCell>
                 </TableRow>
               )}
@@ -1260,7 +1497,7 @@ export function InvoicesWorkspace() {
         </div>
 
         <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
-          <p className="text-sm text-muted-foreground">{totalInvoices} invoices</p>
+          <p className="text-sm text-muted-foreground">{totalInvoices} invoice</p>
           <div className="flex items-center gap-2">
             <Select
               value={String(pageSize)}
@@ -1273,9 +1510,9 @@ export function InvoicesWorkspace() {
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="10">10 rows</SelectItem>
-                <SelectItem value="20">20 rows</SelectItem>
-                <SelectItem value="50">50 rows</SelectItem>
+                  <SelectItem value="10">10 baris</SelectItem>
+                  <SelectItem value="20">20 baris</SelectItem>
+                  <SelectItem value="50">50 baris</SelectItem>
               </SelectContent>
             </Select>
             <span className="text-xs text-muted-foreground md:text-sm">
@@ -1289,7 +1526,7 @@ export function InvoicesWorkspace() {
               onClick={() => setPage((current) => Math.max(1, current - 1))}
               disabled={page <= 1}
             >
-              Previous
+              Sebelumnya
             </Button>
             <Button
               type="button"
@@ -1299,30 +1536,41 @@ export function InvoicesWorkspace() {
               onClick={() => setPage((current) => Math.min(totalPages, current + 1))}
               disabled={page >= totalPages}
             >
-              Next
+              Berikutnya
             </Button>
           </div>
         </div>
       </section>
 
-      <Dialog open={isDetailModalOpen} onOpenChange={setIsDetailModalOpen}>
-        <DialogContent className="max-h-[92vh] overflow-auto sm:max-w-[1080px]">
-          <DialogHeader>
-            <DialogTitle>Invoice Detail</DialogTitle>
-            <DialogDescription>Detail invoice dengan format dokumen invoice standar dan aksi CRUD.</DialogDescription>
-          </DialogHeader>
+      <Drawer open={isDetailModalOpen} onOpenChange={setIsDetailModalOpen} direction="right">
+        <DrawerContent className="data-[vaul-drawer-direction=right]:border-l-border lg:max-w-2xl xl:max-w-3xl">
+          <DrawerHeader className="shrink-0 border-b border-border/70 px-5 py-4 md:px-6">
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <DrawerTitle>Detail Invoice</DrawerTitle>
+                <DrawerDescription>Detail invoice dengan format dokumen invoice standar dan aksi CRUD.</DrawerDescription>
+              </div>
+              <DrawerClose asChild>
+                <Button type="button" variant="ghost">
+                  Tutup
+                </Button>
+              </DrawerClose>
+            </div>
+          </DrawerHeader>
 
-          {isLoadingDetail || !invoiceDetail ? (
-            <p className="text-sm text-muted-foreground">Loading detail invoice...</p>
-          ) : (
-            <div className="space-y-5">
-              <div className="rounded-xl border border-border/70 bg-background/40 p-5">
-                <div className="flex flex-wrap items-start justify-between gap-4">
+          <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+            <div className="inbox-scroll min-h-0 flex-1 overflow-y-auto overscroll-contain px-5 py-4 md:px-6 md:py-5">
+              {isLoadingDetail || !invoiceDetail ? (
+                <p className="text-sm text-muted-foreground">Memuat detail invoice...</p>
+              ) : (
+                <div className="space-y-5">
+                  <div className="rounded-xl border border-border/70 bg-background/40 p-5">
+                    <div className="flex flex-wrap items-start justify-between gap-4">
                   <div>
-                    <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">Invoice Document</p>
+                    <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">Dokumen Invoice</p>
                     <h3 className="mt-1 text-2xl font-semibold tracking-tight text-foreground">{invoiceDetail.invoiceNo}</h3>
                     <p className="mt-1 text-sm text-muted-foreground">
-                      Created: {formatDateLabel(invoiceDetail.createdAt)} | Due: {formatDateLabel(invoiceDetail.dueDate)}
+                      Dibuat: {formatDateLabel(invoiceDetail.createdAt)} | Jatuh Tempo: {formatDateLabel(invoiceDetail.dueDate)}
                     </p>
                   </div>
                   <InvoiceStatusBadge status={invoiceDetail.status} />
@@ -1330,18 +1578,18 @@ export function InvoicesWorkspace() {
 
                 <div className="mt-5 grid gap-4 md:grid-cols-2">
                   <div className="rounded-lg border border-border/70 p-3">
-                    <p className="text-xs uppercase tracking-[0.16em] text-muted-foreground">From</p>
-                    <p className="mt-2 text-sm font-medium text-foreground">{activeBusiness?.name ?? "Your Business"}</p>
+                    <p className="text-xs uppercase tracking-[0.16em] text-muted-foreground">Dari</p>
+                    <p className="mt-2 text-sm font-medium text-foreground">{activeBusiness?.name ?? "Bisnis Anda"}</p>
                   </div>
                   <div className="rounded-lg border border-border/70 p-3">
-                    <p className="text-xs uppercase tracking-[0.16em] text-muted-foreground">Bill To</p>
+                    <p className="text-xs uppercase tracking-[0.16em] text-muted-foreground">Ditagihkan Ke</p>
                     <p className="mt-2 text-sm font-medium text-foreground">{invoiceDetail.customerName?.trim() || invoiceDetail.customerPhoneE164}</p>
                     <p className="text-sm text-muted-foreground">{invoiceDetail.customerPhoneE164}</p>
                   </div>
                 </div>
 
                 <div className="mt-4 rounded-lg border border-border/70 p-3">
-                  <p className="text-xs uppercase tracking-[0.16em] text-muted-foreground">Public Link Slug</p>
+                  <p className="text-xs uppercase tracking-[0.16em] text-muted-foreground">Slug Link Publik</p>
                   <div className="mt-2 flex flex-wrap items-center gap-2">
                     <a
                       href={toPublicInvoicePath(invoiceDetail.publicToken)}
@@ -1355,7 +1603,7 @@ export function InvoicesWorkspace() {
                     </a>
                     <Button type="button" size="sm" variant="secondary" className="border border-border/80 bg-background" onClick={() => void handleCopyPublicLink(invoiceDetail.publicToken)}>
                       <Copy className="mr-2 h-3.5 w-3.5" />
-                      Copy Link
+                      Salin Link
                     </Button>
                   </div>
                 </div>
@@ -1366,7 +1614,7 @@ export function InvoicesWorkspace() {
                       <TableRow>
                         <TableHead>Item</TableHead>
                         <TableHead>Qty</TableHead>
-                        <TableHead>Price</TableHead>
+                        <TableHead>Harga</TableHead>
                         <TableHead className="text-right">Subtotal</TableHead>
                       </TableRow>
                     </TableHeader>
@@ -1405,13 +1653,13 @@ export function InvoicesWorkspace() {
 
               <div className="grid gap-4 md:grid-cols-2">
                 <div className="rounded-xl border border-border/70 p-4">
-                  <p className="text-xs uppercase tracking-[0.16em] text-muted-foreground">Payment Milestones</p>
+                  <p className="text-xs uppercase tracking-[0.16em] text-muted-foreground">Termin Pembayaran</p>
                   <div className="mt-3 space-y-2">
                     {invoiceDetail.milestones.map((milestone) => (
                       <article key={milestone.id} className="rounded-lg border border-border/70 p-3">
                         <p className="text-sm font-medium text-foreground">{milestone.type}</p>
                         <p className="text-sm text-muted-foreground">{formatMoney(milestone.amountCents, invoiceDetail.currency)}</p>
-                        <p className="text-xs text-muted-foreground">Due: {formatDateLabel(milestone.dueDate)}</p>
+                        <p className="text-xs text-muted-foreground">Jatuh Tempo: {formatDateLabel(milestone.dueDate)}</p>
                         <p className="text-xs text-muted-foreground">Status: {milestone.status}</p>
                       </article>
                     ))}
@@ -1419,9 +1667,9 @@ export function InvoicesWorkspace() {
                 </div>
 
                 <div className="rounded-xl border border-border/70 p-4">
-                  <p className="text-xs uppercase tracking-[0.16em] text-muted-foreground">Transfer Instructions</p>
+                  <p className="text-xs uppercase tracking-[0.16em] text-muted-foreground">Instruksi Transfer</p>
                   <div className="mt-3 space-y-2">
-                    {invoiceDetail.bankAccounts.length === 0 ? <p className="text-sm text-muted-foreground">No bank account configured.</p> : null}
+                    {invoiceDetail.bankAccounts.length === 0 ? <p className="text-sm text-muted-foreground">Belum ada rekening bank yang dikonfigurasi.</p> : null}
                     {invoiceDetail.bankAccounts.map((account, index) => (
                       <article key={`${account.accountNumber}-${index}`} className="rounded-lg border border-border/70 p-3">
                         <p className="text-sm font-medium text-foreground">{account.bankName}</p>
@@ -1434,7 +1682,7 @@ export function InvoicesWorkspace() {
               </div>
 
               <div className="rounded-xl border border-border/70 p-4">
-                <p className="text-xs uppercase tracking-[0.16em] text-muted-foreground">Timeline</p>
+                <p className="text-xs uppercase tracking-[0.16em] text-muted-foreground">Linimasa</p>
                 <div className="mt-3 space-y-2">
                   {timeline?.events?.map((event) => (
                     <article key={event.id} className="rounded-lg border border-border/70 p-3">
@@ -1442,13 +1690,16 @@ export function InvoicesWorkspace() {
                       <p className="text-xs text-muted-foreground">{formatDateLabel(event.at)}</p>
                     </article>
                   ))}
-                  {!timeline?.events?.length ? <p className="text-sm text-muted-foreground">No timeline yet.</p> : null}
+                  {!timeline?.events?.length ? <p className="text-sm text-muted-foreground">Belum ada aktivitas.</p> : null}
                 </div>
               </div>
             </div>
           )}
 
-          <DialogFooter className="gap-2">
+            </div>
+          </div>
+
+          <DrawerFooter className="shrink-0 flex-row gap-2 border-t border-border/70 px-5 py-4 md:px-6">
             {invoiceDetail && invoiceDetail.status === "DRAFT" ? (
               <Button
                 type="button"
@@ -1478,42 +1729,42 @@ export function InvoicesWorkspace() {
                 onClick={() => void sendInvoiceById(invoiceDetail.id)}
                 disabled={isSending || (invoiceDetail.status !== "DRAFT" && invoiceDetail.status !== "SENT")}
               >
-                {isSending ? "Sending..." : "Send Invoice"}
+                {isSending ? "Mengirim..." : "Kirim Invoice"}
               </Button>
             ) : null}
             {invoiceDetail?.kind === "DP_AND_FINAL" ? (
               <>
                 <Button type="button" variant="secondary" className="border border-border/80 bg-background" onClick={() => void handleMarkPaid("DP")}
                   disabled={isMarkingPaid}>
-                  Mark DP Paid
+                  Tandai DP Lunas
                 </Button>
                 <Button type="button" variant="secondary" className="border border-border/80 bg-background" onClick={() => void handleMarkPaid("FINAL")}
                   disabled={isMarkingPaid}>
-                  Mark Final Paid
+                  Tandai Pelunasan Lunas
                 </Button>
               </>
             ) : (
               invoiceDetail ? (
                 <Button type="button" variant="secondary" className="border border-border/80 bg-background" onClick={() => void handleMarkPaid("FULL")}
                   disabled={isMarkingPaid}>
-                  Mark Paid
+                  Tandai Lunas
                 </Button>
               ) : null
             )}
             {invoiceDetail && (invoiceDetail.status === "DRAFT" || invoiceDetail.status === "VOID") ? (
               <Button type="button" variant="destructive" onClick={() => void deleteInvoiceById(invoiceDetail.id)} disabled={isDeleting}>
                 <Trash2 className="mr-2 h-4 w-4" />
-                {isDeleting ? "Deleting..." : "Delete"}
+                {isDeleting ? "Menghapus..." : "Hapus"}
               </Button>
             ) : null}
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+          </DrawerFooter>
+        </DrawerContent>
+      </Drawer>
 
       <Dialog open={isCreateInvoiceModalOpen} onOpenChange={setIsCreateInvoiceModalOpen}>
         <DialogContent className="sm:max-w-[640px]">
           <DialogHeader>
-            <DialogTitle>Create Invoice from Invoices</DialogTitle>
+            <DialogTitle>Buat Invoice dari Halaman Invoice</DialogTitle>
             <DialogDescription>
               Pilih customer dari database (search-select). Sistem akan gunakan/buat conversation otomatis agar invoice tetap terhubung ke CRM.
             </DialogDescription>
@@ -1521,23 +1772,23 @@ export function InvoicesWorkspace() {
 
           <div className="space-y-4">
             <div className="space-y-2">
-              <p className="text-sm font-medium text-foreground">Search Select Customer</p>
+              <p className="text-sm font-medium text-foreground">Cari & Pilih Pelanggan</p>
               <Input
                 value={customerSearchText}
                 onChange={(event) => {
                   setCustomerSearchText(event.target.value);
                   setSelectedCustomerId("");
                 }}
-                placeholder="Search customer name or WhatsApp..."
+                placeholder="Cari nama pelanggan atau nomor WhatsApp..."
                 className="h-10"
               />
-              {isLoadingCustomers ? <p className="text-xs text-muted-foreground">Searching customers...</p> : null}
+              {isLoadingCustomers ? <p className="text-xs text-muted-foreground">Mencari pelanggan...</p> : null}
               <div className="max-h-52 overflow-auto rounded-xl border border-border/70">
                 {customerFetchError ? (
                   <div className="space-y-2 px-3 py-3">
                     <p className="text-sm text-destructive">{customerFetchError}</p>
                     <Button type="button" size="sm" variant="secondary" className="h-8" onClick={() => void loadCustomers(customerSearchQuery, { force: true })}>
-                      Retry
+                      Coba Lagi
                     </Button>
                   </div>
                 ) : isLoadingCustomers && customerOptions.length === 0 ? (
@@ -1550,7 +1801,7 @@ export function InvoicesWorkspace() {
                     ))}
                   </div>
                 ) : customerOptions.length === 0 ? (
-                  <p className="px-3 py-3 text-sm text-muted-foreground">No customer found.</p>
+                  <p className="px-3 py-3 text-sm text-muted-foreground">Pelanggan tidak ditemukan.</p>
                 ) : (
                   <div className="divide-y divide-border/60">
                     {customerOptions.map((customer) => (
@@ -1566,20 +1817,27 @@ export function InvoicesWorkspace() {
                           <p className="text-sm font-medium text-foreground">{customer.displayName?.trim() || customer.phoneE164}</p>
                           <p className="text-xs text-muted-foreground">{customer.phoneE164}</p>
                         </div>
-                        <span className="text-xs text-muted-foreground">{customer.latestConversationId ? "existing convo" : "no convo"}</span>
+                        <span className="text-xs text-muted-foreground">{customer.latestConversationId ? "sudah ada chat" : "belum ada chat"}</span>
                       </button>
                     ))}
                   </div>
                 )}
+                {hasMoreCustomers ? (
+                  <div className="border-t border-border/60 p-2">
+                    <Button type="button" variant="secondary" className="h-8 w-full" onClick={() => void loadMoreCustomers()} disabled={isLoadingCustomers}>
+                      {isLoadingCustomers ? "Memuat..." : "Muat Pelanggan Lain"}
+                    </Button>
+                  </div>
+                ) : null}
               </div>
             </div>
 
           </div>
 
           <DialogFooter>
-            <Button type="button" variant="secondary" onClick={() => setIsCreateInvoiceModalOpen(false)}>
-              Cancel
-            </Button>
+              <Button type="button" variant="secondary" onClick={() => setIsCreateInvoiceModalOpen(false)}>
+              Batal
+              </Button>
             <Button
               type="button"
               variant="ghost"
@@ -1598,7 +1856,7 @@ export function InvoicesWorkspace() {
               onClick={() => void handleCreateInvoiceFromInvoices()}
               disabled={isPreparingInvoiceDrawer || !selectedCustomer}
             >
-              {isPreparingInvoiceDrawer ? "Preparing..." : "Continue"}
+              {isPreparingInvoiceDrawer ? "Menyiapkan..." : "Lanjutkan"}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -1607,7 +1865,7 @@ export function InvoicesWorkspace() {
       <Dialog open={isManualCustomerModalOpen} onOpenChange={setIsManualCustomerModalOpen}>
         <DialogContent className="sm:max-w-[560px]">
           <DialogHeader>
-            <DialogTitle>Create Customer Manual</DialogTitle>
+            <DialogTitle>Buat Pelanggan Manual</DialogTitle>
             <DialogDescription>Input manual dipakai saat customer belum ada di database.</DialogDescription>
           </DialogHeader>
 
@@ -1640,7 +1898,7 @@ export function InvoicesWorkspace() {
 
           <DialogFooter>
             <Button type="button" variant="secondary" onClick={() => setIsManualCustomerModalOpen(false)}>
-              Cancel
+              Batal
             </Button>
             <Button
               type="button"
@@ -1650,7 +1908,7 @@ export function InvoicesWorkspace() {
               }}
               disabled={isPreparingInvoiceDrawer || !newCustomerPhone.trim()}
             >
-              {isPreparingInvoiceDrawer ? "Preparing..." : "Continue Manual"}
+              {isPreparingInvoiceDrawer ? "Menyiapkan..." : "Lanjutkan Manual"}
             </Button>
           </DialogFooter>
         </DialogContent>

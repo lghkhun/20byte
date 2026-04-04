@@ -17,11 +17,6 @@ function errorResponse(status: number, code: string, message: string) {
   );
 }
 
-type ConversationDetailPayload = Awaited<ReturnType<typeof getConversationById>>;
-const CONVERSATION_DETAIL_CACHE_TTL_MS = 8_000;
-const conversationDetailCache = new Map<string, { expiresAt: number; data: ConversationDetailPayload }>();
-const conversationDetailInflight = new Map<string, Promise<ConversationDetailPayload>>();
-
 function withServerTiming<T>(response: T, startedAt: number, cacheStatus?: "HIT" | "MISS"): T {
   const durationMs = Number((performance.now() - startedAt).toFixed(1));
   if (response instanceof Response) {
@@ -29,40 +24,9 @@ function withServerTiming<T>(response: T, startedAt: number, cacheStatus?: "HIT"
     if (cacheStatus) {
       response.headers.set("X-Cache", cacheStatus);
     }
+    response.headers.set("Cache-Control", "no-store");
   }
   return response;
-}
-
-async function getCachedConversationDetail(
-  cacheKey: string,
-  loader: () => Promise<ConversationDetailPayload>
-): Promise<{ data: ConversationDetailPayload; fromCache: boolean }> {
-  const now = Date.now();
-  const cached = conversationDetailCache.get(cacheKey);
-  if (cached && cached.expiresAt > now) {
-    return { data: cached.data, fromCache: true };
-  }
-
-  const inflight = conversationDetailInflight.get(cacheKey);
-  if (inflight) {
-    return { data: await inflight, fromCache: true };
-  }
-
-  const request = (async () => {
-    const data = await loader();
-    conversationDetailCache.set(cacheKey, {
-      expiresAt: Date.now() + CONVERSATION_DETAIL_CACHE_TTL_MS,
-      data
-    });
-    return data;
-  })();
-
-  conversationDetailInflight.set(cacheKey, request);
-  try {
-    return { data: await request, fromCache: false };
-  } finally {
-    conversationDetailInflight.delete(cacheKey);
-  }
 }
 
 export async function GET(
@@ -86,10 +50,7 @@ export async function GET(
       auth.session.userId,
       request.nextUrl.searchParams.get("orgId")?.trim() ?? ""
     );
-    const cacheKey = `${auth.session.userId}:${orgId}:${conversationId}`;
-    const { data: conversation, fromCache } = await getCachedConversationDetail(cacheKey, async () =>
-      getConversationById(auth.session.userId, orgId, conversationId)
-    );
+    const conversation = await getConversationById(auth.session.userId, orgId, conversationId);
     return withServerTiming(NextResponse.json(
       {
         data: {
@@ -98,7 +59,7 @@ export async function GET(
         meta: {}
       },
       { status: 200 }
-    ), startedAt, fromCache ? "HIT" : "MISS");
+    ), startedAt);
   } catch (error) {
     if (error instanceof ServiceError) {
       return withServerTiming(errorResponse(error.status, error.code, error.message), startedAt);
@@ -134,17 +95,6 @@ export async function DELETE(
       orgId,
       conversationId
     });
-    const cachePrefix = `${auth.session.userId}:${orgId}:`;
-    for (const key of conversationDetailCache.keys()) {
-      if (key.startsWith(cachePrefix)) {
-        conversationDetailCache.delete(key);
-      }
-    }
-    for (const key of conversationDetailInflight.keys()) {
-      if (key.startsWith(cachePrefix)) {
-        conversationDetailInflight.delete(key);
-      }
-    }
 
     return withServerTiming(NextResponse.json(
       {

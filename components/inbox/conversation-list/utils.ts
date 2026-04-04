@@ -21,7 +21,7 @@ export function formatTimestamp(value: string | null, nowMs: number = Date.now()
 
   const yesterdayStart = todayStart - 24 * 60 * 60 * 1000;
   if (dateMs >= yesterdayStart && dateMs < todayStart) {
-    return "Yesterday";
+    return "Kemarin";
   }
 
   const diffDays = Math.floor((todayStart - new Date(date.getFullYear(), date.getMonth(), date.getDate()).getTime()) / (24 * 60 * 60 * 1000));

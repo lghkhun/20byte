@@ -13,20 +13,6 @@ type CreateConversationRequest = {
 };
 
 type ConversationListFilter = "UNASSIGNED" | "MY" | "ALL";
-type ConversationListPayload = {
-  data: {
-    conversations: Awaited<ReturnType<typeof listConversations>>["conversations"];
-  };
-  meta: {
-    page: number;
-    limit: number;
-    total: number;
-  };
-};
-
-const CONVERSATIONS_CACHE_TTL_MS = 8_000;
-const conversationsCache = new Map<string, { expiresAt: number; payload: ConversationListPayload }>();
-const conversationsInflight = new Map<string, Promise<ConversationListPayload>>();
 
 function errorResponse(status: number, code: string, message: string) {
   return NextResponse.json(
@@ -82,40 +68,9 @@ function withServerTiming<T>(response: T, startedAt: number, cacheStatus?: "HIT"
     if (cacheStatus) {
       response.headers.set("X-Cache", cacheStatus);
     }
+    response.headers.set("Cache-Control", "no-store");
   }
   return response;
-}
-
-async function getCachedConversationList(
-  cacheKey: string,
-  loader: () => Promise<ConversationListPayload>
-): Promise<{ payload: ConversationListPayload; fromCache: boolean }> {
-  const now = Date.now();
-  const cached = conversationsCache.get(cacheKey);
-  if (cached && cached.expiresAt > now) {
-    return { payload: cached.payload, fromCache: true };
-  }
-
-  const inflight = conversationsInflight.get(cacheKey);
-  if (inflight) {
-    return { payload: await inflight, fromCache: true };
-  }
-
-  const request = (async () => {
-    const payload = await loader();
-    conversationsCache.set(cacheKey, {
-      expiresAt: Date.now() + CONVERSATIONS_CACHE_TTL_MS,
-      payload
-    });
-    return payload;
-  })();
-
-  conversationsInflight.set(cacheKey, request);
-  try {
-    return { payload: await request, fromCache: false };
-  } finally {
-    conversationsInflight.delete(cacheKey);
-  }
 }
 
 export async function GET(request: NextRequest) {
@@ -129,36 +84,38 @@ export async function GET(request: NextRequest) {
   const status = parseStatus(request.nextUrl.searchParams.get("status"));
   const page = parseNumber(request.nextUrl.searchParams.get("page"), 1);
   const limit = parseNumber(request.nextUrl.searchParams.get("limit"), 20);
+  const query = request.nextUrl.searchParams.get("query")?.trim() ?? "";
 
   try {
     const orgId = await resolvePrimaryOrganizationIdForUser(
       auth.session.userId,
       request.nextUrl.searchParams.get("orgId")?.trim() ?? ""
     );
-    const cacheKey = `${auth.session.userId}:${orgId}:${filter}:${status}:${page}:${limit}`;
-    const { payload, fromCache } = await getCachedConversationList(cacheKey, async () => {
-      const result = await listConversations({
-        actorUserId: auth.session.userId,
-        orgId,
-        filter,
-        status,
-        page,
-        limit
-      });
-
-      return {
-        data: {
-          conversations: result.conversations
-        },
-        meta: {
-          page: result.page,
-          limit: result.limit,
-          total: result.total
-        }
-      };
+    const result = await listConversations({
+      actorUserId: auth.session.userId,
+      orgId,
+      filter,
+      status,
+      page,
+      limit,
+      query
     });
-
-    return withServerTiming(NextResponse.json(payload, { status: 200 }), startedAt, fromCache ? "HIT" : "MISS");
+    return withServerTiming(
+      NextResponse.json(
+        {
+          data: {
+            conversations: result.conversations
+          },
+          meta: {
+            page: result.page,
+            limit: result.limit,
+            total: result.total
+          }
+        },
+        { status: 200 }
+      ),
+      startedAt
+    );
   } catch (error) {
     if (error instanceof ServiceError) {
       if (error.code === "ORG_NOT_FOUND") {
@@ -208,17 +165,6 @@ export async function POST(request: NextRequest) {
       phoneE164: typeof body.phoneE164 === "string" ? body.phoneE164 : "",
       customerDisplayName: typeof body.customerDisplayName === "string" ? body.customerDisplayName : undefined
     });
-    const cachePrefix = `${auth.session.userId}:${orgId}:`;
-    for (const key of conversationsCache.keys()) {
-      if (key.startsWith(cachePrefix)) {
-        conversationsCache.delete(key);
-      }
-    }
-    for (const key of conversationsInflight.keys()) {
-      if (key.startsWith(cachePrefix)) {
-        conversationsInflight.delete(key);
-      }
-    }
 
     return withServerTiming(NextResponse.json(
       {

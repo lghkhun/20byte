@@ -16,9 +16,14 @@ export function useInboxWorkspaceState() {
   const [isConversationManuallyCleared, setIsConversationManuallyCleared] = useState(false);
   const [selectedConversation, setSelectedConversation] = useState<ConversationItem | null>(null);
   const [isLoadingList, setIsLoadingList] = useState(false);
+  const [isLoadingMoreConversations, setIsLoadingMoreConversations] = useState(false);
+  const [hasMoreConversations, setHasMoreConversations] = useState(false);
+  const [conversationSearchQuery, setConversationSearchQuery] = useState("");
   const [isLoadingConversation, setIsLoadingConversation] = useState(false);
   const [messages, setMessages] = useState<MessageItem[]>([]);
   const [isLoadingMessages, setIsLoadingMessages] = useState(false);
+  const [isLoadingOlderMessages, setIsLoadingOlderMessages] = useState(false);
+  const [hasMoreMessages, setHasMoreMessages] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [messageError, setMessageError] = useState<string | null>(null);
   const [assignError, setAssignError] = useState<string | null>(null);
@@ -42,6 +47,9 @@ export function useInboxWorkspaceState() {
   const [crmActivity, setCrmActivity] = useState<CrmActivityItem[]>([]);
   const [metaTotal, setMetaTotal] = useState<number>(0);
   const [typingConversationId, setTypingConversationId] = useState<string | null>(null);
+  const [realtimeConnectionState, setRealtimeConnectionState] = useState<
+    "initialized" | "connecting" | "connected" | "disconnected" | "suspended" | "failed" | "fallback"
+  >("initialized");
 
   return {
     organizations,
@@ -64,12 +72,22 @@ export function useInboxWorkspaceState() {
     setSelectedConversation,
     isLoadingList,
     setIsLoadingList,
+    isLoadingMoreConversations,
+    setIsLoadingMoreConversations,
+    hasMoreConversations,
+    setHasMoreConversations,
+    conversationSearchQuery,
+    setConversationSearchQuery,
     isLoadingConversation,
     setIsLoadingConversation,
     messages,
     setMessages,
     isLoadingMessages,
     setIsLoadingMessages,
+    isLoadingOlderMessages,
+    setIsLoadingOlderMessages,
+    hasMoreMessages,
+    setHasMoreMessages,
     error,
     setError,
     messageError,
@@ -115,7 +133,9 @@ export function useInboxWorkspaceState() {
     metaTotal,
     setMetaTotal,
     typingConversationId,
-    setTypingConversationId
+    setTypingConversationId,
+    realtimeConnectionState,
+    setRealtimeConnectionState
   };
 }
 

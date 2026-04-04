@@ -190,7 +190,7 @@ export async function sendOutboundMessage(input: SendOutboundMessageInput): Prom
         messageId: pending.messageId,
         sendStatus: "FAILED",
         sendError: normalizeSendError(error),
-        retryable: false
+        retryable: true
       });
 
       throw new ServiceError(502, "WHATSAPP_MEDIA_SEND_FAILED", "Failed to send outbound attachment.");

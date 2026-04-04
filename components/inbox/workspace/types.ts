@@ -71,9 +71,27 @@ export type ListMessagesResponse = {
     messages?: MessageItem[];
   };
   meta?: {
-    page?: number;
     limit?: number;
+    hasMore?: boolean;
+    nextBeforeMessageId?: string | null;
     total?: number;
+  };
+  error?: {
+    code?: string;
+    message?: string;
+  };
+};
+
+export type SearchMessagesResponse = {
+  data?: {
+    messages?: Array<{
+      id: string;
+      text: string;
+      createdAt: string;
+    }>;
+  };
+  meta?: {
+    limit?: number;
   };
   error?: {
     code?: string;

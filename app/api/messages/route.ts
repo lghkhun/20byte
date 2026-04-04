@@ -37,8 +37,8 @@ export async function GET(request: NextRequest) {
   }
 
   const conversationId = request.nextUrl.searchParams.get("conversationId")?.trim() ?? "";
-  const page = parseNumber(request.nextUrl.searchParams.get("page"), 1);
   const limit = parseNumber(request.nextUrl.searchParams.get("limit"), 30);
+  const beforeMessageId = request.nextUrl.searchParams.get("beforeMessageId")?.trim() ?? "";
 
   try {
     const orgId = await resolvePrimaryOrganizationIdForUser(
@@ -49,7 +49,7 @@ export async function GET(request: NextRequest) {
       actorUserId: auth.session.userId,
       orgId,
       conversationId,
-      page,
+      beforeMessageId,
       limit
     });
 
@@ -59,8 +59,9 @@ export async function GET(request: NextRequest) {
           messages: result.messages
         },
         meta: {
-          page: result.page,
           limit: result.limit,
+          hasMore: result.hasMore,
+          nextBeforeMessageId: result.nextBeforeMessageId,
           total: result.total
         }
       },

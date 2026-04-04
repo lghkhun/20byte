@@ -137,67 +137,67 @@ export function ChatHeader({
           type="button"
           variant="ghost"
           size="icon"
-          className="rounded-lg border border-border/70"
+          className="rounded-lg text-muted-foreground hover:bg-muted hover:text-foreground"
           disabled={!conversation}
           title="Search in messages"
           onClick={onOpenSearch}
         >
-          <Search className="h-4 w-4" />
+          <Search className="h-4.5 w-4.5" />
         </Button>
         <Button
           type="button"
           variant="ghost"
           size="icon"
           disabled={!conversation}
-          className="rounded-lg border border-border/70"
+          className="rounded-lg text-muted-foreground hover:bg-muted hover:text-foreground"
           title="Transfer chat"
           onClick={onOpenTransfer}
         >
-          <SendToBack className="h-4 w-4" />
+          <SendToBack className="h-4.5 w-4.5" />
         </Button>
         <Button
           type="button"
           variant="ghost"
           size="icon"
           disabled={!conversation}
-          className="rounded-lg border border-border/70"
+          className="rounded-lg text-muted-foreground hover:bg-muted hover:text-foreground"
           title="Resolve conversation"
           onClick={onOpenResolve}
         >
-          <ShieldCheck className="h-4 w-4" />
+          <ShieldCheck className="h-4.5 w-4.5" />
         </Button>
         <Button
           type="button"
           variant="ghost"
           size="icon"
           disabled={!conversation}
-          className="rounded-lg border border-border/70 text-destructive hover:text-destructive"
+          className="rounded-lg text-destructive/80 hover:bg-destructive/10 hover:text-destructive"
           title="Delete chat"
           onClick={onDeleteConversation}
         >
-          <Trash2 className="h-4 w-4" />
+          <Trash2 className="h-4.5 w-4.5" />
         </Button>
         <Button
           type="button"
           variant="ghost"
           size="icon"
           disabled={!conversation}
-          className="rounded-lg border border-border/70"
+          className="rounded-lg text-muted-foreground hover:bg-muted hover:text-foreground"
           title="Keluar dari chat (Esc)"
           onClick={onUnselectConversation}
         >
-          <X className="h-4 w-4" />
+          <X className="h-4.5 w-4.5" />
         </Button>
         <Button
           type="button"
           variant="ghost"
           size="icon"
           disabled={!conversation || isUpdatingConversationStatus}
-          className="rounded-lg border border-border/70"
+          className="rounded-lg text-muted-foreground hover:bg-muted hover:text-foreground"
           title={isCrmPanelOpen ? "Hide CRM panel" : "Show CRM panel"}
           onClick={onToggleCrmPanel}
         >
-          <Ellipsis className="h-4 w-4" />
+          <Ellipsis className="h-4.5 w-4.5" />
         </Button>
       </div>
     </div>

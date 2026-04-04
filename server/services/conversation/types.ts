@@ -73,6 +73,7 @@ export type ListConversationsInput = {
   orgId: string;
   filter?: ConversationListFilter;
   status?: ConversationStatus;
+  query?: string;
   page?: number;
   limit?: number;
 };

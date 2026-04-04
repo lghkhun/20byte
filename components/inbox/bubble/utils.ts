@@ -6,7 +6,7 @@ export function formatTime(value: string): string {
     return "-";
   }
 
-  return new Intl.DateTimeFormat("en-US", {
+  return new Intl.DateTimeFormat("id-ID", {
     hour: "2-digit",
     minute: "2-digit"
   }).format(date);
@@ -14,7 +14,7 @@ export function formatTime(value: string): string {
 
 export function renderMediaLabel(message: MessageItem): string | null {
   if (message.type === "IMAGE") {
-    return "Image";
+    return "Gambar";
   }
 
   if (message.type === "VIDEO") {
@@ -26,7 +26,7 @@ export function renderMediaLabel(message: MessageItem): string | null {
   }
 
   if (message.type === "DOCUMENT") {
-    return message.fileName ? `Document: ${message.fileName}` : "Document";
+    return message.fileName ? `Dokumen: ${message.fileName}` : "Dokumen";
   }
 
   return null;

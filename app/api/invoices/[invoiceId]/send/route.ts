@@ -9,6 +9,20 @@ type SendInvoiceRequest = {
   orgId?: unknown;
 };
 
+async function parseOptionalJsonBody<T>(request: NextRequest): Promise<T> {
+  const contentLength = request.headers.get("content-length");
+  if (contentLength === "0") {
+    return {} as T;
+  }
+
+  const rawBody = await request.text();
+  if (!rawBody.trim()) {
+    return {} as T;
+  }
+
+  return JSON.parse(rawBody) as T;
+}
+
 function errorResponse(status: number, code: string, message: string) {
   return NextResponse.json(
     {
@@ -36,7 +50,7 @@ export async function POST(
 
   let body: SendInvoiceRequest;
   try {
-    body = (await request.json()) as SendInvoiceRequest;
+    body = await parseOptionalJsonBody<SendInvoiceRequest>(request);
   } catch {
     return errorResponse(400, "INVALID_JSON", "Request body must be valid JSON.");
   }

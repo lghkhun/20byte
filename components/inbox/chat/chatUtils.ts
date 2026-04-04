@@ -30,13 +30,13 @@ export function toDayKey(value: string): string {
 
 export function formatDayLabel(dayKey: string): string {
   if (dayKey === "unknown") {
-    return "Unknown date";
+    return "Tanggal tidak diketahui";
   }
 
   const [year, month, day] = dayKey.split("-").map((part) => Number(part));
   const date = new Date(year, (month ?? 1) - 1, day ?? 1);
   if (Number.isNaN(date.getTime())) {
-    return "Unknown date";
+    return "Tanggal tidak diketahui";
   }
 
   const today = new Date();
@@ -45,14 +45,14 @@ export function formatDayLabel(dayKey: string): string {
   const diffDays = Math.round((startOfToday.getTime() - startOfTarget.getTime()) / (24 * 60 * 60 * 1000));
 
   if (diffDays === 0) {
-    return "Today";
+    return "Hari ini";
   }
 
   if (diffDays === 1) {
-    return "Yesterday";
+    return "Kemarin";
   }
 
-  return new Intl.DateTimeFormat("en-US", {
+  return new Intl.DateTimeFormat("id-ID", {
     month: "short",
     day: "2-digit",
     year: "numeric"

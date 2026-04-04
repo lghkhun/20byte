@@ -1,7 +1,9 @@
 import { MessageDirection } from "@prisma/client";
 
+import { publishMessageStatusEvent } from "@/lib/ably/publisher";
 import { prisma } from "@/lib/db/prisma";
 import type { OutboundStoreResult } from "@/server/services/message/messageTypes";
+import { resolveNextDeliveryState } from "@/server/services/message/statusTransitions";
 import { ServiceError } from "@/server/services/serviceError";
 
 export async function storeOutboundRecord(params: {
@@ -96,7 +98,17 @@ export async function updateOutboundSendResult(params: {
   sendStatus: "PENDING" | "SENT" | "FAILED";
   sendError: string | null;
   retryable: boolean;
-}): Promise<void> {
+}): Promise<{
+  messageId: string;
+  conversationId: string;
+  sendStatus: "PENDING" | "SENT" | "FAILED" | null;
+  deliveryStatus: "SENT" | "DELIVERED" | "READ" | null;
+  sendError: string | null;
+  retryable: boolean;
+  sendAttemptCount: number;
+  deliveredAt: Date | null;
+  readAt: Date | null;
+}> {
   const updated = await prisma.message.updateMany({
     where: {
       id: params.messageId,
@@ -119,13 +131,54 @@ export async function updateOutboundSendResult(params: {
   if (updated.count !== 1) {
     throw new ServiceError(404, "MESSAGE_NOT_FOUND", "Outbound message does not exist.");
   }
-}
 
-function deliveryRank(status: "SENT" | "DELIVERED" | "READ" | null | undefined): number {
-  if (status === "READ") return 3;
-  if (status === "DELIVERED") return 2;
-  if (status === "SENT") return 1;
-  return 0;
+  const refreshed = await prisma.message.findFirst({
+    where: {
+      id: params.messageId,
+      orgId: params.orgId,
+      direction: MessageDirection.OUTBOUND
+    },
+    select: {
+      id: true,
+      conversationId: true,
+      sendStatus: true,
+      deliveryStatus: true,
+      sendError: true,
+      retryable: true,
+      sendAttemptCount: true,
+      deliveredAt: true,
+      readAt: true
+    }
+  });
+
+  if (!refreshed) {
+    throw new ServiceError(404, "MESSAGE_NOT_FOUND", "Outbound message does not exist.");
+  }
+
+  await publishMessageStatusEvent({
+    orgId: params.orgId,
+    conversationId: refreshed.conversationId,
+    messageId: refreshed.id,
+    sendStatus: refreshed.sendStatus,
+    deliveryStatus: refreshed.deliveryStatus as "SENT" | "DELIVERED" | "READ" | null,
+    sendError: refreshed.sendError,
+    retryable: refreshed.retryable,
+    sendAttemptCount: refreshed.sendAttemptCount,
+    deliveredAt: refreshed.deliveredAt,
+    readAt: refreshed.readAt
+  });
+
+  return {
+    messageId: refreshed.id,
+    conversationId: refreshed.conversationId,
+    sendStatus: refreshed.sendStatus,
+    deliveryStatus: refreshed.deliveryStatus as "SENT" | "DELIVERED" | "READ" | null,
+    sendError: refreshed.sendError,
+    retryable: refreshed.retryable,
+    sendAttemptCount: refreshed.sendAttemptCount,
+    deliveredAt: refreshed.deliveredAt,
+    readAt: refreshed.readAt
+  };
 }
 
 export async function updateOutboundDeliveryStatusByWaMessageId(params: {
@@ -136,6 +189,13 @@ export async function updateOutboundDeliveryStatusByWaMessageId(params: {
 }): Promise<{
   messageId: string;
   conversationId: string;
+  sendStatus: "PENDING" | "SENT" | "FAILED" | null;
+  deliveryStatus: "SENT" | "DELIVERED" | "READ" | null;
+  sendError: string | null;
+  retryable: boolean;
+  sendAttemptCount: number;
+  deliveredAt: Date | null;
+  readAt: Date | null;
   conversationStatus: "OPEN" | "CLOSED";
   assignedToMemberId: string | null;
 } | null> {
@@ -148,6 +208,10 @@ export async function updateOutboundDeliveryStatusByWaMessageId(params: {
     select: {
       id: true,
       conversationId: true,
+      sendStatus: true,
+      sendError: true,
+      retryable: true,
+      sendAttemptCount: true,
       deliveryStatus: true,
       deliveredAt: true,
       readAt: true,
@@ -164,45 +228,63 @@ export async function updateOutboundDeliveryStatusByWaMessageId(params: {
     return null;
   }
 
-  const incomingRank = deliveryRank(params.deliveryStatus);
-  const currentRank = deliveryRank(existing.deliveryStatus as "SENT" | "DELIVERED" | "READ" | null);
   const at = params.at ?? new Date();
+  const nextState = resolveNextDeliveryState({
+    currentStatus: existing.deliveryStatus as "SENT" | "DELIVERED" | "READ" | null,
+    currentDeliveredAt: existing.deliveredAt,
+    currentReadAt: existing.readAt,
+    incomingStatus: params.deliveryStatus,
+    at
+  });
 
-  const data: {
-    deliveryStatus?: "SENT" | "DELIVERED" | "READ";
-    deliveredAt?: Date;
-    readAt?: Date;
-  } = {};
+  let nextDeliveryStatus = existing.deliveryStatus as "SENT" | "DELIVERED" | "READ" | null;
+  let nextDeliveredAt = existing.deliveredAt;
+  let nextReadAt = existing.readAt;
 
-  if (incomingRank > currentRank) {
-    data.deliveryStatus = params.deliveryStatus;
-  }
-
-  if (params.deliveryStatus === "DELIVERED" && !existing.deliveredAt) {
-    data.deliveredAt = at;
-  }
-
-  if (params.deliveryStatus === "READ") {
-    if (!existing.deliveredAt) {
-      data.deliveredAt = at;
-    }
-    if (!existing.readAt) {
-      data.readAt = at;
-    }
-  }
-
-  if (Object.keys(data).length > 0) {
-    await prisma.message.update({
+  if (nextState.shouldPersist) {
+    const updatedMessage = await prisma.message.update({
       where: {
         id: existing.id
       },
-      data
+      data: {
+        deliveryStatus: nextState.deliveryStatus ?? undefined,
+        deliveredAt: nextState.deliveredAt ?? undefined,
+        readAt: nextState.readAt ?? undefined
+      },
+      select: {
+        deliveryStatus: true,
+        deliveredAt: true,
+        readAt: true
+      }
+    });
+    nextDeliveryStatus = updatedMessage.deliveryStatus as "SENT" | "DELIVERED" | "READ" | null;
+    nextDeliveredAt = updatedMessage.deliveredAt;
+    nextReadAt = updatedMessage.readAt;
+
+    await publishMessageStatusEvent({
+      orgId: params.orgId,
+      conversationId: existing.conversationId,
+      messageId: existing.id,
+      sendStatus: existing.sendStatus,
+      deliveryStatus: nextDeliveryStatus,
+      sendError: existing.sendError,
+      retryable: existing.retryable,
+      sendAttemptCount: existing.sendAttemptCount,
+      deliveredAt: nextDeliveredAt,
+      readAt: nextReadAt
     });
   }
 
   return {
     messageId: existing.id,
     conversationId: existing.conversationId,
+    sendStatus: existing.sendStatus,
+    deliveryStatus: nextDeliveryStatus,
+    sendError: existing.sendError,
+    retryable: existing.retryable,
+    sendAttemptCount: existing.sendAttemptCount,
+    deliveredAt: nextDeliveredAt,
+    readAt: nextReadAt,
     conversationStatus: existing.conversation.status,
     assignedToMemberId: existing.conversation.assignedToMemberId
   };

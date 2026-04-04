@@ -14,6 +14,8 @@ export function useInboxWorkspaceController() {
     hasLoadedOrganizations: state.hasLoadedOrganizations,
     error: state.error,
     isLoadingList: state.isLoadingList,
+    isLoadingMoreConversations: state.isLoadingMoreConversations,
+    hasMoreConversations: state.hasMoreConversations,
     workspaceSubtitle: loaders.workspaceSubtitle,
     conversations: state.conversations,
     selectedConversationId: state.selectedConversationId,
@@ -22,13 +24,19 @@ export function useInboxWorkspaceController() {
     statusFilter: state.statusFilter,
     setFilter: state.setFilter,
     setStatusFilter: state.setStatusFilter,
+    conversationSearchQuery: state.conversationSearchQuery,
+    setConversationSearchQuery: state.setConversationSearchQuery,
     loadConversation: loaders.loadConversation,
     loadConversations: loaders.loadConversations,
+    loadMoreConversations: loaders.loadMoreConversations,
     selectedConversation: state.selectedConversation,
     isUpdatingConversationStatus: state.isUpdatingConversationStatus,
     messages: state.messages,
     isLoadingMessages: state.isLoadingMessages,
+    isLoadingOlderMessages: state.isLoadingOlderMessages,
+    hasMoreMessages: state.hasMoreMessages,
     messageError: state.messageError,
+    loadOlderMessages: loaders.loadOlderMessages,
     sendTextMessage: actions.sendTextMessage,
     createConversation: actions.createConversation,
     selectConversation: actions.selectConversation,
@@ -67,6 +75,7 @@ export function useInboxWorkspaceController() {
     isProofShortcutModalOpen: state.isProofShortcutModalOpen,
     setIsProofShortcutModalOpen: state.setIsProofShortcutModalOpen,
     isInvoiceDrawerOpen: state.isInvoiceDrawerOpen,
-    setIsInvoiceDrawerOpen: state.setIsInvoiceDrawerOpen
+    setIsInvoiceDrawerOpen: state.setIsInvoiceDrawerOpen,
+    realtimeConnectionState: state.realtimeConnectionState
   };
 }

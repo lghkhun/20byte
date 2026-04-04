@@ -614,12 +614,12 @@ export function CrmContextPanel({
               <p>Last Activity: {formatDateTime(conversation.lastMessageAt)}</p>
               <p>Assigned Member: {conversation.assignedToMemberId || "Unassigned"}</p>
             </div>
-            <div className="pt-2">
+            <div className="pt-3">
               <div className="flex flex-wrap gap-2">
-                <Button type="button" onClick={onOpenInvoiceDrawer} size="sm" variant="secondary" className="h-8 rounded-lg border border-primary/30 bg-primary/10 text-primary">
+                <Button type="button" onClick={onOpenInvoiceDrawer} size="sm" variant="outline" className="h-8 shadow-sm">
                   Create Invoice
                 </Button>
-                <Button type="button" onClick={() => void openAssignModal()} disabled={isAssigning} size="sm" variant="secondary" className="h-8 rounded-lg border border-border/80 bg-background">
+                <Button type="button" onClick={() => void openAssignModal()} disabled={isAssigning} size="sm" variant="outline" className="h-8 shadow-sm">
                   {isAssigning ? "Assigning..." : "Assign to"}
                 </Button>
               </div>
@@ -705,7 +705,7 @@ export function CrmContextPanel({
                 </Button>
               </div>
             </div>
-            <Button type="submit" disabled={isSavingLeadSettings || isLoadingLeadSettings} className="h-10 w-full rounded-xl">
+            <Button type="submit" disabled={isSavingLeadSettings || isLoadingLeadSettings} className="h-10 w-full rounded-xl shadow-md shadow-primary/20">
               {isSavingLeadSettings ? "Saving..." : "Save Lead Settings"}
             </Button>
           </form>
@@ -724,7 +724,7 @@ export function CrmContextPanel({
             className="min-h-[112px] w-full rounded-2xl border border-amber-200 bg-amber-50/40 px-3 py-3 text-sm text-foreground outline-none transition focus:border-amber-300 focus:ring-2 focus:ring-amber-200/60"
           />
           <div className="flex justify-end">
-            <Button type="button" disabled={isSavingNotes} size="sm" className="h-9 rounded-lg" onClick={() => void handleSaveNotes()}>
+            <Button type="button" disabled={isSavingNotes} size="sm" className="h-9 rounded-lg shadow-sm" variant="outline" onClick={() => void handleSaveNotes()}>
               {isSavingNotes ? "Saving..." : "Simpan Catatan"}
             </Button>
           </div>

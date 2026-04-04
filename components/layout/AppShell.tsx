@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useEffect, useRef } from "react";
 
 import { AppSidebar } from "@/components/app-sidebar";
 import { MobileBottomNav } from "@/components/layout/MobileBottomNav";
@@ -22,33 +22,88 @@ type AppShellProps = {
   children: React.ReactNode;
 };
 
-const publicRoutes = new Set(["/", "/login", "/register", "/set-password"]);
+/* ── Scroll-aware public header ── */
+function PublicLayout({ pathname, children }: { pathname: string; children: React.ReactNode }) {
+  const headerRef = useRef<HTMLElement>(null);
+
+  useEffect(() => {
+    const header = headerRef.current;
+    if (!header) return;
+
+    function onScroll() {
+      if (!header) return;
+      if (window.scrollY > 20) {
+        header.classList.add("header-scrolled");
+      } else {
+        header.classList.remove("header-scrolled");
+      }
+    }
+
+    window.addEventListener("scroll", onScroll, { passive: true });
+    onScroll();
+    return () => window.removeEventListener("scroll", onScroll);
+  }, []);
+
+  return (
+    <div className="relative min-h-screen">
+      <header
+        ref={headerRef}
+        className="landing-header fixed left-0 right-0 top-0 z-50 flex h-20 items-center justify-between px-6 transition-all duration-500 md:px-12"
+      >
+        <Link className="text-lg font-black tracking-tighter text-foreground" href="/">
+          20byte.
+        </Link>
+        <div className="flex items-center gap-4">
+          <ThemeToggle />
+          {pathname !== "/login" && (
+            <Link
+              href="/login"
+              className="inline-flex h-10 items-center justify-center rounded-xl bg-transparent px-5 text-sm font-semibold text-foreground transition-all duration-300 hover:bg-foreground/5"
+            >
+              Login
+            </Link>
+          )}
+          {pathname !== "/register" && (
+            <Link
+              href="/register"
+              className="inline-flex h-10 items-center justify-center rounded-xl bg-primary px-6 text-sm font-bold text-primary-foreground shadow-[0_4px_14px_hsl(var(--primary)/0.3)] transition-all duration-300 hover:scale-105 hover:bg-primary/90 hover:shadow-[0_6px_20px_hsl(var(--primary)/0.4)]"
+            >
+              Mulai Trial
+            </Link>
+          )}
+        </div>
+      </header>
+      <main>{children}</main>
+    </div>
+  );
+}
+
+const publicRoutes = new Set([
+  "/",
+  "/login",
+  "/register",
+  "/set-password",
+  "/privacy",
+  "/terms",
+  "/faq"
+]);
 
 export function AppShell({ user, children }: AppShellProps) {
   const pathname = usePathname() ?? "";
   const router = useRouter();
   const lastLockStateRef = useRef<{ checkedAt: number; isLocked: boolean } | null>(null);
-  const [scrolled, setScrolled] = useState(false);
 
   const isPublicInvoiceRoute = pathname.startsWith("/i/");
   const isPublicRoute = publicRoutes.has(pathname) || isPublicInvoiceRoute;
 
-  /* ── Scroll-aware header state ── */
-  const onScroll = useCallback(() => {
-    setScrolled(window.scrollY > 24);
-  }, []);
-
   useEffect(() => {
-    if (!isPublicRoute || isPublicInvoiceRoute) return;
-    window.addEventListener("scroll", onScroll, { passive: true });
-    onScroll();
-    return () => window.removeEventListener("scroll", onScroll);
-  }, [isPublicRoute, isPublicInvoiceRoute, onScroll]);
+    if (!user || isPublicRoute) {
+      return;
+    }
 
-  /* ── Billing lock guard ── */
-  useEffect(() => {
-    if (!user || isPublicRoute) return;
-    if (user.primaryOrgRole !== "OWNER") return;
+    if (user.primaryOrgRole !== "OWNER") {
+      return;
+    }
 
     const billingAllowedRoutes = ["/billing", "/settings/profile"];
     if (billingAllowedRoutes.some((route) => pathname === route || pathname.startsWith(`${route}/`))) {
@@ -58,7 +113,9 @@ export function AppShell({ user, children }: AppShellProps) {
     const now = Date.now();
     const cached = lastLockStateRef.current;
     if (cached && now - cached.checkedAt < 30_000) {
-      if (cached.isLocked) router.replace("/billing");
+      if (cached.isLocked) {
+        router.replace("/billing");
+      }
       return;
     }
 
@@ -68,65 +125,40 @@ export function AppShell({ user, children }: AppShellProps) {
       try {
         const payload = await fetchJsonCached<{ data?: { state?: { isLocked?: boolean } } }>(
           "/api/billing/subscription",
-          { ttlMs: 15_000, init: { cache: "no-store" } }
+          {
+            ttlMs: 15_000,
+            init: { cache: "no-store" }
+          }
         );
+
         const isLocked = Boolean(payload?.data?.state?.isLocked);
         lastLockStateRef.current = { checkedAt: Date.now(), isLocked };
-        if (active && isLocked) router.replace("/billing");
+
+        if (active && isLocked) {
+          router.replace("/billing");
+        }
       } catch {
-        // no-op
+        // no-op: avoid disrupting navigation on transient fetch failures.
       }
     }
 
     void checkBillingLock();
-    return () => { active = false; };
+
+    return () => {
+      active = false;
+    };
   }, [isPublicRoute, pathname, router, user]);
 
-  /* ── Public invoice pages (no shell) ── */
   if (isPublicInvoiceRoute) {
     return <main className="h-screen overflow-auto bg-background">{children}</main>;
   }
 
-  /* ── Public pages (landing, login, register) ── */
   if (isPublicRoute) {
     return (
-      <div className="relative min-h-screen">
-        <header
-          className={`fixed left-0 right-0 top-0 z-50 flex h-14 items-center justify-between px-5 transition-all duration-500 ease-out md:px-8 ${
-            scrolled
-              ? "border-b border-border/30 bg-background/80 shadow-[0_1px_3px_0_rgba(0,0,0,0.04)] backdrop-blur-2xl backdrop-saturate-150"
-              : "border-b border-transparent bg-transparent"
-          }`}
-        >
-          <Link className="text-sm font-bold tracking-tight text-foreground" href="/">
-            20byte
-          </Link>
-          <div className="flex items-center gap-2.5">
-            <ThemeToggle />
-            {pathname !== "/login" && (
-              <Link
-                href="/login"
-                className="inline-flex h-8 items-center justify-center rounded-full px-4 text-xs font-medium text-foreground/80 transition-all duration-200 hover:bg-foreground/5 hover:text-foreground"
-              >
-                Masuk
-              </Link>
-            )}
-            {pathname !== "/register" && (
-              <Link
-                href="/register"
-                className="inline-flex h-8 items-center justify-center rounded-full bg-primary px-5 text-xs font-semibold text-primary-foreground shadow-[0_1px_4px_hsl(160_84%_39%/0.3)] transition-all duration-200 hover:brightness-110"
-              >
-                Daftar Gratis
-              </Link>
-            )}
-          </div>
-        </header>
-        <main>{children}</main>
-      </div>
+      <PublicLayout pathname={pathname}>{children}</PublicLayout>
     );
   }
 
-  /* ── Authenticated shell ── */
   return (
     <SidebarProvider defaultOpen={true} className="h-dvh overflow-hidden">
       <AppSidebar user={user} />

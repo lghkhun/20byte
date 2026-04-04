@@ -245,61 +245,97 @@ body {
   animation: inbox-shimmer 1.2s linear infinite;
 }
 
-/* ═══════════════════════════════════════════════════════
-   Landing page — seamless surface, scroll‑reveal, header
-   ═══════════════════════════════════════════════════════ */
+/* ═══════════════════════════════════════════════════
+   Landing page styles — seamless infinite-scroll feel
+   ═══════════════════════════════════════════════════ */
 
-/* Reset the global `* { border-border }` so landing cards
-   don't have unintended visible borders. */
-.lp,
-.lp * {
-  border-color: transparent;
-}
-
-.lp {
+.landing-page {
   overflow-x: hidden;
   scroll-behavior: smooth;
 }
 
 /* ── Scroll reveal ── */
-.reveal-up {
+.reveal {
   opacity: 0;
-  transform: translateY(28px);
+  transform: translateY(32px);
   transition:
-    opacity 0.7s cubic-bezier(0.16, 1, 0.3, 1),
-    transform 0.7s cubic-bezier(0.16, 1, 0.3, 1);
-  will-change: opacity, transform;
+    opacity 0.8s cubic-bezier(0.22, 1, 0.36, 1),
+    transform 0.8s cubic-bezier(0.22, 1, 0.36, 1);
 }
 
-.reveal-up.is-visible {
+.reveal.revealed {
   opacity: 1;
-  transform: none;
+  transform: translateY(0);
 }
 
-/* ── Flow diagram arrow pulse ── */
-.flow-arrow {
-  animation: lp-arrow-pulse 2.4s ease-in-out infinite;
-}
-@keyframes lp-arrow-pulse {
-  0%, 100% { opacity: 0.2; }
-  50%      { opacity: 0.7; }
+/* Stagger children inside a revealed parent */
+.reveal.revealed .feature-card,
+.reveal.revealed .flow-step {
+  opacity: 1;
+  transform: translateY(0);
 }
 
-/* Flow nodes cascade (driven by --d custom prop) */
-.flow-node {
+/* ── Flow diagram steps ── */
+.flow-step {
   opacity: 0;
   transform: translateY(12px);
-  transition: opacity 0.5s cubic-bezier(0.16, 1, 0.3, 1),
-              transform 0.5s cubic-bezier(0.16, 1, 0.3, 1);
-  transition-delay: var(--d, 0ms);
-}
-.is-visible .flow-node {
-  opacity: 1;
-  transform: none;
+  transition:
+    opacity 0.5s cubic-bezier(0.22, 1, 0.36, 1),
+    transform 0.5s cubic-bezier(0.22, 1, 0.36, 1);
 }
 
-/* ── Header: transparent → frosted glass on scroll ── */
-/* (handled via React className toggle — no extra CSS class needed) */
+.revealed .flow-step:nth-child(1) { transition-delay: 0.05s; }
+.revealed .flow-step:nth-child(2) { transition-delay: 0.15s; }
+.revealed .flow-step:nth-child(3) { transition-delay: 0.25s; }
+.revealed .flow-step:nth-child(4) { transition-delay: 0.35s; }
+.revealed .flow-step:nth-child(5) { transition-delay: 0.45s; }
+.revealed .flow-step:nth-child(6) { transition-delay: 0.55s; }
+
+/* Flow arrow pulse */
+.flow-arrow {
+  animation: arrow-pulse 2s ease-in-out infinite;
+}
+
+@keyframes arrow-pulse {
+  0%,100% { opacity: 0.3; }
+  50% { opacity: 0.8; }
+}
+
+/* ── Stat counter shimmer accent ── */
+.stat-item {
+  position: relative;
+  transition: background-color 0.3s ease;
+}
+.stat-item:hover {
+  background: hsl(var(--primary) / 0.04);
+}
+
+/* ── Smooth section transitions ─────────────────
+   Use large vertical padding & transparent bgs
+   so sections blend into one continuous surface ── */
+.landing-page section {
+  position: relative;
+  z-index: 1;
+}
+
+/* Prevent gradient blobs from creating hard edges */
+.landing-page section > .pointer-events-none {
+  z-index: -1;
+}
+
+/* ── Landing header: transparent → frosted on scroll ── */
+.landing-header {
+  background: transparent;
+  border-bottom: 1px solid transparent;
+  backdrop-filter: none;
+}
+
+.landing-header.header-scrolled {
+  background: hsl(var(--surface) / 0.7);
+  border-bottom-color: hsl(var(--border) / 0.3);
+  backdrop-filter: blur(20px) saturate(1.4);
+  -webkit-backdrop-filter: blur(20px) saturate(1.4);
+}
 
 
 @layer base {

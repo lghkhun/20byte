@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useRef, type ReactNode } from "react";
+import { useEffect, useRef } from "react";
 import {
   MessageSquare,
   Users,
@@ -23,445 +23,520 @@ import {
   ChevronDown,
 } from "lucide-react";
 
-/* ═══════════════════════════════════════════════════
-   Intersection‑Observer scroll‑reveal
-   ═══════════════════════════════════════════════════ */
-function useReveal() {
-  const root = useRef<HTMLDivElement>(null);
-  useEffect(() => {
-    const el = root.current;
-    if (!el) return;
-    const io = new IntersectionObserver(
-      (entries) => entries.forEach((e) => { if (e.isIntersecting) { e.target.classList.add("is-visible"); io.unobserve(e.target); } }),
-      { threshold: 0.08, rootMargin: "0px 0px -60px 0px" }
-    );
-    el.querySelectorAll("[data-reveal]").forEach((t) => io.observe(t));
-    return () => io.disconnect();
-  }, []);
-  return root;
-}
+/* ── scroll-reveal hook ── */
+function useScrollReveal() {
+  const ref = useRef<HTMLDivElement>(null);
 
-/* ── Animated counter ── */
-function Counter({ to, suffix, label }: { to: number; suffix: string; label: string }) {
-  const ref = useRef<HTMLSpanElement>(null);
-  const ran = useRef(false);
   useEffect(() => {
     const el = ref.current;
     if (!el) return;
-    const io = new IntersectionObserver(([e]) => {
-      if (!e.isIntersecting || ran.current) return;
-      ran.current = true;
-      const dur = 1400, t0 = performance.now();
-      (function tick(now: number) {
-        const p = Math.min((now - t0) / dur, 1);
-        const v = Math.floor((1 - Math.pow(1 - p, 4)) * to);
-        el.textContent = `${v}${suffix}`;
-        if (p < 1) requestAnimationFrame(tick);
-      })(t0);
-      io.unobserve(el);
-    }, { threshold: 0.5 });
-    io.observe(el);
-    return () => io.disconnect();
-  }, [to, suffix]);
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        entries.forEach((entry) => {
+          if (entry.isIntersecting) {
+            entry.target.classList.add("revealed");
+            observer.unobserve(entry.target);
+          }
+        });
+      },
+      { threshold: 0.12, rootMargin: "0px 0px -40px 0px" }
+    );
+
+    const targets = el.querySelectorAll(".reveal");
+    targets.forEach((t) => observer.observe(t));
+
+    return () => observer.disconnect();
+  }, []);
+
+  return ref;
+}
+
+/* ── animated counter ── */
+function AnimatedStat({ value, suffix, label }: { value: number; suffix: string; label: string }) {
+  const ref = useRef<HTMLSpanElement>(null);
+  const counted = useRef(false);
+
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        if (entry.isIntersecting && !counted.current) {
+          counted.current = true;
+          let start = 0;
+          const duration = 1600;
+          const startTime = performance.now();
+
+          function tick(now: number) {
+            const elapsed = now - startTime;
+            const progress = Math.min(elapsed / duration, 1);
+            const eased = 1 - Math.pow(1 - progress, 4);
+            start = Math.floor(eased * value);
+            if (el) el.textContent = `${start}${suffix}`;
+            if (progress < 1) requestAnimationFrame(tick);
+          }
+
+          requestAnimationFrame(tick);
+          observer.unobserve(el);
+        }
+      },
+      { threshold: 0.5 }
+    );
+
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [value, suffix]);
+
   return (
-    <div className="flex flex-1 flex-col items-center gap-1.5 py-10">
-      <span ref={ref} className="tabular-nums text-3xl font-bold text-foreground sm:text-4xl">0{suffix}</span>
-      <span className="text-[13px] text-muted-foreground">{label}</span>
+    <div className="stat-item flex flex-col items-center gap-1 px-4 py-8 text-center">
+      <span ref={ref} className="text-3xl font-bold text-foreground md:text-4xl lg:text-5xl">
+        0{suffix}
+      </span>
+      <span className="text-xs text-muted-foreground md:text-sm">{label}</span>
     </div>
   );
 }
 
-/* ── Reveal wrapper ── */
-function R({ children, className = "", delay = 0 }: { children: ReactNode; className?: string; delay?: number }) {
-  return <div data-reveal className={`reveal-up ${className}`} style={delay ? { transitionDelay: `${delay}ms` } as React.CSSProperties : undefined}>{children}</div>;
-}
-
-/* ═══════════════════════════════════════════════════
-   PAGE
-   ═══════════════════════════════════════════════════ */
 export default function HomePage() {
-  const pageRef = useReveal();
+  const containerRef = useScrollReveal();
 
   return (
-    <div ref={pageRef} className="lp">
-
-      {/* ○ decorative ambient blobs — positioned on the page, NOT per‑section */}
-      <div aria-hidden className="pointer-events-none fixed inset-0 -z-10 overflow-hidden">
-        <div className="absolute -top-[20%] left-[10%] h-[800px] w-[800px] rounded-full bg-primary/[0.07] blur-[200px]" />
-        <div className="absolute right-[5%] top-[35%] h-[600px] w-[600px] rounded-full bg-teal-500/[0.04] blur-[180px]" />
-        <div className="absolute bottom-[10%] left-[30%] h-[700px] w-[700px] rounded-full bg-primary/[0.05] blur-[190px]" />
+    <div ref={containerRef} className="landing-page relative min-h-screen">
+      
+      {/* ━━━ GLOBAL AMBIENT BACKGROUND ━━━ 
+          Utilizing a fixed background element prevents any cutoff between HTML sections and ensures 
+          a massive continuous canvas feeling on scroll. */}
+      <div className="pointer-events-none fixed inset-0 -z-10 overflow-hidden bg-background">
+        <div className="absolute left-[10%] top-[-10%] h-[70vw] w-[70vw] max-w-[800px] rounded-full bg-primary/10 blur-[140px] mix-blend-screen" />
+        <div className="absolute right-[-10%] top-[40%] h-[50vw] w-[50vw] max-w-[600px] rounded-full bg-blue-500/5 blur-[120px] mix-blend-screen" />
+        <div className="absolute bottom-[-10%] left-[20%] h-[60vw] w-[60vw] max-w-[700px] rounded-full bg-violet-500/5 blur-[130px] mix-blend-screen" />
       </div>
 
-      {/* ━━━━━━━━━━━━━ HERO ━━━━━━━━━━━━━ */}
-      <section className="flex min-h-[calc(100dvh-3.5rem)] flex-col items-center justify-center px-5 pt-14 md:px-8">
-        <div className="mx-auto max-w-3xl text-center">
-          <R>
-            <span className="mb-6 inline-flex items-center gap-2 rounded-full border border-primary/20 bg-primary/[0.06] px-4 py-1.5 text-[13px] font-medium text-primary">
-              <Zap className="h-3.5 w-3.5" /> WhatsApp CRM All‑in‑One
-            </span>
-          </R>
+      {/* ━━━ HERO ━━━ */}
+      <section className="relative flex min-h-screen flex-col items-center justify-center px-4 pt-14 md:px-6">
+        <div className="relative mx-auto max-w-4xl text-center">
+          <div className="reveal mb-8 inline-flex flex-wrap items-center justify-center gap-2 rounded-full border border-primary/25 bg-primary/10 px-4 py-1.5 text-xs font-semibold text-primary backdrop-blur-md">
+            <Zap className="h-3.5 w-3.5" />
+            <span className="whitespace-nowrap">Didesain Khusus untuk Bisnis Berbasis WhatsApp</span>
+          </div>
 
-          <R delay={60}>
-            <h1 className="mt-2 text-[2.5rem] font-bold leading-[1.1] tracking-tight text-foreground sm:text-5xl md:text-6xl">
-              Semua operasi bisnis,
-              <br />
-              <span className="bg-gradient-to-r from-primary to-emerald-400 bg-clip-text text-transparent">
-                satu dashboard WhatsApp.
-              </span>
-            </h1>
-          </R>
+          <h1 className="reveal text-4xl font-extrabold leading-[1.1] tracking-tight text-foreground sm:text-5xl md:text-6xl lg:text-7xl">
+            Sistem operasi terlengkap untuk bisnis <span className="bg-gradient-to-r from-primary via-emerald-400 to-teal-400 bg-clip-text text-transparent">sentris WhatsApp</span>
+          </h1>
 
-          <R delay={120}>
-            <p className="mx-auto mt-6 max-w-xl text-[15px] leading-relaxed text-muted-foreground sm:text-base md:text-lg">
-              Terima chat, kelola pipeline, simpan data pelanggan, kirim invoice,
-              dan lacak iklan CTWA — tanpa buka 5 tab berbeda.
-            </p>
-          </R>
+          <p className="reveal mx-auto mt-6 max-w-2xl text-base leading-relaxed text-muted-foreground md:text-lg">
+            Berhenti memaksakan workflow pada aplikasi yang menolak WhatsApp. 20byte mengubah WhatsApp menjadi pusat operasi utuh: kelola jutaan chat, geser pipeline CRM, cetak invoice native, dan ukur ROAS presisi dari satu tab.
+          </p>
 
-          <R delay={200}>
-            <div className="mt-10 flex flex-col items-center gap-3 sm:flex-row sm:justify-center sm:gap-4">
-              <Link
-                href="/register"
-                id="hero-cta-register"
-                className="inline-flex h-11 w-full items-center justify-center gap-2.5 rounded-full bg-primary px-7 text-sm font-semibold text-primary-foreground shadow-[0_4px_24px_hsl(160_84%_39%/0.35)] transition-all duration-300 hover:shadow-[0_6px_32px_hsl(160_84%_39%/0.5)] hover:brightness-110 active:scale-[0.98] sm:w-auto"
-              >
-                Coba Gratis 14 Hari
-                <ArrowRight className="h-4 w-4" />
-              </Link>
-              <Link
-                href="/login"
-                id="hero-cta-login"
-                className="inline-flex h-11 w-full items-center justify-center gap-2 rounded-full border border-border/50 bg-card/30 px-7 text-sm font-semibold text-foreground backdrop-blur transition-all duration-300 hover:border-border hover:bg-card/60 active:scale-[0.98] sm:w-auto"
-              >
-                Masuk ke Dashboard
-              </Link>
-            </div>
-          </R>
+          <div className="reveal mt-12 flex flex-col items-center justify-center gap-4 sm:flex-row">
+            <Link
+              href="/register"
+              id="hero-register-btn"
+              className="group inline-flex h-14 w-full items-center justify-center gap-2 rounded-xl bg-primary px-8 text-sm font-semibold text-primary-foreground shadow-[0_8px_30px_hsl(var(--primary)/0.3)] transition-all duration-300 hover:scale-[1.02] hover:bg-primary/90 hover:shadow-[0_12px_40px_hsl(var(--primary)/0.4)] sm:w-auto"
+            >
+              Mulai Trial Spesial Anda
+              <ArrowRight className="h-4 w-4 transition-transform duration-300 group-hover:translate-x-1" />
+            </Link>
+            <Link
+              href="/login"
+              id="hero-login-btn"
+              className="group inline-flex h-14 w-full items-center justify-center gap-2 rounded-xl border border-border/60 bg-card/30 px-8 text-sm font-semibold text-foreground backdrop-blur-md transition-all duration-300 hover:border-foreground/30 hover:bg-card/60 sm:w-auto"
+            >
+              Buka Dashboard
+              <ArrowRight className="h-4 w-4 text-muted-foreground opacity-0 transition-all duration-300 group-hover:translate-x-1 group-hover:opacity-100" />
+            </Link>
+          </div>
 
-          <R delay={280}>
-            <p className="mt-6 flex items-center justify-center gap-2 text-[13px] text-muted-foreground/70">
-              <CheckCircle2 className="h-3.5 w-3.5 text-primary/70" />
-              Tanpa kartu kredit &middot; Setup 5 menit &middot; Bisa batal kapan saja
-            </p>
-          </R>
+          <p className="reveal mt-8 flex flex-wrap items-center justify-center gap-3 text-xs font-medium text-muted-foreground">
+            <span className="flex items-center gap-1.5"><CheckCircle2 className="h-3.5 w-3.5 text-primary" /> Tanpa kartu kredit</span>
+            <span className="hidden opacity-50 sm:block">•</span>
+            <span className="flex items-center gap-1.5"><CheckCircle2 className="h-3.5 w-3.5 text-primary" /> Setup &lt; 5 menit</span>
+            <span className="hidden opacity-50 sm:block">•</span>
+            <span className="flex items-center gap-1.5"><CheckCircle2 className="h-3.5 w-3.5 text-primary" /> Batalkan kapan saja</span>
+          </p>
         </div>
 
-        <div className="mt-auto pb-8 pt-12">
-          <ChevronDown className="mx-auto h-5 w-5 animate-bounce text-muted-foreground/30" />
+        {/* scroll prompt */}
+        <div className="absolute bottom-10 left-1/2 -translate-x-1/2 animate-bounce">
+          <ChevronDown className="h-6 w-6 text-muted-foreground/50" />
         </div>
       </section>
 
-      {/* ━━━━━━━━━━━━━ FEATURES ━━━━━━━━━━━━━ */}
-      <section id="features" className="px-5 py-28 md:px-8 md:py-36">
+      {/* ━━━ FEATURES ━━━ */}
+      <section className="relative z-10 px-4 py-24 md:px-6 md:py-40" id="features">
         <div className="mx-auto max-w-6xl">
-          <R>
-            <div className="mb-16 text-center">
-              <p className="text-xs font-semibold uppercase tracking-[0.2em] text-primary">Fitur Utama</p>
-              <h2 className="mt-3 text-2xl font-bold tracking-tight text-foreground sm:text-3xl md:text-4xl">
-                Empat pilar untuk menjalankan bisnis WhatsApp
-              </h2>
-              <p className="mx-auto mt-4 max-w-xl text-[15px] leading-relaxed text-muted-foreground">
-                Setiap fitur dirancang agar saling terhubung — dari chat pertama hingga invoice lunas.
-              </p>
-            </div>
-          </R>
+          <div className="reveal mb-16 text-center md:mb-24">
+            <h2 className="text-3xl font-bold tracking-tight text-foreground md:text-5xl">
+              Ekosistem jualan WhatsApp tanpa hambatan
+            </h2>
+            <p className="mx-auto mt-6 max-w-2xl text-sm leading-relaxed text-muted-foreground md:text-base">
+              Berhenti menyuruh CS berpindah-pindah aplikasi saat mengejar konversi. 20byte menyatukan setiap senjata closing yang tercecer, meleburnya jadi satu mesin uang dalam harmoni.
+            </p>
+          </div>
 
-          <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
-            {(
-              [
-                {
-                  icon: MessageSquare,
-                  title: "Team Inbox",
-                  body: "Semua chat WhatsApp masuk ke satu inbox bersama. Assign percakapan ke CS, tinggalkan internal notes, dan balas dengan template — real‑time tanpa bentrok.",
-                },
-                {
-                  icon: BarChart3,
-                  title: "CRM Pipeline",
-                  body: "Board visual untuk memindahkan deal antar stage. Lihat total revenue di setiap stage dan pastikan tidak ada follow‑up yang terlewat.",
-                },
-                {
-                  icon: Database,
-                  title: "Database Kontak",
-                  body: "Setiap kontak punya profil lengkap: riwayat chat, catatan tim, tag, dan timeline aktivitas. Filter untuk segmentasi atau broadcast.",
-                },
-                {
-                  icon: Receipt,
-                  title: "Invoice & Penagihan",
-                  body: "Buat invoice profesional, kirim langsung di chat WhatsApp, dan terima bukti transfer dari pelanggan — semuanya tercatat otomatis.",
-                },
-              ] as const
-            ).map((f, i) => (
-              <R key={f.title} delay={i * 80}>
-                <article className="group relative h-full overflow-hidden rounded-2xl border border-border/[0.15] bg-card/[0.35] p-6 backdrop-blur-sm transition-all duration-500 hover:-translate-y-1 hover:border-primary/20 hover:bg-card/60 hover:shadow-[0_16px_48px_-8px_hsl(var(--primary)/0.08)]">
-                  <div className="mb-4 inline-flex rounded-xl bg-primary/[0.08] p-3 text-primary transition-transform duration-500 group-hover:scale-110">
-                    <f.icon className="h-5 w-5" />
+          <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-4">
+            {[
+              {
+                icon: MessageSquare,
+                title: "Shared Team Inbox",
+                desc: "Kelola ribuan chat masuk tanpa bentrok. Assign agen, tulis internal note, dan balas lebih cepat dari satu dashboard.",
+              },
+              {
+                icon: BarChart3,
+                title: "Visual CRM Pipeline",
+                desc: "Visualisasikan funnel sales Anda. Geser prospek antar stage dengan drag-and-drop dan pantau potensi revenue real-time.",
+              },
+              {
+                icon: Database,
+                title: "Smart Database",
+                desc: "Setiap pelanggan memiliki profil komprehensif. Lacak riwayat percakapan, tag, notes, dan timeline aktivitas.",
+              },
+              {
+                icon: Receipt,
+                title: "e-Invoicing Native",
+                desc: "Buat dan kirim tagihan profesional di tengah obrolan. Pantau status pembayaran (DP hingga Lunas) dengan bukti valid.",
+              },
+            ].map((f, i) => (
+              <article
+                key={f.title}
+                className="reveal feature-card group relative overflow-hidden rounded-3xl border border-border/30 bg-card/40 p-8 shadow-sm backdrop-blur-md transition-all duration-500 hover:-translate-y-2 hover:border-primary/30 hover:bg-card/60 hover:shadow-2xl hover:shadow-primary/10"
+                style={{ transitionDelay: `${i * 100}ms` }}
+              >
+                <div className="relative z-10">
+                  <div className="mb-6 flex h-14 w-14 items-center justify-center rounded-2xl bg-primary/10 text-primary transition-transform duration-500 group-hover:scale-110 group-hover:bg-primary group-hover:text-primary-foreground group-hover:shadow-[0_0_20px_hsl(var(--primary)/0.5)]">
+                    <f.icon className="h-6 w-6" />
                   </div>
-                  <h3 className="mb-2 text-[15px] font-semibold text-foreground">{f.title}</h3>
-                  <p className="text-[13px] leading-[1.6] text-muted-foreground">{f.body}</p>
-                </article>
-              </R>
+                  <h3 className="mb-3 text-lg font-bold text-foreground transition-colors duration-300">{f.title}</h3>
+                  <p className="text-sm leading-relaxed text-muted-foreground">{f.desc}</p>
+                </div>
+              </article>
             ))}
           </div>
         </div>
       </section>
 
-      {/* ━━━━━━━━━━━━━ CTWA · CAPI · PIXEL ━━━━━━━━━━━━━ */}
-      <section id="ctwa-integration" className="px-5 py-28 md:px-8 md:py-36">
+      {/* ━━━ CTWA · CAPI · PIXEL  ━━━ */}
+      <section className="relative z-10 px-4 py-24 md:px-6 md:py-40" id="ctwa-integration">
         <div className="mx-auto max-w-6xl">
-          <R>
-            <div className="mb-16 text-center">
-              <p className="inline-flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.2em] text-primary">
-                <Target className="h-3.5 w-3.5" /> Keunggulan Utama
-              </p>
-              <h2 className="mt-3 text-2xl font-bold tracking-tight text-foreground sm:text-3xl md:text-4xl">
-                Iklan → Chat → Invoice → Data balik ke Meta
-              </h2>
-              <p className="mx-auto mt-4 max-w-2xl text-[15px] leading-relaxed text-muted-foreground">
-                Platform pertama yang menghubungkan Click‑to‑WhatsApp Ads langsung ke pipeline CRM
-                dan sistem invoice — dengan full‑loop tracking via Meta Conversions API dan Pixel.
-              </p>
+          <div className="reveal mb-16 text-center md:mb-24">
+            <div className="mb-4 inline-flex items-center gap-2 rounded-full border border-violet-500/30 bg-violet-500/10 px-4 py-1.5 text-xs font-semibold text-violet-500 backdrop-blur-md">
+              <Target className="h-3.5 w-3.5" />
+              Advanced Attribution
             </div>
-          </R>
-
-          <div className="grid gap-5 md:grid-cols-3">
-            {(
-              [
-                {
-                  icon: MousePointerClick,
-                  title: "CTWA Attribution",
-                  accent: "blue",
-                  desc: "Setiap shortlink CTWA membawa metadata campaign, adset, dan ad ID. Begitu pelanggan chat, sumber lead langsung muncul di profil kontak.",
-                  items: ["Shortlink unik per ad", "Auto‑tag campaign di kontak", "Attribution dashboard real‑time"],
-                },
-                {
-                  icon: Activity,
-                  title: "Meta Conversions API",
-                  accent: "emerald",
-                  desc: "Invoice berubah status? Event langsung dikirim ke Meta server‑side — tidak terpengaruh ad blocker atau pembatasan iOS.",
-                  items: ["Server‑side, tanpa cookie blocker", "Invoice → Purchase event otomatis", "Deduplikasi otomatis dengan Pixel"],
-                },
-                {
-                  icon: LineChart,
-                  title: "Meta Pixel",
-                  accent: "violet",
-                  desc: "Halaman invoice publik sudah terpasang Pixel. Tiap kali pelanggan buka atau bayar, data masuk ke Meta untuk retargeting.",
-                  items: ["Pixel di halaman invoice publik", "ViewContent → Purchase funnel", "Custom audience dari pembeli"],
-                },
-              ] as const
-            ).map((c, i) => {
-              const accentMap = {
-                blue: { icon: "bg-blue-500/10 text-blue-500", check: "text-blue-500", border: "hover:border-blue-500/20" },
-                emerald: { icon: "bg-primary/10 text-primary", check: "text-primary", border: "hover:border-primary/20" },
-                violet: { icon: "bg-violet-500/10 text-violet-500", check: "text-violet-500", border: "hover:border-violet-500/20" },
-              };
-              const a = accentMap[c.accent];
-              return (
-                <R key={c.title} delay={i * 100}>
-                  <div className={`group relative h-full overflow-hidden rounded-2xl border border-border/[0.15] bg-card/[0.35] p-7 backdrop-blur-sm transition-all duration-500 hover:-translate-y-1 hover:bg-card/60 hover:shadow-[0_16px_48px_-8px_rgba(0,0,0,0.06)] ${a.border}`}>
-                    <div className={`mb-5 inline-flex rounded-xl p-3 transition-transform duration-500 group-hover:scale-110 ${a.icon}`}>
-                      <c.icon className="h-6 w-6" />
-                    </div>
-                    <h3 className="mb-2 text-lg font-semibold text-foreground">{c.title}</h3>
-                    <p className="mb-5 text-[13px] leading-[1.6] text-muted-foreground">{c.desc}</p>
-                    <ul className="space-y-2.5">
-                      {c.items.map((item) => (
-                        <li key={item} className="flex items-start gap-2 text-[13px] text-muted-foreground">
-                          <CheckCircle2 className={`mt-0.5 h-3.5 w-3.5 shrink-0 ${a.check}`} />
-                          {item}
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
-                </R>
-              );
-            })}
+            <h2 className="text-3xl font-bold tracking-tight text-foreground md:text-5xl">
+              ROI iklan yang terukur pasti
+            </h2>
+            <p className="mx-auto mt-6 max-w-2xl text-sm leading-relaxed text-muted-foreground md:text-base">
+              Lacak setiap klik dari iklan Meta hingga berujung pada invoice lunas. Sistem cerdas kami otomatis menyinkronkan setiap event konversi balik ke Ads Manager Anda.
+            </p>
           </div>
 
-          {/* attribution flow */}
-          <R>
-            <div className="mt-10 rounded-2xl border border-border/[0.1] bg-card/[0.2] px-6 py-8 backdrop-blur-sm md:px-10 md:py-10">
-              <p className="mb-8 text-center text-[13px] font-semibold uppercase tracking-[0.15em] text-muted-foreground">
-                End‑to‑End Attribution Flow
-              </p>
-              <div className="flex flex-col items-center gap-3 md:flex-row md:justify-center md:gap-0">
-                {(
-                  [
-                    { icon: MousePointerClick, label: "Klik CTWA Ad", cls: "text-blue-500 bg-blue-500/10 border-blue-500/15" },
-                    { icon: MessageSquare, label: "Masuk Inbox", cls: "text-primary bg-primary/10 border-primary/15" },
-                    { icon: Users, label: "Pipeline CRM", cls: "text-primary bg-primary/10 border-primary/15" },
-                    { icon: Receipt, label: "Invoice Terkirim", cls: "text-amber-500 bg-amber-500/10 border-amber-500/15" },
-                    { icon: Activity, label: "CAPI Event", cls: "text-violet-500 bg-violet-500/10 border-violet-500/15" },
-                    { icon: TrendingUp, label: "Optimize Ads", cls: "text-blue-500 bg-blue-500/10 border-blue-500/15" },
-                  ] as const
-                ).map((s, i, arr) => (
-                  <div key={s.label} className="flow-node flex items-center gap-3 md:gap-0" style={{ "--d": `${i * 100}ms` } as React.CSSProperties}>
-                    <div className={`flex flex-col items-center gap-2 rounded-xl border px-5 py-3 transition-transform duration-300 hover:scale-105 ${s.cls}`}>
-                      <s.icon className="h-5 w-5" />
-                      <span className="whitespace-nowrap text-[10px] font-semibold">{s.label}</span>
+          <div className="grid gap-6 md:grid-cols-3">
+            {/* CTWA */}
+            <div className="reveal group relative overflow-hidden rounded-3xl border border-border/30 bg-card/40 p-8 shadow-sm backdrop-blur-md transition-all duration-500 hover:-translate-y-2 hover:border-blue-500/40 hover:bg-card/60 hover:shadow-2xl hover:shadow-blue-500/10">
+              <div className="relative z-10">
+                <div className="mb-6 flex h-14 w-14 items-center justify-center rounded-2xl bg-blue-500/10 text-blue-500 transition-transform duration-500 group-hover:scale-110 group-hover:bg-blue-500 group-hover:text-white group-hover:shadow-[0_0_20px_rgba(59,130,246,0.5)]">
+                  <MousePointerClick className="h-6 w-6" />
+                </div>
+                <h3 className="mb-3 text-xl font-bold text-foreground">Akurasi CTWA</h3>
+                <p className="mb-6 text-sm leading-relaxed text-muted-foreground">
+                  Gunakan shortlink cerdas. Setiap pesan masuk otomatis tagging Campaign, Adset, hingga Ad identifier tanpa meleset.
+                </p>
+                <ul className="space-y-3">
+                  {[
+                    "Shortlink otomatis per aset iklan",
+                    "Tagging source lead real-time",
+                    "Dashboard tracking performa",
+                  ].map((item) => (
+                    <li key={item} className="flex items-start gap-3 text-sm text-muted-foreground font-medium">
+                      <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-blue-500" />
+                      {item}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            </div>
+
+            {/* CAPI */}
+            <div className="reveal group relative overflow-hidden rounded-3xl border border-border/30 bg-card/40 p-8 shadow-sm backdrop-blur-md transition-all duration-500 hover:-translate-y-2 hover:border-emerald-500/40 hover:bg-card/60 hover:shadow-2xl hover:shadow-emerald-500/10">
+              <div className="relative z-10">
+                <div className="mb-6 flex h-14 w-14 items-center justify-center rounded-2xl bg-emerald-500/10 text-emerald-500 transition-transform duration-500 group-hover:scale-110 group-hover:bg-emerald-500 group-hover:text-white group-hover:shadow-[0_0_20px_rgba(16,185,129,0.5)]">
+                  <Activity className="h-6 w-6" />
+                </div>
+                <h3 className="mb-3 text-xl font-bold text-foreground">Conversions API</h3>
+                <p className="mb-6 text-sm leading-relaxed text-muted-foreground">
+                  Laporkan konversi via koneksi server-side aman setiap kali invoice diterbitkan atau dibayar. Kebal ad-blocker.
+                </p>
+                <ul className="space-y-3">
+                  {[
+                    "Koneksi S2S absolut & aman",
+                    "Tembakkan event saat invoice cair",
+                    "Deduplikasi data otomatis",
+                  ].map((item) => (
+                    <li key={item} className="flex items-start gap-3 text-sm text-muted-foreground font-medium">
+                      <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-emerald-500" />
+                      {item}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            </div>
+
+            {/* Pixel */}
+            <div className="reveal group relative overflow-hidden rounded-3xl border border-border/30 bg-card/40 p-8 shadow-sm backdrop-blur-md transition-all duration-500 hover:-translate-y-2 hover:border-violet-500/40 hover:bg-card/60 hover:shadow-2xl hover:shadow-violet-500/10">
+              <div className="relative z-10">
+                <div className="mb-6 flex h-14 w-14 items-center justify-center rounded-2xl bg-violet-500/10 text-violet-500 transition-transform duration-500 group-hover:scale-110 group-hover:bg-violet-500 group-hover:text-white group-hover:shadow-[0_0_20px_rgba(139,92,246,0.5)]">
+                  <LineChart className="h-6 w-6" />
+                </div>
+                <h3 className="mb-3 text-xl font-bold text-foreground">Meta Pixel Native</h3>
+                <p className="mb-6 text-sm leading-relaxed text-muted-foreground">
+                  Halaman invoice publik tertanam Meta Pixel. Lacak ViewContent pelanggan untuk kampanye retargeting laser-focus.
+                </p>
+                <ul className="space-y-3">
+                  {[
+                    "Pixel di public invoice",
+                    "Retargeting abandoned invoice",
+                    "Pembangunan Custom Audience",
+                  ].map((item) => (
+                    <li key={item} className="flex items-start gap-3 text-sm text-muted-foreground font-medium">
+                      <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-violet-500" />
+                      {item}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            </div>
+          </div>
+
+          {/* Flow diagram */}
+          <div className="reveal mt-12 overflow-hidden rounded-3xl border border-border/20 bg-card/20 p-8 backdrop-blur-xl md:p-12 lg:p-16">
+            <h3 className="mb-10 text-center text-sm font-bold uppercase tracking-widest text-muted-foreground">
+              Arsitektur Alur Otomasi
+            </h3>
+            <div className="flow-diagram flex flex-col items-center gap-4 md:flex-row md:justify-center md:gap-0">
+              {[
+                { icon: MousePointerClick, label: "Klik Iklan", accent: "blue" as const },
+                { icon: MessageSquare, label: "Chat Masuk", accent: "emerald" as const },
+                { icon: Users, label: "Lead di Pipeline", accent: "emerald" as const },
+                { icon: Receipt, label: "Penerbitan Invoice", accent: "amber" as const },
+                { icon: Activity, label: "Server Event", accent: "violet" as const },
+                { icon: TrendingUp, label: "Optimasi ROAS", accent: "blue" as const },
+              ].map((step, i, arr) => {
+                const colorMap = {
+                  blue: "text-blue-500 bg-blue-500/10 border-blue-500/20",
+                  emerald: "text-emerald-500 bg-emerald-500/10 border-emerald-500/20",
+                  amber: "text-amber-500 bg-amber-500/10 border-amber-500/20",
+                  violet: "text-violet-500 bg-violet-500/10 border-violet-500/20",
+                };
+                return (
+                  <div key={step.label} className="flow-step flex items-center gap-4 md:gap-0" style={{ animationDelay: `${i * 120}ms` }}>
+                    <div className={`flex flex-col items-center justify-center gap-3 rounded-2xl border px-6 py-5 transition-all duration-300 hover:scale-110 ${colorMap[step.accent]}`}>
+                      <step.icon className="h-6 w-6" />
+                      <span className="whitespace-nowrap text-xs font-bold tracking-tight">{step.label}</span>
                     </div>
                     {i < arr.length - 1 && (
                       <>
-                        <ArrowRight className="flow-arrow mx-1.5 hidden h-3.5 w-3.5 text-muted-foreground/25 md:block" />
-                        <ArrowRight className="flow-arrow h-3.5 w-3.5 rotate-90 text-muted-foreground/25 md:hidden" />
+                        <div className="flow-arrow hidden md:block"><ArrowRight className="mx-3 h-5 w-5 text-muted-foreground/40" /></div>
+                        <div className="flow-arrow block md:hidden"><ArrowRight className="h-5 w-5 rotate-90 text-muted-foreground/40" /></div>
                       </>
                     )}
                   </div>
-                ))}
-              </div>
-              <p className="mt-8 text-center text-[13px] leading-relaxed text-muted-foreground/70">
-                Dari klik iklan sampai pembayaran lunas — setiap konversi tersambung dan
-                terkirim balik ke Meta untuk optimasi campaign otomatis.
-              </p>
+                );
+              })}
             </div>
-          </R>
+            <p className="mt-10 text-center text-sm font-medium text-muted-foreground">
+              Protokol transparan. Tiada lagi closed-loop cycle yang membuat campaign Anda buta data konversi.
+            </p>
+          </div>
         </div>
       </section>
 
-      {/* ━━━━━━━━━━━━━ HOW IT WORKS ━━━━━━━━━━━━━ */}
-      <section className="px-5 py-28 md:px-8 md:py-36">
-        <div className="mx-auto max-w-4xl">
-          <R>
-            <div className="mb-16 text-center">
-              <p className="text-xs font-semibold uppercase tracking-[0.2em] text-primary">Cara Kerja</p>
-              <h2 className="mt-3 text-2xl font-bold tracking-tight text-foreground sm:text-3xl md:text-4xl">
-                Tiga langkah, langsung jalan
-              </h2>
-              <p className="mx-auto mt-4 max-w-md text-[15px] leading-relaxed text-muted-foreground">
-                Tidak perlu developer, tidak perlu integrasi rumit.
-              </p>
-            </div>
-          </R>
+      {/* ━━━ HOW IT WORKS ━━━ */}
+      <section className="relative z-10 px-4 py-24 md:px-6 md:py-40">
+        <div className="mx-auto max-w-5xl">
+          <div className="reveal mb-16 text-center md:mb-24">
+            <h2 className="text-3xl font-bold tracking-tight text-foreground md:text-5xl">
+              Alur adopsi instan
+            </h2>
+            <p className="mx-auto mt-6 max-w-2xl text-sm leading-relaxed text-muted-foreground md:text-base">
+              Singkirkan instalasi rumit berhari-hari. 20byte didesain untuk live operation sesaat setelah tim Anda login.
+            </p>
+          </div>
 
-          <div className="relative grid gap-10 md:grid-cols-3 md:gap-8">
-            {/* connector line (desktop) */}
-            <div aria-hidden className="pointer-events-none absolute left-[16.66%] right-[16.66%] top-8 hidden h-px bg-gradient-to-r from-transparent via-border/50 to-transparent md:block" />
-
-            {(
-              [
-                { icon: UserPlus, n: "01", title: "Daftar & Hubungkan", body: "Buat akun, scan QR code, dan nomor WhatsApp Business Anda langsung terhubung dalam 2 menit." },
-                { icon: Users, n: "02", title: "Atur Tim & Pipeline", body: "Undang anggota tim, tentukan role masing‑masing, dan konfigurasi stage pipeline sesuai alur bisnis Anda." },
-                { icon: Send, n: "03", title: "Mulai Closing", body: "Terima chat, geser deal antar stage, kirim invoice, dan pantau performa — semua dari satu layar." },
-              ] as const
-            ).map((s, i) => (
-              <R key={s.n} delay={i * 100}>
-                <div className="group relative flex flex-col items-center text-center">
-                  <div className="relative mb-5 flex h-16 w-16 items-center justify-center rounded-2xl bg-primary/[0.06] text-primary transition-all duration-500 group-hover:scale-110 group-hover:bg-primary/[0.12] group-hover:shadow-[0_8px_24px_hsl(160_84%_39%/0.12)]">
-                    <s.icon className="h-7 w-7" />
-                    <span className="absolute -right-1 -top-1 flex h-5 w-5 items-center justify-center rounded-full bg-primary text-[10px] font-bold text-primary-foreground">{s.n}</span>
-                  </div>
-                  <h3 className="mb-2 text-[15px] font-semibold text-foreground">{s.title}</h3>
-                  <p className="max-w-[260px] text-[13px] leading-[1.6] text-muted-foreground">{s.body}</p>
+          <div className="grid gap-10 md:grid-cols-3 md:gap-8">
+            {[
+              {
+                icon: UserPlus,
+                step: "01",
+                title: "Otentikasi & Hubungkan",
+                desc: "Hanya butuh 2 menit. Daftarkan entitas bisnis Anda, lalu scan QR Code WhatsApp Business. Infrastruktur seketika aktif.",
+              },
+              {
+                icon: Users,
+                step: "02",
+                title: "Konfigurasi Kolaborasi",
+                desc: "Delegasikan akses dengan Role-Based Guard. Susun stage Pipeline yang merefleksikan proses sales unik perusahaan Anda.",
+              },
+              {
+                icon: Send,
+                step: "03",
+                title: "Mulai Interaksi Sales",
+                desc: "Sambut prospek, negosiasikan deal, dan tutup penjualan via e-Invoice—selesai utuh tanpa harus berganti tab browser.",
+              },
+            ].map((s, i) => (
+              <div
+                key={s.step}
+                className="reveal group relative flex flex-col items-center text-center"
+                style={{ transitionDelay: `${i * 120}ms` }}
+              >
+                {i < 2 && (
+                  <div className="pointer-events-none absolute right-0 top-[2.25rem] hidden h-px w-full bg-gradient-to-r from-transparent via-border/50 to-transparent md:block" />
+                )}
+                <div className="relative z-10 mb-8 flex h-[4.5rem] w-[4.5rem] items-center justify-center rounded-2xl bg-card border border-border/50 text-foreground shadow-sm transition-all duration-500 group-hover:scale-110 group-hover:border-primary/40 group-hover:text-primary group-hover:shadow-[0_10px_30px_hsl(var(--primary)/0.15)]">
+                  <s.icon className="h-8 w-8" />
+                  <span className="absolute -right-2 -top-2 flex h-6 w-6 items-center justify-center rounded-full bg-foreground text-[10px] font-extrabold text-background transition-colors duration-500 group-hover:bg-primary group-hover:text-primary-foreground">
+                    {s.step}
+                  </span>
                 </div>
-              </R>
+                <h3 className="mb-3 text-xl font-bold text-foreground">{s.title}</h3>
+                <p className="px-4 text-sm leading-relaxed text-muted-foreground">
+                  {s.desc}
+                </p>
+              </div>
             ))}
           </div>
         </div>
       </section>
 
-      {/* ━━━━━━━━━━━━━ STATS ━━━━━━━━━━━━━ */}
-      <section className="px-5 py-16 md:px-8 md:py-20">
-        <R>
-          <div className="mx-auto max-w-4xl overflow-hidden rounded-2xl border border-border/[0.12] bg-card/[0.2] backdrop-blur-sm">
-            <div className="grid grid-cols-2 divide-x divide-border/[0.12] md:grid-cols-4">
-              <Counter to={5} suffix="K+" label="Chat diproses / hari" />
-              <Counter to={98} suffix="%" label="Response rate" />
-              <Counter to={3} suffix="x" label="Lebih cepat closing" />
-              <Counter to={500} suffix="+" label="Bisnis aktif" />
+      {/* ━━━ STATS ━━━ */}
+      <section className="relative z-10 px-4 py-16 md:px-6 md:py-24">
+        <div className="mx-auto max-w-5xl">
+          <div className="reveal overflow-hidden rounded-3xl border border-border/20 bg-card/20 shadow-xl backdrop-blur-lg">
+            <div className="grid grid-cols-2 divide-x divide-y divide-border/20 md:grid-cols-4 md:divide-y-0">
+              <AnimatedStat value={5} suffix="K+" label="Log Interaksi Harian" />
+              <AnimatedStat value={98} suffix="%" label="SLA Response Rate" />
+              <AnimatedStat value={3} suffix="x" label="Akselerasi Closing" />
+              <AnimatedStat value={500} suffix="+" label="Tenant Terdaftar" />
             </div>
           </div>
-        </R>
+        </div>
       </section>
 
-      {/* ━━━━━━━━━━━━━ WHY 20BYTE ━━━━━━━━━━━━━ */}
-      <section className="px-5 py-28 md:px-8 md:py-36">
-        <div className="mx-auto max-w-5xl">
-          <div className="grid items-start gap-14 md:grid-cols-2 md:gap-20">
-            <R>
-              <div>
-                <p className="text-xs font-semibold uppercase tracking-[0.2em] text-primary">Kenapa 20byte</p>
-                <h2 className="mt-3 text-2xl font-bold leading-tight tracking-tight text-foreground sm:text-3xl md:text-4xl">
-                  Dibangun khusus untuk bisnis yang hidup di WhatsApp
-                </h2>
-                <p className="mt-5 text-[15px] leading-relaxed text-muted-foreground">
-                  Cukup buka satu tab. Seluruh percakapan, data pelanggan, invoice, dan
-                  performa iklan CTWA ada di satu tempat — tanpa copy‑paste antar aplikasi.
-                </p>
-              </div>
-            </R>
-
-            <div className="space-y-2">
-              {(
-                [
-                  { icon: Shield, title: "Multi‑agent dengan role guard", desc: "Owner, Admin, CS, Advertiser — tiap role punya akses yang tepat. Tidak ada chat yang bentrok." },
-                  { icon: Zap, title: "Notifikasi instan", desc: "Pesan masuk langsung muncul di inbox. Tidak ada lead yang hilang karena telat respons." },
-                  { icon: FileText, title: "Invoice langsung dari chat", desc: "Generate invoice, kirim link pembayaran, pelanggan bayar — bukti transfer masuk otomatis ke timeline." },
-                  { icon: BarChart3, title: "Full‑funnel attribution", desc: "Klik CTWA → chat → deal → invoice PAID — seluruh perjalanan pelanggan terukur dan terhubung." },
-                ] as const
-              ).map((b, i) => (
-                <R key={b.title} delay={i * 80}>
-                  <div className="group flex gap-4 rounded-xl p-4 transition-all duration-300 hover:bg-card/40">
-                    <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-primary/[0.06] text-primary transition-all duration-500 group-hover:scale-110 group-hover:bg-primary/[0.12]">
-                      <b.icon className="h-5 w-5" />
-                    </div>
-                    <div className="min-w-0">
-                      <h3 className="text-[14px] font-semibold text-foreground">{b.title}</h3>
-                      <p className="mt-1 text-[13px] leading-[1.6] text-muted-foreground">{b.desc}</p>
-                    </div>
+      {/* ━━━ WHY 20BYTE ━━━ */}
+      <section className="relative z-10 px-4 py-24 md:px-6 md:py-40">
+        <div className="mx-auto max-w-6xl">
+          <div className="grid items-center gap-16 lg:grid-cols-2 lg:gap-24">
+            <div className="reveal">
+              <h2 className="text-3xl font-bold leading-tight tracking-tight text-foreground md:text-5xl lg:text-[3.5rem] lg:leading-[1.1]">
+                Karena WhatsApp Business biasa tak lagi memadai
+              </h2>
+              <p className="mt-6 text-base leading-relaxed text-muted-foreground md:text-lg">
+                Bisnis yang mendulang omzet masif lewat WhatsApp tidak bisa bertahan hanya mengandalkan fitur standar. Kami membedah DNA komunikasi WhatsApp untuk merakit mesin konversi tingkat enterprise bagi Anda.
+              </p>
+            </div>
+            <div className="space-y-6">
+              {[
+                {
+                  icon: Shield,
+                  title: "Hierarki Otorisasi Bertingkat",
+                  desc: "Modul sekuritas memastikan Owner, Admin, dan CS bergerak terisolasi pada area wewenangnya. Tidak ada tabrakan penanganan chat.",
+                },
+                {
+                  icon: Zap,
+                  title: "Engine Notifikasi Latensi Rendah",
+                  desc: "Push event seketika. Jangan biarkan momentum prospek dingin hanya karena kelambanan websocket sisi client.",
+                },
+                {
+                  icon: FileText,
+                  title: "Penerbitan Invoice Contextual",
+                  desc: "Link penagihan di-generate tepat di dalam window chat yang berjalan. Tanpa perlu cross-reference identitas pelanggan.",
+                },
+                {
+                  icon: BarChart3,
+                  title: "Spektrum Analitik Funnel Penuh",
+                  desc: "Data tersaji tak terputus. Dari impresi iklan awal, laju interaksi inbox, higga keberhasilan konversi menjadi revenue.",
+                },
+              ].map((item, i) => (
+                <div
+                  key={item.title}
+                  className="reveal group flex items-start gap-5 rounded-2xl border border-transparent p-5 transition-all duration-300 hover:border-border/30 hover:bg-card/40 hover:shadow-lg"
+                  style={{ transitionDelay: `${i * 100}ms` }}
+                >
+                  <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-card border border-border/50 text-foreground transition-all duration-500 group-hover:scale-110 group-hover:border-primary/40 group-hover:text-primary group-hover:shadow-[0_5px_20px_hsl(var(--primary)/0.2)]">
+                    <item.icon className="h-6 w-6" />
                   </div>
-                </R>
+                  <div>
+                    <h3 className="text-lg font-bold text-foreground">{item.title}</h3>
+                    <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
+                      {item.desc}
+                    </p>
+                  </div>
+                </div>
               ))}
             </div>
           </div>
         </div>
       </section>
 
-      {/* ━━━━━━━━━━━━━ CTA ━━━━━━━━━━━━━ */}
-      <section className="px-5 py-28 md:px-8 md:py-36">
-        <R>
-          <div className="mx-auto max-w-2xl text-center">
-            <div className="rounded-3xl border border-primary/10 bg-gradient-to-b from-primary/[0.04] to-transparent px-8 py-14 backdrop-blur-sm md:px-14 md:py-20">
-              <h2 className="text-2xl font-bold tracking-tight text-foreground sm:text-3xl md:text-4xl">
-                Siap mengelola bisnis lebih efisien?
-              </h2>
-              <p className="mx-auto mt-5 max-w-md text-[15px] leading-relaxed text-muted-foreground">
-                Ratusan bisnis sudah beralih ke 20byte. Mulai trial gratis —
-                tanpa kartu kredit, tanpa kontrak.
-              </p>
-              <div className="mt-10 flex flex-col items-center gap-3 sm:flex-row sm:justify-center sm:gap-4">
-                <Link
-                  href="/register"
-                  id="cta-register"
-                  className="inline-flex h-12 w-full items-center justify-center gap-2 rounded-full bg-primary px-8 text-sm font-semibold text-primary-foreground shadow-[0_4px_24px_hsl(160_84%_39%/0.35)] transition-all duration-300 hover:shadow-[0_6px_32px_hsl(160_84%_39%/0.5)] hover:brightness-110 active:scale-[0.98] sm:w-auto"
-                >
-                  Daftar Sekarang — Gratis
-                  <ArrowRight className="h-4 w-4" />
-                </Link>
-                <Link
-                  href="/login"
-                  id="cta-login"
-                  className="inline-flex h-12 w-full items-center justify-center gap-2 rounded-full border border-border/50 bg-card/30 px-8 text-sm font-semibold text-foreground backdrop-blur transition-all duration-300 hover:border-border hover:bg-card/60 active:scale-[0.98] sm:w-auto"
-                >
-                  Sudah punya akun? Masuk
-                </Link>
-              </div>
+      {/* ━━━ CTA ━━━ */}
+      <section className="relative z-10 px-4 py-24 pb-32 md:px-6 md:py-40 md:pb-48">
+        <div className="relative mx-auto max-w-4xl text-center">
+          <div className="reveal relative overflow-hidden rounded-[2.5rem] border border-primary/20 bg-card/60 p-10 shadow-2xl backdrop-blur-xl md:p-20">
+            {/* Inner background glow for CTA */}
+            <div className="pointer-events-none absolute inset-0 -z-10">
+              <div className="absolute left-1/2 top-1/2 h-[300px] w-[500px] -translate-x-1/2 -translate-y-1/2 rounded-full bg-primary/10 blur-[80px]" />
+            </div>
+
+            <h2 className="text-3xl font-extrabold tracking-tight text-foreground md:text-5xl lg:text-6xl">
+              Transformasi dimulai <span className="text-primary">sekarang.</span>
+            </h2>
+            <p className="mx-auto mt-6 max-w-2xl text-base leading-relaxed text-muted-foreground md:text-lg">
+              Bergabung dengan para market leader yang telah mengoptimasi performa konversinya. Aktifkan lisensi trial Anda tanpa komitmen kartu kredit.
+            </p>
+            <div className="mt-12 flex flex-col items-center justify-center gap-4 sm:flex-row">
+              <Link
+                href="/register"
+                id="cta-register-btn"
+                className="group inline-flex h-14 w-full items-center justify-center gap-2 rounded-xl bg-primary px-10 text-base font-bold text-primary-foreground shadow-[0_8px_30px_hsl(var(--primary)/0.3)] transition-all duration-300 hover:scale-[1.03] hover:shadow-[0_12px_40px_hsl(var(--primary)/0.4)] sm:w-auto"
+              >
+                Mulai Trial Gratis
+                <ArrowRight className="h-5 w-5 transition-transform duration-300 group-hover:translate-x-1" />
+              </Link>
+              <Link
+                href="/login"
+                id="cta-login-btn"
+                className="group inline-flex h-14 w-full items-center justify-center gap-2 rounded-xl border border-border/60 bg-card/40 px-10 text-base font-bold text-foreground backdrop-blur-md transition-all duration-300 hover:border-foreground/40 hover:bg-card/80 sm:w-auto"
+              >
+                Akses Dashboard
+              </Link>
             </div>
           </div>
-        </R>
+        </div>
       </section>
 
-      {/* ━━━━━━━━━━━━━ FOOTER ━━━━━━━━━━━━━ */}
-      <footer className="border-t border-border/[0.08] px-5 py-10 md:px-8">
-        <div className="mx-auto flex max-w-6xl flex-col items-center justify-between gap-4 md:flex-row">
-          <div className="flex items-center gap-3">
-            <span className="text-sm font-bold tracking-tight text-foreground">20byte</span>
-            <span className="text-xs text-muted-foreground/50">© {new Date().getFullYear()}</span>
+      {/* ━━━ FOOTER ━━━ */}
+      <footer className="relative z-10 border-t border-border/10 bg-card/10 px-4 py-12 backdrop-blur-md md:px-6 md:py-16">
+        <div className="mx-auto flex max-w-6xl flex-col items-center justify-between gap-8 text-center md:flex-row md:text-left">
+          <div className="flex flex-col gap-1 md:items-start">
+            <span className="text-xl font-black tracking-tighter text-foreground">20byte.</span>
+            <span className="text-sm font-medium text-muted-foreground mt-1">
+              © {new Date().getFullYear()} Hak Cipta Dilindungi.
+            </span>
           </div>
-          <nav className="flex items-center gap-6 text-[13px] text-muted-foreground/60">
-            <a href="#features" className="transition-colors hover:text-foreground">Fitur</a>
-            <a href="#ctwa-integration" className="transition-colors hover:text-foreground">CTWA & CAPI</a>
-            <Link href="/login" className="transition-colors hover:text-foreground">Masuk</Link>
-            <Link href="/register" className="transition-colors hover:text-foreground">Daftar</Link>
-          </nav>
+          
+          <div className="flex flex-wrap items-center justify-center gap-6 text-sm font-semibold text-muted-foreground md:justify-end md:gap-8">
+            <Link href="/faq" className="transition-colors hover:text-foreground">
+              FAQ
+            </Link>
+            <Link href="/terms" className="transition-colors hover:text-foreground">
+              Syarat & Ketentuan
+            </Link>
+            <Link href="/privacy" className="transition-colors hover:text-foreground">
+              Kebijakan Privasi
+            </Link>
+          </div>
         </div>
       </footer>
     </div>

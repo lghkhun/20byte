@@ -6,6 +6,7 @@ import {
   buildConversationUpdatedEventPayload,
   buildInvoiceEventPayload,
   buildMessageNewEventPayload,
+  buildMessageStatusEventPayload,
   buildOrgChannelName,
   buildStorageUpdatedEventPayload
 } from "@/lib/realtime/eventPayloads";
@@ -47,6 +48,29 @@ test("message/conversation/assignment payloads include base + domain fields", ()
   assert.equal(assignmentPayload.type, "assignment.changed");
   assert.equal(assignmentPayload.assignedToMemberId, "member-1");
   assert.equal(assignmentPayload.status, "CLOSED");
+});
+
+test("message.status payload carries delivery transition fields", () => {
+  const payload = buildMessageStatusEventPayload({
+    orgId: "org-1",
+    conversationId: "conv-1",
+    messageId: "msg-1",
+    sendStatus: "SENT",
+    deliveryStatus: "READ",
+    sendError: null,
+    retryable: false,
+    sendAttemptCount: 2,
+    deliveredAt: "2026-03-06T10:00:00.000Z",
+    readAt: "2026-03-06T10:02:00.000Z"
+  });
+
+  assert.equal(payload.type, "message.status");
+  assert.equal(payload.entityId, "msg-1");
+  assert.equal(payload.sendStatus, "SENT");
+  assert.equal(payload.deliveryStatus, "READ");
+  assert.equal(payload.sendAttemptCount, 2);
+  assert.equal(payload.deliveredAt, "2026-03-06T10:00:00.000Z");
+  assert.equal(payload.readAt, "2026-03-06T10:02:00.000Z");
 });
 
 test("invoice payload supports DOC16 total field while keeping standard base fields", () => {
