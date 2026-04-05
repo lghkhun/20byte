@@ -110,6 +110,12 @@ const CASES: ServiceGuardCase[] = [
     expectUpdateMany: true
   },
   {
+    label: "message external outbound tx-path",
+    file: "server/services/message/externalOutbound.ts",
+    strictNoDirectWrite: true,
+    expectUpdateMany: true
+  },
+  {
     label: "invoice draft tx-path",
     file: "server/services/invoice/draft.ts",
     requiredPatterns: [

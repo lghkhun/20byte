@@ -139,9 +139,10 @@ async function collapseCustomerConversations(
   const mergedUnreadCount = conversations.reduce((total, conversation) => total + conversation.unreadCount, 0);
   const shouldOpen = conversations.some((conversation) => conversation.status === ConversationStatus.OPEN);
 
-  await tx.conversation.update({
+  const conversationUpdateResult = await tx.conversation.updateMany({
     where: {
-      id: primaryConversation.id
+      id: primaryConversation.id,
+      orgId
     },
     data: {
       status: shouldOpen ? ConversationStatus.OPEN : primaryConversation.status,
@@ -149,6 +150,10 @@ async function collapseCustomerConversations(
       lastMessageAt: latestMessage?.createdAt ?? primaryConversation.lastMessageAt
     }
   });
+
+  if (conversationUpdateResult.count !== 1) {
+    throw new ServiceError(404, "CONVERSATION_NOT_FOUND", "Conversation does not exist.");
+  }
 
   await tx.conversation.deleteMany({
     where: {
@@ -268,9 +273,10 @@ async function mergeLegacyCustomerIntoCanonical(
 
   await collapseCustomerConversations(tx, orgId, canonicalCustomerId);
 
-  await tx.customer.delete({
+  await tx.customer.deleteMany({
     where: {
-      id: legacyCustomerId
+      id: legacyCustomerId,
+      orgId
     }
   });
 }
@@ -408,11 +414,23 @@ export async function getOrCreateCustomer(
         updateData.firstContactAt = new Date();
       }
 
-      const updatedLegacy = await tx.customer.update({
+      const updateResult = await tx.customer.updateMany({
         where: {
-          id: legacy.id
+          id: legacy.id,
+          orgId
         },
-        data: updateData,
+        data: updateData
+      });
+
+      if (updateResult.count !== 1) {
+        throw new ServiceError(404, "CUSTOMER_NOT_FOUND", "Customer does not exist.");
+      }
+
+      const updatedLegacy = await tx.customer.findFirst({
+        where: {
+          id: legacy.id,
+          orgId
+        },
         select: {
           id: true,
           source: true,
@@ -423,6 +441,10 @@ export async function getOrCreateCustomer(
           medium: true
         }
       });
+
+      if (!updatedLegacy) {
+        throw new ServiceError(404, "CUSTOMER_NOT_FOUND", "Customer does not exist.");
+      }
 
       await collapseCustomerConversations(tx, orgId, updatedLegacy.id);
 
@@ -470,18 +492,27 @@ export async function getOrCreateOpenConversation(
   tx: Prisma.TransactionClient,
   orgId: string,
   customerId: string,
-  attribution?: ResolvedAttribution
+  attribution?: ResolvedAttribution,
+  waChatJid?: string
 ) {
+  const normalizedWaChatJid = (waChatJid ?? "").trim() || null;
   const latestConversation = await tx.conversation.findFirst({
     where: {
       orgId,
-      customerId
+      ...(normalizedWaChatJid
+        ? {
+            waChatJid: normalizedWaChatJid
+          }
+        : {
+            customerId
+          })
     },
     orderBy: [{ updatedAt: "desc" }, { lastMessageAt: "desc" }, { createdAt: "desc" }],
     select: {
       id: true,
       status: true,
       assignedToMemberId: true,
+      waChatJid: true,
       sourceCampaign: true,
       sourcePlatform: true,
       sourceMedium: true,
@@ -509,6 +540,9 @@ export async function getOrCreateOpenConversation(
     }
     if (!latestConversation.trackingId && attribution?.trackingId) {
       updateData.trackingId = attribution.trackingId;
+    }
+    if (!latestConversation.waChatJid && normalizedWaChatJid) {
+      updateData.waChatJid = normalizedWaChatJid;
     }
     if (latestConversation.status !== ConversationStatus.OPEN) {
       updateData.status = ConversationStatus.OPEN;
@@ -544,7 +578,8 @@ export async function getOrCreateOpenConversation(
       sourcePlatform: attribution?.platform ?? null,
       sourceMedium: attribution?.medium ?? null,
       shortlinkId: attribution?.shortlinkId ?? null,
-      trackingId: attribution?.trackingId ?? null
+      trackingId: attribution?.trackingId ?? null,
+      waChatJid: normalizedWaChatJid
     },
     select: {
       id: true,

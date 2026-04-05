@@ -7,10 +7,13 @@ import { ServiceError } from "@/server/services/serviceError";
 type InboundContext = {
   orgId: string;
   customerPhoneE164: string;
+  waChatJid?: string;
   waMessageId: string;
   customerDisplayName?: string;
   customerAvatarUrl?: string;
   trackingId?: string;
+  replyToWaMessageId?: string;
+  replyPreviewText?: string;
   text?: string;
   mediaId?: string;
   mediaUrl?: string;
@@ -77,12 +80,47 @@ export async function storeInboundMessageInTransaction(params: {
     const attribution = await params.resolveAttribution(tx);
     const customer = await params.getOrCreateCustomer(tx, attribution);
     const conversation = await params.getOrCreateConversation(tx, customer.id, attribution, customer);
+    const replyToWaMessageId = context.replyToWaMessageId?.trim() || null;
+    const replyToMessage = replyToWaMessageId
+      ? await tx.message.findFirst({
+          where: {
+            orgId: context.orgId,
+            conversationId: conversation.id,
+            waMessageId: replyToWaMessageId
+          },
+          select: {
+            id: true,
+            text: true,
+            type: true
+          }
+        })
+      : null;
+
+    const replyPreviewText =
+      context.replyPreviewText?.trim() ||
+      replyToMessage?.text?.trim() ||
+      (replyToMessage
+        ? replyToMessage.type === "IMAGE"
+          ? "Foto"
+          : replyToMessage.type === "VIDEO"
+            ? "Video"
+            : replyToMessage.type === "AUDIO"
+              ? "Audio"
+              : replyToMessage.type === "DOCUMENT"
+                ? "Dokumen"
+                : replyToMessage.type === "TEMPLATE"
+                  ? "Template"
+                  : "Pesan"
+        : null);
 
     const created = await tx.message.create({
       data: {
         orgId: context.orgId,
         conversationId: conversation.id,
         waMessageId: context.waMessageId,
+        replyToMessageId: replyToMessage?.id ?? null,
+        replyToWaMessageId,
+        replyPreviewText: replyPreviewText ? replyPreviewText.slice(0, 180) : null,
         direction: MessageDirection.INBOUND,
         type: context.type,
         text: context.text,

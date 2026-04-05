@@ -3,6 +3,7 @@ import type { MessageDirection, MessageType } from "@prisma/client";
 export type StoreInboundMessageInput = {
   orgId: string;
   customerPhoneE164: string;
+  waChatJid?: string;
   customerDisplayName?: string;
   customerAvatarUrl?: string;
   shortlinkCode?: string;

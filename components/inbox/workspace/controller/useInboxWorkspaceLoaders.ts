@@ -111,6 +111,7 @@ export function useInboxWorkspaceLoaders(state: InboxWorkspaceState) {
   const messagesLengthRef = useRef(messages.length);
   const markReadInFlightRef = useRef(new Set<string>());
   const markReadDebounceTimersRef = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
+  const realtimeMessageRefreshTimersRef = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
   const typingResetTimersRef = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
   const loadMessagesAbortRef = useRef<AbortController | null>(null);
   const loadMessagesRequestVersionsRef = useRef<Map<string, number>>(new Map());
@@ -1176,6 +1177,7 @@ export function useInboxWorkspaceLoaders(state: InboxWorkspaceState) {
     }
 
     const typingTimers = typingResetTimersRef.current;
+    const realtimeMessageRefreshTimers = realtimeMessageRefreshTimersRef.current;
     const markReadTimers = markReadDebounceTimersRef.current;
     let active = true;
     let cleanup: (() => void) | null = null;
@@ -1227,6 +1229,20 @@ export function useInboxWorkspaceLoaders(state: InboxWorkspaceState) {
 
         void loadConversations({ background: true });
       }, 250);
+    };
+
+    const scheduleRealtimeMessagesRefresh = (conversationId: string, delayMs = 140) => {
+      const existingTimer = realtimeMessageRefreshTimers.get(conversationId);
+      if (existingTimer) {
+        clearTimeout(existingTimer);
+      }
+
+      const timer = setTimeout(() => {
+        realtimeMessageRefreshTimers.delete(conversationId);
+        void loadMessages(conversationId, { background: true });
+      }, delayMs);
+
+      realtimeMessageRefreshTimers.set(conversationId, timer);
     };
 
     const startSubscription = async () => {
@@ -1310,7 +1326,7 @@ export function useInboxWorkspaceLoaders(state: InboxWorkspaceState) {
               if (payload.direction === "INBOUND") {
                 scheduleMarkConversationRead(payload.conversationId);
               }
-              void loadMessages(payload.conversationId, { background: true });
+              scheduleRealtimeMessagesRefresh(payload.conversationId);
             }
 
             if (payload.direction === "INBOUND" && payload.conversationId !== selectedId) {
@@ -1382,7 +1398,7 @@ export function useInboxWorkspaceLoaders(state: InboxWorkspaceState) {
                 if (realtimeMessageStatusMismatchCountRef.current % 5 === 0) {
                   console.info(`[realtime] message.status mismatch count=${realtimeMessageStatusMismatchCountRef.current}`);
                 }
-                void loadMessages(payload.conversationId, { background: true });
+                scheduleRealtimeMessagesRefresh(payload.conversationId, 80);
               }
             }
           },
@@ -1540,6 +1556,11 @@ export function useInboxWorkspaceLoaders(state: InboxWorkspaceState) {
         clearTimeout(timer);
       });
       markReadTimers.clear();
+
+      realtimeMessageRefreshTimers.forEach((timer) => {
+        clearTimeout(timer);
+      });
+      realtimeMessageRefreshTimers.clear();
     };
   }, [
     hasLoadedOrganizations,

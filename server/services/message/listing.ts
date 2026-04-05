@@ -129,6 +129,9 @@ export async function listConversationMessages(input: ListMessagesInput): Promis
     select: {
       id: true,
       waMessageId: true,
+      replyToMessageId: true,
+      replyToWaMessageId: true,
+      replyPreviewText: true,
       direction: true,
       type: true,
       text: true,

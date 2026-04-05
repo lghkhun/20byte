@@ -38,16 +38,20 @@ export function useInboxWorkspaceActions(state: InboxWorkspaceState, loaders: In
 
   const { loadConversation, loadConversations, loadMessages } = loaders;
   const loadConversationsBackground = useCallback(() => loadConversations({ background: true }), [loadConversations]);
-  const reconcileAfterSend = useCallback(async (conversationId?: string | null) => {
+  const reconcileAfterSend = useCallback(async (conversationId?: string | null, options?: { refreshMessages?: boolean }) => {
     const targetConversationId = (conversationId ?? selectedConversationId)?.trim() ?? "";
     if (!targetConversationId) {
       return;
     }
-
-    await Promise.all([
-      loadMessages(targetConversationId, { background: true }),
-      loadConversationsBackground()
-    ]);
+    const shouldRefreshMessages = options?.refreshMessages ?? true;
+    if (shouldRefreshMessages) {
+      await Promise.all([
+        loadMessages(targetConversationId, { background: true }),
+        loadConversationsBackground()
+      ]);
+      return;
+    }
+    await loadConversationsBackground();
   }, [loadConversationsBackground, loadMessages, selectedConversationId]);
 
   const appendOptimisticOutboundMessage = useCallback(
@@ -55,6 +59,9 @@ export function useInboxWorkspaceActions(state: InboxWorkspaceState, loaders: In
       conversationId: string;
       type: MessageItem["type"];
       text: string | null;
+      replyToMessageId?: string | null;
+      replyToWaMessageId?: string | null;
+      replyPreviewText?: string | null;
       templateName?: string | null;
       templateCategory?: MessageItem["templateCategory"];
       templateLanguageCode?: string | null;
@@ -64,6 +71,9 @@ export function useInboxWorkspaceActions(state: InboxWorkspaceState, loaders: In
       const optimisticMessage: MessageItem = {
         id: optimisticMessageId,
         waMessageId: null,
+        replyToMessageId: input.replyToMessageId ?? null,
+        replyToWaMessageId: input.replyToWaMessageId ?? null,
+        replyPreviewText: input.replyPreviewText ?? null,
         direction: "OUTBOUND",
         type: input.type,
         text: input.text,
@@ -200,7 +210,7 @@ export function useInboxWorkspaceActions(state: InboxWorkspaceState, loaders: In
   ]);
 
   const sendTextMessage = useCallback(
-    async (text: string) => {
+    async (text: string, options?: { replyToMessageId?: string | null; replyPreviewText?: string | null }) => {
       if (!orgId || !selectedConversationId) {
         return;
       }
@@ -211,12 +221,19 @@ export function useInboxWorkspaceActions(state: InboxWorkspaceState, loaders: In
       const optimisticMessageId = appendOptimisticOutboundMessage({
         conversationId,
         type: "TEXT",
-        text
+        text,
+        replyToMessageId: options?.replyToMessageId ?? null,
+        replyPreviewText: options?.replyPreviewText ?? null
       });
       const response = await fetch("/api/inbox/send", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ conversationId, type: "TEXT", text })
+        body: JSON.stringify({
+          conversationId,
+          type: "TEXT",
+          text,
+          replyToMessageId: options?.replyToMessageId ?? undefined
+        })
       });
 
       const payload = (await response.json().catch(() => null)) as SendMessageResponse | null;
@@ -227,7 +244,7 @@ export function useInboxWorkspaceActions(state: InboxWorkspaceState, loaders: In
         });
         removeOptimisticMessage(optimisticMessageId);
         setMessageError(payload?.error?.message ?? "Gagal mengirim pesan.");
-        await reconcileAfterSend(conversationId);
+        await reconcileAfterSend(conversationId, { refreshMessages: true });
         return;
       }
 
@@ -243,7 +260,7 @@ export function useInboxWorkspaceActions(state: InboxWorkspaceState, loaders: In
         orgId,
         conversationId
       });
-      await reconcileAfterSend(conversationId);
+      await reconcileAfterSend(conversationId, { refreshMessages: false });
     },
     [appendOptimisticOutboundMessage, orgId, reconcileAfterSend, removeOptimisticMessage, resolveOptimisticMessage, selectedConversationId, setMessageError]
   );
@@ -323,7 +340,7 @@ export function useInboxWorkspaceActions(state: InboxWorkspaceState, loaders: In
         });
         removeOptimisticMessage(optimisticMessageId);
         setMessageError(payload?.error?.message ?? "Gagal mengirim template pesan.");
-        await reconcileAfterSend(conversationId);
+        await reconcileAfterSend(conversationId, { refreshMessages: true });
         return;
       }
 
@@ -339,13 +356,16 @@ export function useInboxWorkspaceActions(state: InboxWorkspaceState, loaders: In
         orgId,
         conversationId
       });
-      await reconcileAfterSend(conversationId);
+      await reconcileAfterSend(conversationId, { refreshMessages: false });
     },
     [appendOptimisticOutboundMessage, orgId, reconcileAfterSend, removeOptimisticMessage, resolveOptimisticMessage, selectedConversationId, setMessageError]
   );
 
   const sendAttachmentMessage = useCallback(
-    async (attachment: { file: File; fileName: string; mimeType: string; size: number }) => {
+    async (
+      attachment: { file: File; fileName: string; mimeType: string; size: number },
+      options?: { replyToMessageId?: string | null }
+    ) => {
       if (!orgId || !selectedConversationId) {
         return;
       }
@@ -356,6 +376,9 @@ export function useInboxWorkspaceActions(state: InboxWorkspaceState, loaders: In
       const body = new FormData();
       body.set("conversationId", conversationId);
       body.set("type", attachment.mimeType.startsWith("image/") ? "IMAGE" : attachment.mimeType.startsWith("video/") ? "VIDEO" : attachment.mimeType.startsWith("audio/") ? "AUDIO" : "DOCUMENT");
+      if (options?.replyToMessageId) {
+        body.set("replyToMessageId", options.replyToMessageId);
+      }
       body.set("file", attachment.file, attachment.fileName);
 
       const response = await fetch("/api/inbox/send", {
@@ -370,7 +393,7 @@ export function useInboxWorkspaceActions(state: InboxWorkspaceState, loaders: In
           conversationId
         });
         setMessageError(payload?.error?.message ?? "Gagal memproses lampiran.");
-        await reconcileAfterSend(conversationId);
+        await reconcileAfterSend(conversationId, { refreshMessages: true });
         return;
       }
 
@@ -378,7 +401,7 @@ export function useInboxWorkspaceActions(state: InboxWorkspaceState, loaders: In
         orgId,
         conversationId
       });
-      await reconcileAfterSend(conversationId);
+      await reconcileAfterSend(conversationId, { refreshMessages: false });
     },
     [orgId, reconcileAfterSend, selectedConversationId, setMessageError]
   );

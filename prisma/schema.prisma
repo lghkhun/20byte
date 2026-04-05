@@ -334,6 +334,7 @@ model Conversation {
   sourceMedium       String?
   shortlinkId        String?
   trackingId         String?
+  waChatJid          String?
   crmPipelineId      String?
   crmStageId         String?
 
@@ -354,6 +355,7 @@ model Conversation {
   @@index([orgId, assignedToMemberId, status, lastMessageAt, updatedAt], map: "conv_org_assignee_status_lastmsg_upd_idx")
   @@index([orgId, assignedToMemberId, status, crmPipelineId, lastMessageAt, updatedAt], map: "conv_org_asg_st_pipe_last_upd_idx")
   @@index([customerId])
+  @@index([orgId, waChatJid], map: "conv_org_wa_chat_jid_idx")
   @@index([trackingId])
   @@index([crmPipelineId])
   @@index([crmStageId])

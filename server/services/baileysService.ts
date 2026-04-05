@@ -120,6 +120,8 @@ declare global {
   var __twentyByteBaileysBootstrapStarted: boolean | undefined;
   var __twentyByteBaileysTypingCache: Map<string, { isTyping: boolean; expiresAt: number }> | undefined;
   var __twentyByteBaileysConversationByPhoneCache: Map<string, { conversationId: string; expiresAt: number }> | undefined;
+  var __twentyByteBaileysPhoneByChatJidCache: Map<string, { phoneE164: string; expiresAt: number }> | undefined;
+  var __twentyByteBaileysGroupSubjectCache: Map<string, { subject: string; expiresAt: number }> | undefined;
 }
 
 function getTypingCache(): Map<string, { isTyping: boolean; expiresAt: number }> {
@@ -134,6 +136,20 @@ function getConversationByPhoneCache(): Map<string, { conversationId: string; ex
     globalThis.__twentyByteBaileysConversationByPhoneCache = new Map();
   }
   return globalThis.__twentyByteBaileysConversationByPhoneCache;
+}
+
+function getPhoneByChatJidCache(): Map<string, { phoneE164: string; expiresAt: number }> {
+  if (!globalThis.__twentyByteBaileysPhoneByChatJidCache) {
+    globalThis.__twentyByteBaileysPhoneByChatJidCache = new Map();
+  }
+  return globalThis.__twentyByteBaileysPhoneByChatJidCache;
+}
+
+function getGroupSubjectCache(): Map<string, { subject: string; expiresAt: number }> {
+  if (!globalThis.__twentyByteBaileysGroupSubjectCache) {
+    globalThis.__twentyByteBaileysGroupSubjectCache = new Map();
+  }
+  return globalThis.__twentyByteBaileysGroupSubjectCache;
 }
 
 function getSessionsStore(): Map<string, SessionEntry> {
@@ -442,7 +458,131 @@ async function resolveCustomerPhoneE164ForInboundJid(orgId: string, remoteJid: s
   return normalizePossibleE164(normalizedDigits);
 }
 
-async function resolveOutboundDestinationJid(orgId: string, toPhoneE164: string, socket: WASocket): Promise<string> {
+function toStablePseudoGroupPhoneE164(remoteJid: string): string {
+  const normalized = normalize(remoteJid);
+  let hash = 0;
+  for (let index = 0; index < normalized.length; index += 1) {
+    hash = (hash * 31 + normalized.charCodeAt(index)) % 10_000_000_000;
+  }
+  const digits = String(hash).padStart(10, "0");
+  return `+999${digits}`;
+}
+
+async function resolveCustomerPhoneByChatJid(orgId: string, chatJid: string): Promise<string | null> {
+  const normalizedChatJid = jidNormalizedUser(chatJid);
+  if (!normalizedChatJid) {
+    return null;
+  }
+
+  const cache = getPhoneByChatJidCache();
+  const cacheKey = `${orgId}:${normalizedChatJid}`;
+  const cached = cache.get(cacheKey);
+  if (cached && cached.expiresAt > Date.now()) {
+    return cached.phoneE164;
+  }
+
+  const row = await prisma.conversation.findFirst({
+    where: {
+      orgId,
+      waChatJid: normalizedChatJid
+    },
+    select: {
+      customer: {
+        select: {
+          phoneE164: true
+        }
+      }
+    }
+  });
+
+  const phoneE164 = row?.customer.phoneE164 ?? null;
+  if (phoneE164) {
+    cache.set(cacheKey, {
+      phoneE164,
+      expiresAt: Date.now() + 5 * 60_000
+    });
+  }
+
+  return phoneE164;
+}
+
+function extractQuotedContext(content: WAMessage["message"]): { replyToWaMessageId?: string; replyPreviewText?: string } {
+  const normalized = unwrapMessageContent(content);
+  if (!normalized) {
+    return {};
+  }
+
+  const contextInfo =
+    normalized.extendedTextMessage?.contextInfo ??
+    normalized.imageMessage?.contextInfo ??
+    normalized.videoMessage?.contextInfo ??
+    normalized.audioMessage?.contextInfo ??
+    normalized.documentMessage?.contextInfo;
+
+  const replyToWaMessageId = normalize(contextInfo?.stanzaId ?? undefined);
+  if (!replyToWaMessageId) {
+    return {};
+  }
+
+  const quotedKind = resolveMessageKind(contextInfo?.quotedMessage as WAMessage["message"] | undefined);
+  const replyPreviewText = normalize(
+    quotedKind.text ??
+      (quotedKind.type === "IMAGE"
+        ? "Foto"
+        : quotedKind.type === "VIDEO"
+          ? "Video"
+          : quotedKind.type === "AUDIO"
+            ? "Audio"
+            : quotedKind.type === "DOCUMENT"
+              ? "Dokumen"
+              : "Pesan")
+  );
+
+  return {
+    replyToWaMessageId,
+    replyPreviewText: replyPreviewText || undefined
+  };
+}
+
+async function resolveGroupDisplayName(remoteJid: string, socket: WASocket): Promise<string | undefined> {
+  const normalizedRemoteJid = jidNormalizedUser(remoteJid);
+  if (!normalizedRemoteJid || !isJidGroup(normalizedRemoteJid)) {
+    return undefined;
+  }
+
+  const cache = getGroupSubjectCache();
+  const cached = cache.get(normalizedRemoteJid);
+  if (cached && cached.expiresAt > Date.now()) {
+    return cached.subject;
+  }
+
+  try {
+    const metadata = await socket.groupMetadata(normalizedRemoteJid);
+    const subject = normalize(metadata?.subject ?? undefined);
+    if (!subject) {
+      return undefined;
+    }
+    cache.set(normalizedRemoteJid, {
+      subject,
+      expiresAt: Date.now() + 5 * 60_000
+    });
+    return subject;
+  } catch {
+    return undefined;
+  }
+}
+
+async function resolveOutboundDestinationJid(
+  orgId: string,
+  toPhoneE164: string,
+  socket: WASocket,
+  preferredJid?: string
+): Promise<string> {
+  const normalizedPreferredJid = jidNormalizedUser(preferredJid ?? undefined);
+  if (normalizedPreferredJid) {
+    return normalizedPreferredJid;
+  }
+
   const directJid = toJid(toPhoneE164);
   const destinationDigits = extractDigits(toPhoneE164);
   if (!destinationDigits) {
@@ -743,12 +883,19 @@ async function resetBaileysLinkState(orgId: string): Promise<void> {
 
 async function processInboundMessage(orgId: string, message: WAMessage, socket: WASocket): Promise<void> {
   const remoteJid = jidNormalizedUser(message.key.remoteJid ?? undefined);
-  if (!remoteJid || isJidGroup(remoteJid) || isJidStatusBroadcast(remoteJid)) {
+  if (!remoteJid || isJidStatusBroadcast(remoteJid)) {
     return;
   }
   const isFromMe = Boolean(message.key.fromMe);
+  const isGroupChat = isJidGroup(remoteJid);
 
-  const customerPhoneE164 = await resolveCustomerPhoneE164ForInboundJid(orgId, remoteJid, socket);
+  const quotedContext = extractQuotedContext(message.message);
+  const resolvedByChatJid = await resolveCustomerPhoneByChatJid(orgId, remoteJid);
+  const customerPhoneE164 =
+    resolvedByChatJid ??
+    (isGroupChat
+      ? toStablePseudoGroupPhoneE164(remoteJid)
+      : await resolveCustomerPhoneE164ForInboundJid(orgId, remoteJid, socket));
   if (!customerPhoneE164) {
     if (DEBUG_BAILEYS_INBOUND) {
       console.info(`[baileys] inbound ignored-unresolved-phone org=${orgId} remoteJid=${remoteJid}`);
@@ -790,9 +937,12 @@ async function processInboundMessage(orgId: string, message: WAMessage, socket: 
     const outboundResult = await storeExternalOutboundMessage({
       orgId,
       customerPhoneE164,
-      customerDisplayName: normalize(message.pushName ?? undefined),
+      waChatJid: remoteJid,
+      customerDisplayName: normalize((await resolveGroupDisplayName(remoteJid, socket)) ?? message.pushName ?? undefined),
       customerAvatarUrl,
       waMessageId,
+      replyToWaMessageId: quotedContext.replyToWaMessageId,
+      replyPreviewText: quotedContext.replyPreviewText,
       type: kind.type,
       text: kind.text,
       mediaId: mediaPath,
@@ -813,9 +963,12 @@ async function processInboundMessage(orgId: string, message: WAMessage, socket: 
   const inboundResult = await storeInboundMessage({
     orgId,
     customerPhoneE164,
-    customerDisplayName: normalize(message.pushName ?? undefined),
+    waChatJid: remoteJid,
+    customerDisplayName: normalize((await resolveGroupDisplayName(remoteJid, socket)) ?? message.pushName ?? undefined),
     customerAvatarUrl,
     waMessageId,
+    replyToWaMessageId: quotedContext.replyToWaMessageId,
+    replyPreviewText: quotedContext.replyPreviewText,
     type: kind.type,
     text: kind.text,
     mediaId: mediaPath,
@@ -1349,12 +1502,21 @@ function toJid(phoneE164: string): string {
 export async function sendBaileysTextMessage(input: {
   orgId: string;
   toPhoneE164: string;
+  toJid?: string;
   text: string;
+  quotedWaMessageId?: string;
 }): Promise<string | null> {
   const send = async (socket: WASocket) => {
-    const jid = await resolveOutboundDestinationJid(input.orgId, input.toPhoneE164, socket);
+    const jid = await resolveOutboundDestinationJid(input.orgId, input.toPhoneE164, socket, input.toJid);
     return socket.sendMessage(jid, {
-      text: input.text
+      text: input.text,
+      ...(normalize(input.quotedWaMessageId ?? undefined)
+        ? {
+            contextInfo: {
+              stanzaId: normalize(input.quotedWaMessageId ?? undefined)
+            }
+          }
+        : {})
     });
   };
 
@@ -1378,19 +1540,27 @@ export async function sendBaileysTextMessage(input: {
 export async function sendBaileysMediaMessage(input: {
   orgId: string;
   toPhoneE164: string;
+  toJid?: string;
   type: "IMAGE" | "VIDEO" | "AUDIO" | "DOCUMENT";
   fileName: string;
   mimeType?: string;
   caption?: string;
+  quotedWaMessageId?: string;
   buffer: Buffer;
 }): Promise<string | null> {
   const send = async (socket: WASocket) => {
-    const jid = await resolveOutboundDestinationJid(input.orgId, input.toPhoneE164, socket);
+    const jid = await resolveOutboundDestinationJid(input.orgId, input.toPhoneE164, socket, input.toJid);
+    const contextInfo = normalize(input.quotedWaMessageId ?? undefined)
+      ? {
+          stanzaId: normalize(input.quotedWaMessageId ?? undefined)
+        }
+      : undefined;
     if (input.type === "IMAGE") {
       const response = await socket.sendMessage(jid, {
         image: input.buffer,
         caption: normalize(input.caption ?? undefined) || undefined,
-        mimetype: normalize(input.mimeType ?? "image/jpeg")
+        mimetype: normalize(input.mimeType ?? "image/jpeg"),
+        ...(contextInfo ? { contextInfo } : {})
       });
       return normalize(response?.key?.id ?? undefined);
     }
@@ -1399,7 +1569,8 @@ export async function sendBaileysMediaMessage(input: {
       const response = await socket.sendMessage(jid, {
         video: input.buffer,
         caption: normalize(input.caption ?? undefined) || undefined,
-        mimetype: normalize(input.mimeType ?? "video/mp4")
+        mimetype: normalize(input.mimeType ?? "video/mp4"),
+        ...(contextInfo ? { contextInfo } : {})
       });
       return normalize(response?.key?.id ?? undefined);
     }
@@ -1408,7 +1579,8 @@ export async function sendBaileysMediaMessage(input: {
       const response = await socket.sendMessage(jid, {
         audio: input.buffer,
         mimetype: normalize(input.mimeType ?? "audio/ogg"),
-        ptt: false
+        ptt: false,
+        ...(contextInfo ? { contextInfo } : {})
       });
       return normalize(response?.key?.id ?? undefined);
     }
@@ -1417,7 +1589,8 @@ export async function sendBaileysMediaMessage(input: {
       document: input.buffer,
       fileName: normalize(input.fileName) || "document",
       caption: normalize(input.caption ?? undefined) || undefined,
-      mimetype: normalize(input.mimeType ?? "application/octet-stream")
+      mimetype: normalize(input.mimeType ?? "application/octet-stream"),
+      ...(contextInfo ? { contextInfo } : {})
     });
     return normalize(response?.key?.id ?? undefined);
   };
@@ -1440,15 +1613,19 @@ export async function sendBaileysMediaMessage(input: {
 export async function sendBaileysTemplateLikeMessage(input: {
   orgId: string;
   toPhoneE164: string;
+  toJid?: string;
   templateName: string;
   languageCode: string;
   components: Array<Record<string, unknown>>;
+  quotedWaMessageId?: string;
 }): Promise<string | null> {
   const renderedComponents = input.components.length > 0 ? `\n\n${JSON.stringify(input.components)}` : "";
   return sendBaileysTextMessage({
     orgId: input.orgId,
     toPhoneE164: input.toPhoneE164,
-    text: `[Template:${input.templateName}][${input.languageCode}]${renderedComponents}`
+    toJid: input.toJid,
+    text: `[Template:${input.templateName}][${input.languageCode}]${renderedComponents}`,
+    quotedWaMessageId: input.quotedWaMessageId
   });
 }
 

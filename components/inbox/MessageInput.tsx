@@ -13,20 +13,24 @@ type MessageInputProps = {
   density?: "compact" | "comfy";
   disabled: boolean;
   textValue: string;
+  replyTarget?: { id: string; text: string } | null;
+  onClearReplyTarget?: () => void;
   onTextValueChange: (nextValue: string) => void;
-  onSendText: (text: string) => Promise<void>;
+  onSendText: (text: string, options?: { replyToMessageId?: string | null; replyPreviewText?: string | null }) => Promise<void>;
   onSendAttachment: (attachment: {
     file: File;
     fileName: string;
     mimeType: string;
     size: number;
-  }) => Promise<void>;
+  }, options?: { replyToMessageId?: string | null }) => Promise<void>;
 };
 
 export function MessageInput({
   density = "comfy",
   disabled,
   textValue,
+  replyTarget = null,
+  onClearReplyTarget,
   onTextValueChange,
   onSendText,
   onSendAttachment
@@ -34,7 +38,6 @@ export function MessageInput({
   const inputRef = useRef<HTMLTextAreaElement | null>(null);
   const emojiButtonRef = useRef<HTMLButtonElement | null>(null);
   const { resolvedTheme } = useTheme();
-  const [isSending, setIsSending] = useState(false);
   const [pendingAttachment, setPendingAttachment] = useState<{
     file: File;
     fileName: string;
@@ -47,16 +50,24 @@ export function MessageInput({
 
   async function submitText() {
     const payload = textValue.trim();
-    if (!payload || disabled || isSending) {
+    if (!payload || disabled) {
       return;
     }
 
-    setIsSending(true);
+    // Clear draft immediately so user can continue typing while previous message is in-flight.
+    onTextValueChange("");
     try {
-      await onSendText(payload);
+      await onSendText(payload, {
+        replyToMessageId: replyTarget?.id ?? null,
+        replyPreviewText: replyTarget?.text ?? null
+      });
       onTextValueChange("");
-    } finally {
-      setIsSending(false);
+      onClearReplyTarget?.();
+      requestAnimationFrame(() => {
+        inputRef.current?.focus();
+      });
+    } catch {
+      // ignore; parent handles error feedback
     }
   }
 
@@ -73,8 +84,14 @@ export function MessageInput({
     setAttachmentError(null);
     setIsSendingAttachment(true);
     try {
-      await onSendAttachment(pendingAttachment);
+      await onSendAttachment(pendingAttachment, {
+        replyToMessageId: replyTarget?.id ?? null
+      });
       setPendingAttachment(null);
+      onClearReplyTarget?.();
+      requestAnimationFrame(() => {
+        inputRef.current?.focus();
+      });
     } finally {
       setIsSendingAttachment(false);
     }
@@ -102,6 +119,17 @@ export function MessageInput({
       className={`space-y-2 border-t border-border/80 bg-card/95 backdrop-blur-sm ${density === "compact" ? "px-3 py-2 sm:px-4 sm:py-3" : "px-3 py-3 sm:px-4 sm:py-4"}`}
       onSubmit={handleSubmit}
     >
+      {replyTarget ? (
+        <div className="flex items-start justify-between gap-2 rounded-xl border border-primary/25 bg-primary/10 px-3 py-2">
+          <div className="min-w-0">
+            <p className="text-[11px] font-medium uppercase tracking-wide text-primary">Balas pesan</p>
+            <p className="line-clamp-2 break-words text-xs text-foreground/90">{replyTarget.text}</p>
+          </div>
+          <Button type="button" variant="ghost" size="sm" className="h-7 px-2 text-xs" onClick={onClearReplyTarget}>
+            Batal
+          </Button>
+        </div>
+      ) : null}
       <div
         className={`relative flex items-end gap-2 rounded-2xl border border-border bg-background/95 shadow-sm transition ${
           density === "compact" ? "px-2 py-1.5" : "px-2 py-2 sm:px-3 sm:py-2"
@@ -113,7 +141,7 @@ export function MessageInput({
           onChange={(event) => onTextValueChange(event.target.value)}
           onKeyDown={handleKeyDown}
           placeholder="Ketik pesan..."
-          disabled={disabled || isSending}
+          disabled={disabled}
           rows={1}
           className="max-h-40 min-h-8 flex-1 resize-none border-0 bg-transparent px-0 py-0 text-sm shadow-none placeholder:text-muted-foreground/80 focus-visible:outline-none"
         />
@@ -160,8 +188,8 @@ export function MessageInput({
             />
           </label>
         </div>
-        <Button type="submit" disabled={disabled || isSending} className="h-9 rounded-xl px-4 shadow-md shadow-primary/20 sm:px-6">
-          {isSending ? "Mengirim..." : "Kirim"}
+        <Button type="submit" disabled={disabled} className="h-9 rounded-xl px-4 shadow-md shadow-primary/20 sm:px-6">
+          Kirim
         </Button>
         {isEmojiOpen ? (
           <div className="absolute bottom-[calc(100%_+_12px)] right-0 z-20 overflow-hidden rounded-2xl border border-border bg-card shadow-2xl">

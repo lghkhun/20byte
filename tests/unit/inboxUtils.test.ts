@@ -11,6 +11,9 @@ function mockMessage(type: MessageItem["type"], fileName: string | null = null):
   return {
     id: "m1",
     waMessageId: null,
+    replyToMessageId: null,
+    replyToWaMessageId: null,
+    replyPreviewText: null,
     direction: "INBOUND",
     type,
     text: null,

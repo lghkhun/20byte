@@ -1,9 +1,17 @@
 "use client";
 
+import { ChevronDown, Copy, CornerUpLeft, Info, Receipt } from "lucide-react";
+
 import { MediaContent } from "@/components/inbox/bubble/MediaContent";
 import { formatTime, normalizeRuntimeUrl, renderMediaLabel } from "@/components/inbox/bubble/utils";
 import type { MessageItem } from "@/components/inbox/types";
 import { Button } from "@/components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger
+} from "@/components/ui/dropdown-menu";
 
 function renderTextWithLinks(text: string) {
   const urlRegex = /(https?:\/\/[^\s]+)/gi;
@@ -33,6 +41,7 @@ type MessageBubbleProps = {
   density?: "compact" | "comfy";
   isEmphasized?: boolean;
   message: MessageItem;
+  onReplyMessage?: (message: MessageItem) => void;
   onSelectProofMessage?: (messageId: string) => void;
   onRetryOutboundMessage?: (messageId: string) => void;
 };
@@ -87,6 +96,7 @@ export function MessageBubble({
   density = "comfy",
   isEmphasized = false,
   message,
+  onReplyMessage,
   onSelectProofMessage,
   onRetryOutboundMessage
 }: MessageBubbleProps) {
@@ -118,12 +128,14 @@ export function MessageBubble({
           </p>
         ) : null}
 
-        {isOutbound && message.sendStatus ? (
-          <div className="mb-1">
-            <span className="inline-flex rounded-full border border-border/70 bg-background/60 px-2 py-0.5 text-[11px] text-muted-foreground">
-              {message.sendStatus}
-              {message.sendAttemptCount > 0 ? ` • attempt ${message.sendAttemptCount}` : ""}
-            </span>
+        {message.replyToMessageId || message.replyToWaMessageId ? (
+          <div className="mb-2 rounded-lg border border-border/70 bg-background/60 px-2.5 py-1.5">
+            <p className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+              {isOutbound ? "Membalas" : "Balasan"}
+            </p>
+            <p className="line-clamp-2 break-words text-xs text-foreground/90">
+              {message.replyPreviewText?.trim() || "Pesan yang dibalas"}
+            </p>
           </div>
         ) : null}
 
@@ -140,20 +152,6 @@ export function MessageBubble({
           <p className="emoji-render whitespace-pre-wrap break-words text-sm leading-relaxed text-foreground">
             {renderTextWithLinks(message.text)}
           </p>
-        ) : null}
-
-        {canUseAsProof ? (
-          <div className="mt-2">
-            <Button
-              type="button"
-              variant="secondary"
-              size="sm"
-              onClick={() => onSelectProofMessage?.(message.id)}
-              className="h-7 rounded-md border border-border/70 px-2.5 text-[11px]"
-            >
-              Use as payment proof
-            </Button>
-          </div>
         ) : null}
 
         {isOutbound && message.sendStatus === "FAILED" ? (
@@ -182,6 +180,51 @@ export function MessageBubble({
               {deliveryIndicator.icon}
             </span>
           ) : null}
+        </div>
+
+        <div className="absolute right-1.5 top-1.5 opacity-0 transition-opacity group-hover:opacity-100">
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button type="button" size="icon" variant="ghost" className="h-6 w-6 rounded-full text-muted-foreground/90">
+                <ChevronDown className="h-3.5 w-3.5" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align={isOutbound ? "end" : "start"} className="w-44">
+              <DropdownMenuItem
+                onSelect={() => onReplyMessage?.(message)}
+                className="flex items-center gap-2"
+              >
+                <CornerUpLeft className="h-4 w-4" />
+                Balas
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                onSelect={() => {
+                  const text = message.text?.trim() || message.replyPreviewText?.trim() || "";
+                  if (!text) {
+                    return;
+                  }
+                  void navigator.clipboard?.writeText(text);
+                }}
+                className="flex items-center gap-2"
+              >
+                <Copy className="h-4 w-4" />
+                Salin
+              </DropdownMenuItem>
+              {canUseAsProof ? (
+                <DropdownMenuItem
+                  onSelect={() => onSelectProofMessage?.(message.id)}
+                  className="flex items-center gap-2"
+                >
+                  <Receipt className="h-4 w-4" />
+                  Use as payment proof
+                </DropdownMenuItem>
+              ) : null}
+              <DropdownMenuItem className="flex items-center gap-2 text-muted-foreground">
+                <Info className="h-4 w-4" />
+                Info pesan
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
         </div>
       </article>
     </div>

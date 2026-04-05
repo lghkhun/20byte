@@ -8,6 +8,7 @@ import { ServiceError } from "@/server/services/serviceError";
 type SendMessageRequest = {
   orgId?: unknown;
   conversationId?: unknown;
+  replyToMessageId?: unknown;
   type?: unknown;
   text?: unknown;
   templateName?: unknown;
@@ -99,6 +100,7 @@ export async function POST(request: NextRequest) {
       actorUserId: auth.session.userId,
       orgId,
       conversationId: typeof body.conversationId === "string" ? body.conversationId : "",
+      replyToMessageId: typeof body.replyToMessageId === "string" ? body.replyToMessageId : undefined,
       type,
       text: typeof body.text === "string" ? body.text : undefined,
       templateName: typeof body.templateName === "string" ? body.templateName : undefined,

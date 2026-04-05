@@ -62,6 +62,7 @@ export async function sendOutboundMessage(input: SendOutboundMessageInput): Prom
 
   await requireInboxMembership(input.actorUserId, orgId);
   const conversation = await getConversationWithCustomer(orgId, conversationId);
+  const destinationJid = normalize(conversation.waChatJid ?? "") || undefined;
   const replyToMessageId = normalize(input.replyToMessageId ?? "");
   const replyTarget = replyToMessageId
     ? await prisma.message.findFirst({
@@ -157,6 +158,7 @@ export async function sendOutboundMessage(input: SendOutboundMessageInput): Prom
         waMessageId = await sendOutboundTextWithRetry({
           orgId: connection.orgId,
           to: conversation.customer.phoneE164,
+          toJid: destinationJid,
           text,
           quotedWaMessageId: replyToWaMessageId ?? undefined
         });
@@ -251,6 +253,7 @@ export async function sendOutboundMessage(input: SendOutboundMessageInput): Prom
         waMessageId = await sendOutboundMediaWithRetry({
           orgId: connection.orgId,
           to: conversation.customer.phoneE164,
+          toJid: destinationJid,
           type: mediaType,
           fileName: mediaFileName,
           mimeType: input.mimeType,
@@ -349,6 +352,7 @@ export async function sendOutboundMessage(input: SendOutboundMessageInput): Prom
       waMessageId = await sendOutboundTemplateWithRetry({
         orgId: connection.orgId,
         to: conversation.customer.phoneE164,
+        toJid: destinationJid,
         templateName,
         languageCode: templateLanguageCode,
         components: templateComponents,

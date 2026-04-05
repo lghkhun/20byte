@@ -9,7 +9,10 @@ import { ServiceError } from "@/server/services/serviceError";
 type StoreExternalOutboundInput = {
   orgId: string;
   customerPhoneE164: string;
+  waChatJid?: string;
   waMessageId: string;
+  replyToWaMessageId?: string;
+  replyPreviewText?: string;
   customerDisplayName?: string;
   customerAvatarUrl?: string;
   type: MessageType;
@@ -46,7 +49,10 @@ function normalizeContext(input: StoreExternalOutboundInput) {
   return {
     orgId: normalize(input.orgId),
     customerPhoneE164: normalize(input.customerPhoneE164),
+    waChatJid: normalizeOptional(input.waChatJid),
     waMessageId: normalize(input.waMessageId),
+    replyToWaMessageId: normalizeOptional(input.replyToWaMessageId),
+    replyPreviewText: normalizeMessageText(input.replyPreviewText),
     customerDisplayName: normalizeOptional(input.customerDisplayName),
     customerAvatarUrl: normalizeOptional(input.customerAvatarUrl),
     type: input.type,
@@ -112,7 +118,38 @@ export async function storeExternalOutboundMessage(input: StoreExternalOutboundI
       context.customerDisplayName ?? undefined,
       context.customerAvatarUrl ?? undefined
     );
-    const conversation = await getOrCreateOpenConversation(tx, context.orgId, customer.id);
+    const conversation = await getOrCreateOpenConversation(tx, context.orgId, customer.id, undefined, context.waChatJid);
+    const replyToWaMessageId = context.replyToWaMessageId?.trim() || null;
+    const replyToMessage = replyToWaMessageId
+      ? await tx.message.findFirst({
+          where: {
+            orgId: context.orgId,
+            conversationId: conversation.id,
+            waMessageId: replyToWaMessageId
+          },
+          select: {
+            id: true,
+            text: true,
+            type: true
+          }
+        })
+      : null;
+    const replyPreviewText =
+      context.replyPreviewText?.trim() ||
+      replyToMessage?.text?.trim() ||
+      (replyToMessage
+        ? replyToMessage.type === "IMAGE"
+          ? "Foto"
+          : replyToMessage.type === "VIDEO"
+            ? "Video"
+            : replyToMessage.type === "AUDIO"
+              ? "Audio"
+              : replyToMessage.type === "DOCUMENT"
+                ? "Dokumen"
+                : replyToMessage.type === "TEMPLATE"
+                  ? "Template"
+                  : "Pesan"
+        : null);
 
     const pendingCandidate = await tx.message.findFirst({
       where: buildPendingMatchWhere(context, conversation.id),
@@ -162,6 +199,9 @@ export async function storeExternalOutboundMessage(input: StoreExternalOutboundI
         waMessageId: context.waMessageId,
         direction: MessageDirection.OUTBOUND,
         type: context.type,
+        replyToMessageId: replyToMessage?.id ?? null,
+        replyToWaMessageId,
+        replyPreviewText: replyPreviewText ? replyPreviewText.slice(0, 180) : null,
         text: context.text,
         mediaId: context.mediaId,
         mediaUrl: context.mediaUrl,

@@ -4,7 +4,9 @@ import { sendBaileysMediaMessage, sendBaileysTemplateLikeMessage, sendBaileysTex
 export async function sendOutboundTextWithRetry(params: {
   orgId: string;
   to: string;
+  toJid?: string;
   text: string;
+  quotedWaMessageId?: string;
 }): Promise<string | null> {
   return withRetry(
     "outbound-text-send",
@@ -12,7 +14,9 @@ export async function sendOutboundTextWithRetry(params: {
       sendBaileysTextMessage({
         orgId: params.orgId,
         toPhoneE164: params.to,
-        text: params.text
+        toJid: params.toJid,
+        text: params.text,
+        quotedWaMessageId: params.quotedWaMessageId
       }),
     { retries: 2, baseDelayMs: 600, factor: 2, jitter: true }
   );
@@ -21,9 +25,11 @@ export async function sendOutboundTextWithRetry(params: {
 export async function sendOutboundTemplateWithRetry(params: {
   orgId: string;
   to: string;
+  toJid?: string;
   templateName: string;
   languageCode: string;
   components: Array<Record<string, unknown>>;
+  quotedWaMessageId?: string;
 }): Promise<string | null> {
   return withRetry(
     "outbound-template-send",
@@ -31,9 +37,11 @@ export async function sendOutboundTemplateWithRetry(params: {
       sendBaileysTemplateLikeMessage({
         orgId: params.orgId,
         toPhoneE164: params.to,
+        toJid: params.toJid,
         templateName: params.templateName,
         languageCode: params.languageCode,
-        components: params.components
+        components: params.components,
+        quotedWaMessageId: params.quotedWaMessageId
       }),
     { retries: 2, baseDelayMs: 600, factor: 2, jitter: true }
   );
@@ -42,10 +50,12 @@ export async function sendOutboundTemplateWithRetry(params: {
 export async function sendOutboundMediaWithRetry(params: {
   orgId: string;
   to: string;
+  toJid?: string;
   type: "IMAGE" | "VIDEO" | "AUDIO" | "DOCUMENT";
   fileName: string;
   mimeType?: string;
   caption?: string;
+  quotedWaMessageId?: string;
   buffer: Buffer;
 }): Promise<string | null> {
   return withRetry(
@@ -54,10 +64,12 @@ export async function sendOutboundMediaWithRetry(params: {
       sendBaileysMediaMessage({
         orgId: params.orgId,
         toPhoneE164: params.to,
+        toJid: params.toJid,
         type: params.type,
         fileName: params.fileName,
         mimeType: params.mimeType,
         caption: params.caption,
+        quotedWaMessageId: params.quotedWaMessageId,
         buffer: params.buffer
       }),
     { retries: 2, baseDelayMs: 600, factor: 2, jitter: true }

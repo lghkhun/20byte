@@ -35,11 +35,14 @@ function buildInboundContext(input: StoreInboundMessageInput) {
   return {
     orgId,
     customerPhoneE164,
+    waChatJid: normalizeOptional(input.waChatJid),
     waMessageId,
     customerDisplayName: normalizeOptional(input.customerDisplayName),
     customerAvatarUrl: normalizeOptional(input.customerAvatarUrl),
     shortlinkCode: resolvedShortlinkCode,
     trackingId: normalizeOptional(input.trackingId) ?? trackingExtract.trackingId,
+    replyToWaMessageId: normalizeOptional(input.replyToWaMessageId),
+    replyPreviewText: normalizeMessageText(input.replyPreviewText),
     text: normalizeMessageText(invisibleExtract.cleanText),
     mediaId: normalizeOptional(input.mediaId),
     mediaUrl: normalizeOptional(input.mediaUrl),
@@ -110,7 +113,7 @@ export async function storeInboundMessage(input: StoreInboundMessageInput): Prom
         attribution
       ),
     getOrCreateConversation: async (tx: Prisma.TransactionClient, customerId, attribution, customer) =>
-      getOrCreateOpenConversation(tx, context.orgId, customerId, resolveConversationAttribution(customer, attribution))
+      getOrCreateOpenConversation(tx, context.orgId, customerId, resolveConversationAttribution(customer, attribution), context.waChatJid)
   });
 
   publishMessageNewEventNonBlocking({

@@ -10,6 +10,7 @@ import { ServiceError } from "@/server/services/serviceError";
 type SendMessageRequest = {
   orgId?: unknown;
   conversationId?: unknown;
+  replyToMessageId?: unknown;
   type?: unknown;
   text?: unknown;
   mimeType?: unknown;
@@ -125,6 +126,7 @@ async function parseBody(request: NextRequest): Promise<{
       body: {
         orgId: formData.get("orgId"),
         conversationId: formData.get("conversationId"),
+        replyToMessageId: formData.get("replyToMessageId"),
         type: formData.get("type") ?? attachment?.type,
         text: formData.get("text"),
         mimeType: attachment?.mimeType,
@@ -212,6 +214,7 @@ export async function POST(request: NextRequest) {
       actorUserId: auth.session.userId,
       orgId,
       conversationId: typeof body.conversationId === "string" ? body.conversationId : "",
+      replyToMessageId: typeof body.replyToMessageId === "string" ? body.replyToMessageId : undefined,
       dispatchMode: "SYNC",
       type,
       text: typeof body.text === "string" ? body.text : undefined,

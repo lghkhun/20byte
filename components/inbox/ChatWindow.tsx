@@ -25,13 +25,13 @@ type ChatWindowProps = {
   isConversationSelected: boolean;
   isCustomerTyping: boolean;
   error: string | null;
-  onSendText: (text: string) => Promise<void>;
+  onSendText: (text: string, options?: { replyToMessageId?: string | null; replyPreviewText?: string | null }) => Promise<void>;
   onSendAttachment: (attachment: {
     file: File;
     fileName: string;
     mimeType: string;
     size: number;
-  }) => Promise<void>;
+  }, options?: { replyToMessageId?: string | null }) => Promise<void>;
   isCrmPanelOpen: boolean;
   onToggleCrmPanel: () => void;
   onToggleConversationStatus: () => Promise<void>;
@@ -89,6 +89,7 @@ export function ChatWindow({
   const [isResolving, setIsResolving] = useState(false);
   const [resolveError, setResolveError] = useState<string | null>(null);
   const [draftByConversation, setDraftByConversation] = useState<Record<string, string>>({});
+  const [replyTarget, setReplyTarget] = useState<{ id: string; text: string } | null>(null);
   const lastMessageId = messages.length > 0 ? messages[messages.length - 1]?.id ?? null : null;
   const trimmedSearchQuery = searchQuery.trim();
   const normalizedSearchQuery = trimmedSearchQuery.toLowerCase();
@@ -108,6 +109,7 @@ export function ChatWindow({
     setSearchMatches([]);
     setSearchError(null);
     setIsSearchingMessages(false);
+    setReplyTarget(null);
   }, [conversation?.id]);
 
   useEffect(() => {
@@ -347,15 +349,8 @@ export function ChatWindow({
     }));
   }
 
-  async function handleSendText(text: string) {
-    await onSendText(text);
-    if (!conversation) {
-      return;
-    }
-    setDraftByConversation((current) => ({
-      ...current,
-      [conversation.id]: ""
-    }));
+  async function handleSendText(text: string, options?: { replyToMessageId?: string | null; replyPreviewText?: string | null }) {
+    await onSendText(text, options);
   }
 
   async function jumpToMatchedMessage(messageId: string) {
@@ -486,7 +481,7 @@ export function ChatWindow({
         ) : null}
 
         {isConversationSelected && !isLoading && !error && messages.length > 0 ? (
-          <div key={`${conversation?.id ?? "none"}-${messages.length}`} className="inbox-fade-slide space-y-3">
+          <div className="inbox-fade-slide space-y-3">
             {hasMoreMessages ? (
               <div className="flex justify-center">
                 <span className="rounded-full border border-border bg-card/90 px-3 py-1 text-[11px] text-muted-foreground">
@@ -525,6 +520,25 @@ export function ChatWindow({
                     density={density}
                     isEmphasized={message.id === animatedMessageId}
                     message={message}
+                    onReplyMessage={(targetMessage) => {
+                      const preview = (targetMessage.text?.trim() ||
+                        targetMessage.replyPreviewText?.trim() ||
+                        (targetMessage.type === "IMAGE"
+                          ? "Foto"
+                          : targetMessage.type === "VIDEO"
+                            ? "Video"
+                            : targetMessage.type === "AUDIO"
+                              ? "Audio"
+                              : targetMessage.type === "DOCUMENT"
+                                ? "Dokumen"
+                                : targetMessage.type === "TEMPLATE"
+                                  ? `Template: ${targetMessage.templateName ?? "Template"}`
+                                  : "Pesan")) as string;
+                      setReplyTarget({
+                        id: targetMessage.id,
+                        text: preview
+                      });
+                    }}
                     onSelectProofMessage={onSelectProofMessage}
                     onRetryOutboundMessage={(messageId) => {
                       void onRetryOutboundMessage(messageId);
@@ -539,12 +553,12 @@ export function ChatWindow({
       )}
 
       {showScrollToLatest && isConversationSelected ? (
-        <div className="pointer-events-none absolute bottom-24 right-4 z-[3] sm:right-7">
+        <div className="pointer-events-none absolute bottom-[5.15rem] left-1/2 z-[3] -translate-x-1/2">
           <Button
             type="button"
-            variant="secondary"
+            variant="ghost"
             size="sm"
-            className="pointer-events-auto rounded-full shadow-md"
+            className="pointer-events-auto h-9 rounded-full border border-emerald-600/35 bg-emerald-500/12 px-4 text-emerald-900 shadow-[0_10px_28px_-12px_rgba(16,185,129,0.45)] backdrop-blur-md transition hover:bg-emerald-500/18 hover:text-emerald-950 dark:border-emerald-400/45 dark:bg-emerald-500/15 dark:text-emerald-100 dark:shadow-[0_10px_28px_-12px_rgba(16,185,129,0.75)] dark:hover:bg-emerald-500/22 dark:hover:text-emerald-50"
             onClick={() => {
               if (!scrollRef.current) {
                 return;
@@ -566,9 +580,11 @@ export function ChatWindow({
           density={density}
           disabled={!isConversationSelected}
           textValue={activeDraft}
+          replyTarget={replyTarget}
+          onClearReplyTarget={() => setReplyTarget(null)}
           onTextValueChange={setDraftValue}
           onSendText={handleSendText}
-          onSendAttachment={onSendAttachment}
+          onSendAttachment={async (attachment, options) => onSendAttachment(attachment, options)}
         />
       ) : null}
 
