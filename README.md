@@ -217,6 +217,9 @@ Start application containers in Docker:
 docker compose up -d --build
 ```
 
+For local Docker development with hot-reload, `docker-compose.override.yml` is loaded automatically.  
+For VPS production, use [deploy.sh](/mnt/diskD/DEV/20byte/scripts/deploy.sh) because it pins Compose to [docker-compose.yml](/mnt/diskD/DEV/20byte/docker-compose.yml) only.
+
 Connection mode note:
 - Host mode (`npm run dev`): use `.env` URLs (`DATABASE_URL=mysql://root:password@localhost:3307/20byte`, `REDIS_URL=redis://localhost:6379`).
 - Container mode (`docker compose ...`): `web`/`worker` use internal Docker DNS (`mysql:3306`, `redis:6379`) from `docker-compose.yml`.
@@ -426,6 +429,13 @@ Helper files:
 - deploy script: [scripts/deploy.sh](/mnt/diskD/DEV/20byte/scripts/deploy.sh)
 - nginx example: [20byte.conf.example](/mnt/diskD/DEV/20byte/deploy/nginx/20byte.conf.example)
 - caddy example: [Caddyfile.example](/mnt/diskD/DEV/20byte/deploy/caddy/Caddyfile.example)
+- auto deploy workflow: [deploy-vps.yml](/mnt/diskD/DEV/20byte/.github/workflows/deploy-vps.yml)
+
+GitHub auto deploy setup:
+- tambahkan GitHub Actions secrets: `VPS_HOST`, `VPS_PORT`, `VPS_USER`, `VPS_PATH`, `VPS_SSH_KEY`
+- buat `.env` production di VPS satu kali di folder target `VPS_PATH`
+- setiap push ke branch `main`, workflow akan sync source terbaru ke VPS lalu menjalankan `./scripts/deploy.sh`
+- workflow tidak mengirim `.env`, `.runtime`, `node_modules`, atau `.next` dari GitHub runner ke VPS
 
 ---
 

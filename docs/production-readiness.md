@@ -72,3 +72,5 @@ Kriteria lulus:
 - volume runtime WhatsApp persisten (`runtime_data`) tersedia
 - helper deploy shell tersedia dan lolos `sh -n scripts/deploy.sh`
 - reverse proxy example tersedia untuk minimal satu opsi operator (`nginx` atau `caddy`)
+- health endpoint aplikasi tersedia di `/api/health`
+- auto deploy workflow GitHub ke VPS tersedia dan terdokumentasi

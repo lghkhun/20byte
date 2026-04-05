@@ -10,7 +10,7 @@ if [ ! -f ".env" ]; then
   exit 1
 fi
 
-COMPOSE_CMD="${COMPOSE_CMD:-docker compose}"
+COMPOSE_CMD="${COMPOSE_CMD:-docker compose -f docker-compose.yml}"
 PROJECT_NAME="${COMPOSE_PROJECT_NAME:-20byte}"
 
 echo "[deploy] validating docker compose config..."
@@ -27,6 +27,14 @@ $COMPOSE_CMD --project-name "$PROJECT_NAME" up -d
 
 echo "[deploy] current status:"
 $COMPOSE_CMD --project-name "$PROJECT_NAME" ps
+
+echo "[deploy] checking local health endpoint..."
+if command -v curl >/dev/null 2>&1; then
+  curl -fsS "http://127.0.0.1:${APP_PORT:-3000}/api/health" >/dev/null
+  echo "[deploy] healthcheck passed"
+else
+  echo "[deploy] curl not found, skipping local health probe"
+fi
 
 echo "[deploy] tail logs if needed:"
 echo "  $COMPOSE_CMD --project-name \"$PROJECT_NAME\" logs -f migrate web worker"
