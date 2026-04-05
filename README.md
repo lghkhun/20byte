@@ -202,7 +202,7 @@ npm install
 Start local infrastructure (MySQL + Redis):
 
 ```
-docker compose up -d
+docker compose up -d mysql redis
 ```
 
 Default host ports:
@@ -211,15 +211,15 @@ Default host ports:
 
 If you want MySQL on `3306`, set `MYSQL_PORT=3306` in `.env`.
 
-Start application containers for pre-deployment checks (web + worker):
+Start application containers in Docker:
 
 ```
-docker compose --profile app up -d --build
+docker compose up -d --build
 ```
 
 Connection mode note:
 - Host mode (`npm run dev`): use `.env` URLs (`DATABASE_URL=mysql://root:password@localhost:3307/20byte`, `REDIS_URL=redis://localhost:6379`).
-- Container mode (`docker compose --profile app ...`): `web`/`worker` use internal Docker DNS (`mysql:3306`, `redis:6379`) from `docker-compose.yml`.
+- Container mode (`docker compose ...`): `web`/`worker` use internal Docker DNS (`mysql:3306`, `redis:6379`) from `docker-compose.yml`.
 
 Stop infrastructure:
 
@@ -400,6 +400,32 @@ External services:
 Cloudflare R2  
 Ably  
 WhatsApp Cloud API
+
+## Docker Compose on VPS
+
+Jika VPS sudah terinstall Docker + Docker Compose plugin, alur deploy paling sederhana adalah:
+
+```bash
+cp .env.docker.example .env
+./scripts/deploy.sh
+```
+
+Catatan penting:
+- `docker-compose.yml` sekarang akan menjalankan service `migrate` dulu sebelum `web` dan `worker` start.
+- state WhatsApp Baileys disimpan di volume Docker `runtime_data`, jadi pairing session tidak hilang saat container restart.
+- MySQL dan Redis dibind ke `127.0.0.1` saja, jadi tetap bisa dipakai dari host lokal tanpa dibuka ke network publik VPS.
+- aplikasi tetap diekspos lewat `${APP_PORT:-3000}` dan sebaiknya diletakkan di belakang reverse proxy seperti Nginx Proxy Manager, Caddy, atau Traefik.
+
+Checklist minimum di VPS:
+- isi `.env` dengan domain produksi yang benar untuk `APP_URL` dan `NEXTAUTH_URL`
+- gunakan password kuat untuk `MYSQL_ROOT_PASSWORD`, `MYSQL_PASSWORD`, dan `NEXTAUTH_SECRET`
+- set `WHATSAPP_MOCK_MODE=false` bila ingin koneksi device WhatsApp asli
+- jalankan `docker compose logs -f migrate web worker` pada boot pertama untuk memastikan migrasi dan app start normal
+
+Helper files:
+- deploy script: [scripts/deploy.sh](/mnt/diskD/DEV/20byte/scripts/deploy.sh)
+- nginx example: [20byte.conf.example](/mnt/diskD/DEV/20byte/deploy/nginx/20byte.conf.example)
+- caddy example: [Caddyfile.example](/mnt/diskD/DEV/20byte/deploy/caddy/Caddyfile.example)
 
 ---
 

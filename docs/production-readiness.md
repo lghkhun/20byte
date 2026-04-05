@@ -54,3 +54,21 @@ Verifikasi:
 ## 5) Release Decision
 
 Siap produksi jika semua poin 1-4 lulus tanpa regresi kritikal.
+
+## 6) Docker Compose VPS Gate
+
+Untuk deployment VPS berbasis Docker, verifikasi:
+
+```bash
+cp .env.docker.example .env
+docker compose config
+docker compose build
+```
+
+Kriteria lulus:
+- `docker compose config` valid tanpa missing variable error
+- image `web` dan `worker` bisa di-build penuh
+- service `migrate` tersedia untuk menjalankan `prisma migrate deploy`
+- volume runtime WhatsApp persisten (`runtime_data`) tersedia
+- helper deploy shell tersedia dan lolos `sh -n scripts/deploy.sh`
+- reverse proxy example tersedia untuk minimal satu opsi operator (`nginx` atau `caddy`)
