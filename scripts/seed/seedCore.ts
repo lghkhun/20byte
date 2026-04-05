@@ -88,6 +88,10 @@ export async function seedCore(ctx: SeedContext) {
     where: {
       orgId: {
         in: ["seed_org_alpha", "seed_org_beta"]
+      },
+      NOT: {
+        metaBusinessId: "baileys",
+        wabaId: "baileys"
       }
     }
   });

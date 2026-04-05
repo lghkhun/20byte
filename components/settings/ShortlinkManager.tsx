@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Copy, Link2, MoreHorizontal, Pencil, Trash2 } from "lucide-react";
+import { Copy, Link2, MoreHorizontal, Pencil, Plus, Trash2 } from "lucide-react";
 
 import { fetchOrganizationsCached } from "@/lib/client/orgsCache";
 import { notifyError, notifySuccess } from "@/lib/ui/notify";
@@ -43,12 +43,11 @@ type ShortlinkItem = {
   visitorCount: number;
 };
 
-type BaileysConnectionPayload = {
+type ShortlinkConnectionPayload = {
   data?: {
     connection?: {
-      connectedAccount?: {
-        displayPhone?: string | null;
-      } | null;
+      connectedPhone?: string | null;
+      isBaileys?: boolean;
     } | null;
   };
 } & ApiError;
@@ -145,6 +144,8 @@ export function ShortlinkManager({ variant = "settings" }: { variant?: "settings
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
   const [editingShortlinkId, setEditingShortlinkId] = useState<string | null>(null);
   const [connectedPhone, setConnectedPhone] = useState("");
+  const [isConnectionLoading, setIsConnectionLoading] = useState(false);
+  const [hasResolvedConnection, setHasResolvedConnection] = useState(false);
   const [runtimeOrigin, setRuntimeOrigin] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
@@ -206,6 +207,17 @@ export function ShortlinkManager({ variant = "settings" }: { variant?: "settings
     () => Boolean(campaign.trim() && normalizedConnectedPhone && !isSubmitting),
     [campaign, normalizedConnectedPhone, isSubmitting]
   );
+  const connectedPhoneLabel = useMemo(() => {
+    if (connectedPhone) {
+      return connectedPhone;
+    }
+
+    if (isConnectionLoading || !hasResolvedConnection) {
+      return "Memuat nomor terhubung...";
+    }
+
+    return "Belum ada nomor terhubung";
+  }, [connectedPhone, hasResolvedConnection, isConnectionLoading]);
   const canOpenPreview = useMemo(() => destinationPreview !== "-", [destinationPreview]);
   const editingShortlink = useMemo(
     () => shortlinks.find((item) => item.id === editingShortlinkId) ?? null,
@@ -336,6 +348,7 @@ export function ShortlinkManager({ variant = "settings" }: { variant?: "settings
     const cached = connectionCacheRef.current.get(orgId);
     if (cached) {
       setConnectedPhone(cached.phone);
+      setHasResolvedConnection(true);
     }
     const isCacheFresh = Boolean(cached && Date.now() - cached.cachedAt < CONNECTION_CACHE_TTL_MS);
     if (isCacheFresh && !options?.force) {
@@ -347,9 +360,10 @@ export function ShortlinkManager({ variant = "settings" }: { variant?: "settings
       const abortController = new AbortController();
       connectionAbortControllerRef.current?.abort();
       connectionAbortControllerRef.current = abortController;
+      setIsConnectionLoading(true);
       try {
-        const response = await fetch(`/api/whatsapp/baileys?orgId=${encodeURIComponent(orgId)}`, { cache: "no-store", signal: abortController.signal });
-        const payload = (await response.json()) as BaileysConnectionPayload;
+        const response = await fetch(`/api/shortlinks/connection?orgId=${encodeURIComponent(orgId)}`, { cache: "no-store", signal: abortController.signal });
+        const payload = (await response.json()) as ShortlinkConnectionPayload;
         if (!isMountedRef.current || requestId !== connectionRequestIdRef.current) {
           return;
         }
@@ -358,19 +372,24 @@ export function ShortlinkManager({ variant = "settings" }: { variant?: "settings
           throw new Error(payload.error?.message ?? "Failed to load connected WhatsApp number.");
         }
 
-        const phone = payload.data?.connection?.connectedAccount?.displayPhone?.trim() ?? "";
+        const phone = payload.data?.connection?.connectedPhone?.trim() ?? "";
         connectionCacheRef.current.set(orgId, {
           phone,
           cachedAt: Date.now()
         });
         setConnectedPhone(phone);
+        setHasResolvedConnection(true);
         recordPerf("shortlinks.connection.load", startedAt, true);
       } catch (error) {
         if (error instanceof DOMException && error.name === "AbortError") {
           return;
         }
+        setHasResolvedConnection(true);
         throw error;
       } finally {
+        if (isMountedRef.current && requestId === connectionRequestIdRef.current) {
+          setIsConnectionLoading(false);
+        }
         if (connectionAbortControllerRef.current === abortController) {
           connectionAbortControllerRef.current = null;
         }
@@ -388,11 +407,17 @@ export function ShortlinkManager({ variant = "settings" }: { variant?: "settings
     await fetchPromise;
   }, [activeBusiness?.id, recordPerf]);
 
+  useEffect(() => {
+    setHasResolvedConnection(false);
+    setIsConnectionLoading(false);
+    setConnectedPhone("");
+  }, [activeBusiness?.id]);
+
   const createAction = useMemo(
     () => (
       <Button
         type="button"
-        className="h-10 rounded-xl"
+        className="h-10 gap-2 rounded-xl bg-primary px-5 font-medium text-primary-foreground shadow-md shadow-primary/20 hover:bg-primary/95"
         onMouseEnter={() => {
           void loadShortlinks();
         }}
@@ -404,6 +429,7 @@ export function ShortlinkManager({ variant = "settings" }: { variant?: "settings
           void loadBaileysConnection({ force: true });
         }}
       >
+        <Plus className="mr-1 h-4 w-4" />
         Tambah Shortlink
       </Button>
     ),
@@ -777,8 +803,8 @@ export function ShortlinkManager({ variant = "settings" }: { variant?: "settings
       {variant === "page" ? (
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div className="flex items-center gap-3 md:gap-4">
-            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-cyan-50 text-cyan-600 md:h-11 md:w-11 md:rounded-2xl">
-              <Link2 className="h-5 w-5" />
+            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-gradient-to-tr from-primary/20 to-primary/5 text-primary shadow-inner ring-1 ring-primary/20 md:h-12 md:w-12 md:rounded-[18px]">
+              <Link2 className="h-5 w-5 md:h-6 md:w-6" />
             </div>
             <div>
               <h1 className="text-xl font-semibold tracking-tight text-foreground md:text-3xl">Shortlink System</h1>
@@ -787,7 +813,7 @@ export function ShortlinkManager({ variant = "settings" }: { variant?: "settings
           </div>
           <Button
             type="button"
-            className="h-10 rounded-xl"
+            className="h-10 gap-2 rounded-xl bg-primary px-5 font-medium text-primary-foreground shadow-md shadow-primary/20 hover:bg-primary/95"
             onMouseEnter={() => {
               void loadShortlinks();
             }}
@@ -799,6 +825,7 @@ export function ShortlinkManager({ variant = "settings" }: { variant?: "settings
               void loadBaileysConnection({ force: true });
             }}
           >
+            <Plus className="mr-1 h-4 w-4" />
             Tambah Shortlink
           </Button>
         </div>
@@ -808,20 +835,20 @@ export function ShortlinkManager({ variant = "settings" }: { variant?: "settings
       <div className="overflow-x-auto rounded-2xl border border-border/70 bg-background/60">
         <Table>
           <TableHeader>
-            <TableRow>
-              <TableHead>Code</TableHead>
-              <TableHead>Short URL</TableHead>
-              <TableHead>No. WA</TableHead>
-              <TableHead>Template Pesan</TableHead>
-              <TableHead>Source</TableHead>
-              <TableHead>Campaign</TableHead>
-              <TableHead>Adset</TableHead>
-              <TableHead>Ad</TableHead>
-              <TableHead>Platform</TableHead>
-              <TableHead>Medium</TableHead>
-              <TableHead className="text-right">Visitors</TableHead>
-              <TableHead>Status</TableHead>
-              <TableHead>Created</TableHead>
+            <TableRow className="bg-muted/40 hover:bg-muted/40">
+              <TableHead className="font-semibold text-foreground/80">Code</TableHead>
+              <TableHead className="font-semibold text-foreground/80">Short URL</TableHead>
+              <TableHead className="font-semibold text-foreground/80">No. WA</TableHead>
+              <TableHead className="font-semibold text-foreground/80">Template Pesan</TableHead>
+              <TableHead className="font-semibold text-foreground/80">Source</TableHead>
+              <TableHead className="font-semibold text-foreground/80">Campaign</TableHead>
+              <TableHead className="font-semibold text-foreground/80">Adset</TableHead>
+              <TableHead className="font-semibold text-foreground/80">Ad</TableHead>
+              <TableHead className="font-semibold text-foreground/80">Platform</TableHead>
+              <TableHead className="font-semibold text-foreground/80">Medium</TableHead>
+              <TableHead className="text-right font-semibold text-foreground/80">Visitors</TableHead>
+              <TableHead className="font-semibold text-foreground/80">Status</TableHead>
+              <TableHead className="font-semibold text-foreground/80">Created</TableHead>
               <TableHead className="w-[56px]" />
             </TableRow>
           </TableHeader>
@@ -847,9 +874,10 @@ export function ShortlinkManager({ variant = "settings" }: { variant?: "settings
                       href={resolveUsableShortUrl(shortlink)}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="text-primary hover:underline"
+                      className="inline-flex items-center gap-1.5 rounded-full border border-primary/20 bg-primary/5 px-2.5 py-1 text-[13px] font-medium tracking-tight text-primary transition-colors hover:bg-primary/10"
                     >
-                      {resolveUsableShortUrl(shortlink)}
+                      <Link2 className="h-3.5 w-3.5 shrink-0" />
+                      <span className="truncate">{resolveUsableShortUrl(shortlink)}</span>
                     </a>
                   </TableCell>
                   <TableCell className="text-muted-foreground">{shortlink.waPhone ? `+${shortlink.waPhone}` : "-"}</TableCell>
@@ -871,7 +899,7 @@ export function ShortlinkManager({ variant = "settings" }: { variant?: "settings
                         }}
                         aria-label={`Toggle shortlink ${shortlink.code}`}
                       />
-                      <span className={shortlink.isEnabled ? "text-xs text-emerald-700" : "text-xs text-muted-foreground"}>
+                      <span className={shortlink.isEnabled ? "text-[10px] font-bold tracking-widest text-emerald-600" : "text-[10px] font-bold tracking-widest text-muted-foreground"}>
                         {shortlink.isEnabled ? "ACTIVE" : "DISABLED"}
                       </span>
                     </div>
@@ -926,72 +954,89 @@ export function ShortlinkManager({ variant = "settings" }: { variant?: "settings
         <DialogContent className="sm:max-w-[640px]">
           <DialogHeader>
             <DialogTitle>Tambah Shortlink</DialogTitle>
-            <DialogDescription>Buat shortlink CTWA otomatis dari nomor WhatsApp Baileys yang terhubung.</DialogDescription>
+            <DialogDescription>Buat shortlink CTWA otomatis dari nomor WhatsApp yang terhubung.</DialogDescription>
           </DialogHeader>
-          <form onSubmit={handleCreateShortlink} className="grid gap-3">
-            <div className="rounded-xl border border-border bg-muted/30 px-3 py-2 text-sm">
-              <p className="text-[11px] uppercase tracking-[0.12em] text-muted-foreground">Nomor Terhubung (Baileys)</p>
-              <p className="mt-1 font-medium text-foreground">{connectedPhone || "Belum ada nomor terhubung"}</p>
-            </div>
-            <div className="rounded-xl border border-border bg-muted/30 px-3 py-2 text-sm">
-              <p className="text-[11px] uppercase tracking-[0.12em] text-muted-foreground">Preview WA URL</p>
-              <p className="mt-1 break-all font-mono text-xs text-foreground">{destinationPreview}</p>
-            </div>
-            <div className="flex justify-end">
-              <Button
-                type="button"
-                variant="outline"
-                className="h-9 rounded-xl"
-                disabled={!canOpenPreview}
-                onClick={() => {
-                  if (!canOpenPreview) {
-                    return;
-                  }
-                  window.open(destinationPreview, "_blank", "noopener,noreferrer");
-                }}
-              >
-                Open wa.me preview
-              </Button>
-            </div>
-            <Input value={campaign} onChange={(event) => setCampaign(event.target.value)} placeholder="Nama shortlink / campaign" className="h-10 rounded-xl" />
-            <p className="-mt-1 text-xs text-muted-foreground">Nama campaign untuk identifikasi link di dashboard dan report iklan.</p>
-            <Input
-              value={templateMessage}
-              onChange={(event) => setTemplateMessage(event.target.value)}
-              placeholder="Template pesan (contoh: Halo, saya tertarik promo ini)"
-              className="h-10 rounded-xl"
-            />
-            <p className="-mt-1 text-xs text-muted-foreground">Pesan ini otomatis terisi saat user dibawa ke chat WhatsApp.</p>
-            <div className="grid gap-3 sm:grid-cols-2">
-              <div className="space-y-1">
-                <Input value={source} onChange={(event) => setSource(event.target.value)} placeholder="Source (meta_ads)" className="h-10 rounded-xl" />
-                <p className="text-xs text-muted-foreground">Sumber traffic, contoh: `meta_ads`, `organic`.</p>
+          <form onSubmit={handleCreateShortlink} className="grid gap-4">
+            <div className="rounded-xl border border-primary/20 bg-gradient-to-br from-primary/5 to-transparent p-4">
+              <div className="mb-4 space-y-1">
+                <p className="text-[11px] font-bold uppercase tracking-wider text-primary/80">Nomor WhatsApp Terhubung</p>
+                <p className="font-medium text-foreground">{connectedPhoneLabel}</p>
               </div>
-              <div className="space-y-1">
-                <Input value={platform} onChange={(event) => setPlatform(event.target.value)} placeholder="Platform (meta)" className="h-10 rounded-xl" />
-                <p className="text-xs text-muted-foreground">Platform iklan, contoh: `meta`.</p>
+              <div className="space-y-2">
+                <p className="text-[11px] font-bold uppercase tracking-wider text-primary/80">Preview WA URL</p>
+                <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                  <p className="min-w-0 break-all font-mono text-xs leading-relaxed text-foreground/90">{destinationPreview}</p>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="h-8 shrink-0 rounded-lg shadow-sm"
+                    disabled={!canOpenPreview}
+                    onClick={() => {
+                      if (!canOpenPreview) return;
+                      window.open(destinationPreview, "_blank", "noopener,noreferrer");
+                    }}
+                  >
+                    Test Link
+                  </Button>
+                </div>
               </div>
             </div>
-            <div className="grid gap-3 sm:grid-cols-2">
-              <div className="space-y-1">
-                <Input value={adset} onChange={(event) => setAdset(event.target.value)} placeholder="Adset" className="h-10 rounded-xl" />
-                <p className="text-xs text-muted-foreground">Nama ad set dari Ads Manager.</p>
+
+            <div className="space-y-1.5">
+              <label className="text-[13px] font-semibold text-foreground">Nama Campaign / Shortlink</label>
+              <Input value={campaign} onChange={(event) => setCampaign(event.target.value)} placeholder="Contoh: ramadan-sale-2026" className="h-10 rounded-xl bg-muted/20 focus-visible:bg-transparent" />
+              <p className="text-[11px] text-muted-foreground">Identifikasi link di dashboard dan report iklan.</p>
+            </div>
+
+            <div className="space-y-1.5">
+              <label className="text-[13px] font-semibold text-foreground">Template Pesan</label>
+              <Input
+                value={templateMessage}
+                onChange={(event) => setTemplateMessage(event.target.value)}
+                placeholder="Contoh: Halo, saya tertarik promo ini"
+                className="h-10 rounded-xl bg-muted/20 focus-visible:bg-transparent"
+              />
+              <p className="text-[11px] text-muted-foreground">Pesan ini otomatis terisi di kolom chat WhatsApp user terkirim otomatis.</p>
+            </div>
+
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div className="space-y-1.5">
+                <label className="text-[13px] font-semibold text-foreground">Source</label>
+                <Input value={source} onChange={(event) => setSource(event.target.value)} placeholder="meta_ads" className="h-10 rounded-xl bg-muted/20 focus-visible:bg-transparent" />
+                <p className="text-[11px] text-muted-foreground">Traffic asal (`meta_ads`, `organic`).</p>
               </div>
-              <div className="space-y-1">
-                <Input value={adName} onChange={(event) => setAdName(event.target.value)} placeholder="Ad Name" className="h-10 rounded-xl" />
-                <p className="text-xs text-muted-foreground">Nama iklan spesifik untuk analitik.</p>
+              <div className="space-y-1.5">
+                <label className="text-[13px] font-semibold text-foreground">Platform</label>
+                <Input value={platform} onChange={(event) => setPlatform(event.target.value)} placeholder="meta" className="h-10 rounded-xl bg-muted/20 focus-visible:bg-transparent" />
+                <p className="text-[11px] text-muted-foreground">Platform iklan (`meta`).</p>
               </div>
             </div>
-            <div className="space-y-1">
-              <Input value={medium} onChange={(event) => setMedium(event.target.value)} placeholder="Medium (paid_social)" className="h-10 rounded-xl" />
-              <p className="text-xs text-muted-foreground">Tipe channel, contoh: `paid_social`, `cpc`.</p>
+
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div className="space-y-1.5">
+                <label className="text-[13px] font-semibold text-foreground">Ad Set</label>
+                <Input value={adset} onChange={(event) => setAdset(event.target.value)} placeholder="Retargeting Audience" className="h-10 rounded-xl bg-muted/20 focus-visible:bg-transparent" />
+                <p className="text-[11px] text-muted-foreground">Grup iklan di Ads Manager.</p>
+              </div>
+              <div className="space-y-1.5">
+                <label className="text-[13px] font-semibold text-foreground">Ad Name</label>
+                <Input value={adName} onChange={(event) => setAdName(event.target.value)} placeholder="Video Promo 1" className="h-10 rounded-xl bg-muted/20 focus-visible:bg-transparent" />
+                <p className="text-[11px] text-muted-foreground">Nama iklan spesifik.</p>
+              </div>
             </div>
-            <DialogFooter>
-              <Button type="button" variant="ghost" onClick={() => setIsCreateDialogOpen(false)}>
+
+            <div className="space-y-1.5">
+              <label className="text-[13px] font-semibold text-foreground">Medium</label>
+              <Input value={medium} onChange={(event) => setMedium(event.target.value)} placeholder="paid_social" className="h-10 rounded-xl bg-muted/20 focus-visible:bg-transparent" />
+              <p className="text-[11px] text-muted-foreground">Tipe penempatan (`paid_social`).</p>
+            </div>
+
+            <DialogFooter className="mt-2">
+              <Button type="button" variant="ghost" className="h-10 rounded-xl" onClick={() => setIsCreateDialogOpen(false)}>
                 Batal
               </Button>
-              <Button type="submit" disabled={!canSubmit}>
-                {isSubmitting ? "Creating..." : "Create Shortlink"}
+              <Button type="submit" className="h-10 rounded-xl bg-primary px-6 shadow-md shadow-primary/20 hover:bg-primary/95" disabled={!canSubmit}>
+                {isSubmitting ? "Creating..." : "Buat Shortlink"}
               </Button>
             </DialogFooter>
           </form>
@@ -1012,36 +1057,64 @@ export function ShortlinkManager({ variant = "settings" }: { variant?: "settings
             <DialogTitle>Edit Shortlink</DialogTitle>
             <DialogDescription>Ubah campaign, template, dan metadata Meta CAPI.</DialogDescription>
           </DialogHeader>
-          <form onSubmit={handleSaveEditShortlink} className="grid gap-3">
-            <div className="rounded-xl border border-border bg-muted/30 px-3 py-2 text-sm">
-              <p className="text-[11px] uppercase tracking-[0.12em] text-muted-foreground">Code</p>
-              <p className="mt-1 font-medium text-foreground">{editingShortlink?.code ?? "-"}</p>
+          <form onSubmit={handleSaveEditShortlink} className="grid gap-4">
+            <div className="rounded-xl border border-primary/20 bg-gradient-to-br from-primary/5 to-transparent p-4">
+              <div className="mb-4 space-y-1">
+                <p className="text-[11px] font-bold uppercase tracking-wider text-primary/80">Code</p>
+                <p className="font-medium text-foreground">{editingShortlink?.code ?? "-"}</p>
+              </div>
+              <div className="space-y-1">
+                <p className="text-[11px] font-bold uppercase tracking-wider text-primary/80">Preview WA URL</p>
+                <p className="break-all font-mono text-xs leading-relaxed text-foreground/90">{editDestinationPreview}</p>
+              </div>
             </div>
-            <div className="rounded-xl border border-border bg-muted/30 px-3 py-2 text-sm">
-              <p className="text-[11px] uppercase tracking-[0.12em] text-muted-foreground">Preview WA URL</p>
-              <p className="mt-1 break-all font-mono text-xs text-foreground">{editDestinationPreview}</p>
+
+            <div className="space-y-1.5">
+              <label className="text-[13px] font-semibold text-foreground">Nama Campaign / Shortlink</label>
+              <Input value={editCampaign} onChange={(event) => setEditCampaign(event.target.value)} className="h-10 rounded-xl bg-muted/20 focus-visible:bg-transparent" />
             </div>
-            <Input value={editCampaign} onChange={(event) => setEditCampaign(event.target.value)} placeholder="Nama shortlink / campaign" className="h-10 rounded-xl" />
-            <Input
-              value={editTemplateMessage}
-              onChange={(event) => setEditTemplateMessage(event.target.value)}
-              placeholder="Template pesan"
-              className="h-10 rounded-xl"
-            />
-            <div className="grid gap-3 sm:grid-cols-2">
-              <Input value={editSource} onChange={(event) => setEditSource(event.target.value)} placeholder="Source (meta_ads)" className="h-10 rounded-xl" />
-              <Input value={editPlatform} onChange={(event) => setEditPlatform(event.target.value)} placeholder="Platform (meta)" className="h-10 rounded-xl" />
+
+            <div className="space-y-1.5">
+              <label className="text-[13px] font-semibold text-foreground">Template Pesan</label>
+              <Input
+                value={editTemplateMessage}
+                onChange={(event) => setEditTemplateMessage(event.target.value)}
+                className="h-10 rounded-xl bg-muted/20 focus-visible:bg-transparent"
+              />
             </div>
-            <div className="grid gap-3 sm:grid-cols-2">
-              <Input value={editAdset} onChange={(event) => setEditAdset(event.target.value)} placeholder="Adset" className="h-10 rounded-xl" />
-              <Input value={editAdName} onChange={(event) => setEditAdName(event.target.value)} placeholder="Ad Name" className="h-10 rounded-xl" />
+
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div className="space-y-1.5">
+                <label className="text-[13px] font-semibold text-foreground">Source</label>
+                <Input value={editSource} onChange={(event) => setEditSource(event.target.value)} className="h-10 rounded-xl bg-muted/20 focus-visible:bg-transparent" />
+              </div>
+              <div className="space-y-1.5">
+                <label className="text-[13px] font-semibold text-foreground">Platform</label>
+                <Input value={editPlatform} onChange={(event) => setEditPlatform(event.target.value)} className="h-10 rounded-xl bg-muted/20 focus-visible:bg-transparent" />
+              </div>
             </div>
-            <Input value={editMedium} onChange={(event) => setEditMedium(event.target.value)} placeholder="Medium (paid_social)" className="h-10 rounded-xl" />
-            <DialogFooter>
-              <Button type="button" variant="ghost" onClick={() => setIsEditDialogOpen(false)}>
+
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div className="space-y-1.5">
+                <label className="text-[13px] font-semibold text-foreground">Ad Set</label>
+                <Input value={editAdset} onChange={(event) => setEditAdset(event.target.value)} className="h-10 rounded-xl bg-muted/20 focus-visible:bg-transparent" />
+              </div>
+              <div className="space-y-1.5">
+                <label className="text-[13px] font-semibold text-foreground">Ad Name</label>
+                <Input value={editAdName} onChange={(event) => setEditAdName(event.target.value)} className="h-10 rounded-xl bg-muted/20 focus-visible:bg-transparent" />
+              </div>
+            </div>
+
+            <div className="space-y-1.5">
+              <label className="text-[13px] font-semibold text-foreground">Medium</label>
+              <Input value={editMedium} onChange={(event) => setEditMedium(event.target.value)} className="h-10 rounded-xl bg-muted/20 focus-visible:bg-transparent" />
+            </div>
+
+            <DialogFooter className="mt-2">
+              <Button type="button" variant="ghost" className="h-10 rounded-xl" onClick={() => setIsEditDialogOpen(false)}>
                 Batal
               </Button>
-              <Button type="submit" disabled={!canSaveEdit}>
+              <Button type="submit" className="h-10 rounded-xl bg-primary px-6 shadow-md shadow-primary/20 hover:bg-primary/95" disabled={!canSaveEdit}>
                 {isMutating ? "Saving..." : "Save Changes"}
               </Button>
             </DialogFooter>

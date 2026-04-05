@@ -35,6 +35,26 @@ async function waitForConnectedBaileysPhone(locator, page, timeoutMs = 15_000) {
   return lastText;
 }
 
+/**
+ * @param {import("@playwright/test").Locator} dialog
+ * @param {string[]} placeholders
+ * @param {string} value
+ */
+async function fillByFirstVisiblePlaceholder(dialog, placeholders, value) {
+  for (const placeholder of placeholders) {
+    const input = dialog.getByPlaceholder(placeholder).first();
+    const isVisible = await input.isVisible().catch(() => false);
+    if (!isVisible) {
+      continue;
+    }
+
+    await input.fill(value);
+    return;
+  }
+
+  throw new Error(`Unable to find visible input for placeholders: ${placeholders.join(", ")}`);
+}
+
 async function main() {
   const browser = await chromium.launch({ headless: true });
   const context = await browser.newContext();
@@ -58,16 +78,24 @@ async function main() {
     const createDialog = page.getByRole("dialog", { name: /Tambah Shortlink/i });
     await createDialog.waitFor({ timeout: 10_000 });
 
-    const connectedPhoneLocator = createDialog.getByText(/Nomor Terhubung \(Baileys\)/i).locator("xpath=../p[2]");
+    const connectedPhoneLocator = createDialog
+      .getByText(/Nomor WhatsApp Terhubung|Nomor Terhubung \(Baileys\)/i)
+      .locator("xpath=../p[2]");
     const connectedPhoneText = await waitForConnectedBaileysPhone(connectedPhoneLocator, page, 15_000);
     if (!connectedPhoneText || /Belum ada nomor terhubung/i.test(connectedPhoneText)) {
-      skippedReason = "Baileys connected number is unavailable, create flow skipped.";
+      skippedReason = "Connected WhatsApp number is unavailable, create flow skipped.";
     } else {
       createdCampaignName = `SMOKE-SHORTLINK-${Date.now()}`;
-      await createDialog.getByPlaceholder("Nama shortlink / campaign").fill(createdCampaignName);
-      await createDialog.getByPlaceholder("Template pesan (contoh: Halo, saya tertarik promo ini)").fill("Halo dari smoke test");
+      await fillByFirstVisiblePlaceholder(createDialog, ["Nama shortlink / campaign", "Contoh: ramadan-sale-2026"], createdCampaignName);
+      await fillByFirstVisiblePlaceholder(
+        createDialog,
+        ["Template pesan (contoh: Halo, saya tertarik promo ini)", "Contoh: Halo, saya tertarik promo ini"],
+        "Halo dari smoke test"
+      );
 
-      const createButton = createDialog.getByRole("button", { name: /Create Shortlink|Creating.../i });
+      const createButton = createDialog.getByRole("button", {
+        name: /Create Shortlink|Creating\.\.\.|Buat Shortlink|Membuat\.\.\./i
+      });
       await createButton.click();
       await createDialog.waitFor({ state: "hidden", timeout: 20_000 });
 

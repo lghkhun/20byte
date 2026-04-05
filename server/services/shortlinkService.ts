@@ -64,6 +64,11 @@ function extractDigits(value: string): string {
   return value.replace(/\D/g, "");
 }
 
+function formatDisplayPhone(value: string): string {
+  const digits = extractDigits(value);
+  return digits ? `+${digits}` : "";
+}
+
 function parseWhatsAppDestination(
   destinationUrl: string
 ): {
@@ -166,6 +171,37 @@ function generateCode(): string {
   }
 
   return output;
+}
+
+async function resolveConnectedWhatsappNumber(orgId: string): Promise<{
+  displayPhone: string;
+  isBaileys: boolean;
+} | null> {
+  const account = await prisma.waAccount.findUnique({
+    where: {
+      orgId
+    },
+    select: {
+      displayPhone: true,
+      phoneNumberId: true,
+      metaBusinessId: true,
+      wabaId: true
+    }
+  });
+
+  if (!account) {
+    return null;
+  }
+
+  const resolvedPhone = formatDisplayPhone(account.displayPhone) || formatDisplayPhone(account.phoneNumberId);
+  if (!resolvedPhone) {
+    return null;
+  }
+
+  return {
+    displayPhone: resolvedPhone,
+    isBaileys: account.metaBusinessId === "baileys" && account.wabaId === "baileys"
+  };
 }
 
 async function requireShortlinkAccess(actorUserId: string, orgId: string): Promise<void> {
@@ -287,6 +323,26 @@ export async function listShortlinks(actorUserId: string, orgIdInput: string): P
   return rows.map(mapShortlink);
 }
 
+export async function getShortlinkConnectionContext(
+  actorUserId: string,
+  orgIdInput: string
+): Promise<{
+  connectedPhone: string | null;
+  isBaileys: boolean;
+}> {
+  const orgId = normalizeShortlinkValue(orgIdInput);
+  if (!orgId) {
+    throw new ServiceError(400, "MISSING_ORG_ID", "orgId is required.");
+  }
+
+  await requireShortlinkAccess(actorUserId, orgId);
+  const connected = await resolveConnectedWhatsappNumber(orgId);
+  return {
+    connectedPhone: connected?.displayPhone ?? null,
+    isBaileys: connected?.isBaileys ?? false
+  };
+}
+
 export async function createShortlink(input: CreateShortlinkInput): Promise<ShortlinkItem> {
   const orgId = normalizeShortlinkValue(input.orgId);
   const requestedDestinationUrl = normalizeShortlinkValue(input.destinationUrl);
@@ -309,24 +365,14 @@ export async function createShortlink(input: CreateShortlinkInput): Promise<Shor
 
   let destinationUrl = requestedDestinationUrl;
   if (!destinationUrl) {
-    const connectedAccount = await prisma.waAccount.findFirst({
-      where: {
-        orgId,
-        metaBusinessId: "baileys",
-        wabaId: "baileys"
-      },
-      orderBy: { connectedAt: "desc" },
-      select: {
-        displayPhone: true
-      }
-    });
+    const connectedAccount = await resolveConnectedWhatsappNumber(orgId);
 
     const waPhone = extractDigits(connectedAccount?.displayPhone ?? "");
     if (!waPhone) {
       throw new ServiceError(
         400,
-        "BAILEYS_NUMBER_NOT_CONNECTED",
-        "Connect a Baileys WhatsApp number first to generate wa.me shortlinks automatically."
+        "WHATSAPP_NUMBER_NOT_CONNECTED",
+        "Connect a WhatsApp number first to generate wa.me shortlinks automatically."
       );
     }
 
