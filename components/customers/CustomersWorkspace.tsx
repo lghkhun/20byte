@@ -1860,6 +1860,14 @@ export function CustomersWorkspace() {
           </div>
         </div>
 
+        <div className="mt-3 flex items-center justify-between gap-3">
+          <div className={`inline-flex max-w-full items-center gap-2 rounded-xl border px-3 py-2 text-xs ${realtimeStatusMeta.className}`}>
+            <span className="h-2 w-2 shrink-0 rounded-full bg-current/70" aria-hidden />
+            <span className="font-medium">{realtimeStatusMeta.label}</span>
+            <span className="hidden text-current/80 md:inline">• {realtimeStatusMeta.description}</span>
+          </div>
+        </div>
+
         <div className="mt-4 grid grid-cols-1 gap-3 rounded-2xl border border-border bg-card p-3 shadow-sm lg:grid-cols-[minmax(280px,1fr)_auto_auto_auto_auto]">
           <div className="flex min-w-0 items-center gap-2">
             <Button type="button" size="sm" variant="outline" className="h-10 shrink-0 rounded-xl px-4" onClick={openTableLayoutDialog}>

@@ -387,17 +387,6 @@ export function ChatWindow({
             void handleOpenTransfer();
           }}
           onOpenResolve={() => setIsResolveOpen(true)}
-          onDeleteConversation={() => {
-            if (!conversation) {
-              return;
-            }
-            const confirmed = window.confirm("Hapus chat ini? Semua pesan pada chat ini akan dihapus.");
-            if (!confirmed) {
-              return;
-            }
-            void onDeleteConversation();
-          }}
-          onUnselectConversation={onUnselectConversation}
           onToggleCrmPanel={onToggleCrmPanel}
         />
       ) : null}

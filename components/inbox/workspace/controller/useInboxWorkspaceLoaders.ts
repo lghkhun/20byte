@@ -3,6 +3,9 @@
 import { useCallback, useEffect, useMemo, useRef } from "react";
 
 import type {
+  CrmActivityItem,
+  CrmInvoiceItem,
+  CustomerTagItem,
   ConversationCrmContextResponse,
   ConversationFetchResponse,
   CustomerTagsResponse,
@@ -15,6 +18,16 @@ import { fetchOrganizationsCached } from "@/lib/client/orgsCache";
 import { subscribeToOrgMessageEvents } from "@/lib/ably/client";
 import { recordInboxTelemetry } from "@/components/inbox/workspace/controller/inboxTelemetry";
 import { isRequestVersionCurrent, issueRequestVersion } from "@/components/inbox/workspace/controller/requestVersionGuard";
+import {
+  pruneConversationMessagesLocalCache,
+  readConversationMessagesLocalCache,
+  writeConversationMessagesLocalCache
+} from "@/components/inbox/workspace/controller/messageLocalCache";
+import {
+  pruneConversationCrmContextLocalCache,
+  readConversationCrmContextLocalCache,
+  writeConversationCrmContextLocalCache
+} from "@/components/inbox/workspace/controller/crmContextLocalCache";
 
 import type { InboxWorkspaceState } from "./useInboxWorkspaceState";
 
@@ -23,6 +36,13 @@ type MessageStoreEntry = {
   hasMore: boolean;
   nextBeforeMessageId: string | null;
   snapshot: string;
+};
+
+type CrmContextStoreEntry = {
+  customerId: string;
+  tags: CustomerTagItem[];
+  invoices: CrmInvoiceItem[];
+  activity: CrmActivityItem[];
 };
 
 type LoadMessagesOptions = {
@@ -39,6 +59,7 @@ type LoadConversationsOptions = {
 
 const CONVERSATION_PAGE_LIMIT = 20;
 const MESSAGE_PAGE_LIMIT = 30;
+const REALTIME_FALLBACK_POLL_INTERVAL_MS = 5_000;
 
 export function useInboxWorkspaceLoaders(state: InboxWorkspaceState) {
   const {
@@ -52,7 +73,6 @@ export function useInboxWorkspaceLoaders(state: InboxWorkspaceState) {
     statusFilter,
     conversationSearchQuery,
     selectedConversationId,
-    isConversationManuallyCleared,
     setSelectedConversationId,
     setSelectedConversation,
     setIsLoadingList,
@@ -109,6 +129,7 @@ export function useInboxWorkspaceLoaders(state: InboxWorkspaceState) {
   const realtimeMessageStatusMismatchCountRef = useRef(0);
   const realtimeConnectionAttemptCountRef = useRef(0);
   const messageStoreRef = useRef<Map<string, MessageStoreEntry>>(new Map());
+  const crmContextStoreRef = useRef<Map<string, CrmContextStoreEntry>>(new Map());
 
   const recalculateConversationSnapshot = useCallback((rows: ConversationItem[] | null | undefined) => {
     const safeRows = rows ?? [];
@@ -153,9 +174,103 @@ export function useInboxWorkspaceLoaders(state: InboxWorkspaceState) {
         nextBeforeMessageId,
         snapshot
       });
+      if (orgId) {
+        writeConversationMessagesLocalCache(orgId, conversationId, rows, hasMore, nextBeforeMessageId);
+      }
       return snapshot;
     },
-    [buildMessagesSnapshot]
+    [buildMessagesSnapshot, orgId]
+  );
+
+  const getMessageStoreEntry = useCallback(
+    (conversationId: string): MessageStoreEntry | null => {
+      const inMemory = messageStoreRef.current.get(conversationId);
+      if (inMemory) {
+        return inMemory;
+      }
+
+      if (!orgId) {
+        return null;
+      }
+
+      const fromLocal = readConversationMessagesLocalCache(orgId, conversationId);
+      if (!fromLocal) {
+        return null;
+      }
+
+      const snapshot = buildMessagesSnapshot(fromLocal.rows);
+      const hydrated: MessageStoreEntry = {
+        rows: fromLocal.rows,
+        hasMore: fromLocal.hasMore,
+        nextBeforeMessageId: fromLocal.nextBeforeMessageId,
+        snapshot
+      };
+      messageStoreRef.current.set(conversationId, hydrated);
+      return hydrated;
+    },
+    [buildMessagesSnapshot, orgId]
+  );
+
+  const getCrmContextStoreEntry = useCallback(
+    (conversationId: string, expectedCustomerId?: string | null): CrmContextStoreEntry | null => {
+      const normalizedExpectedCustomerId = (expectedCustomerId ?? "").trim();
+      const inMemory = crmContextStoreRef.current.get(conversationId);
+      if (inMemory) {
+        if (!normalizedExpectedCustomerId || inMemory.customerId === normalizedExpectedCustomerId) {
+          return inMemory;
+        }
+      }
+
+      if (!orgId) {
+        return null;
+      }
+
+      const fromLocal = readConversationCrmContextLocalCache(orgId, conversationId, normalizedExpectedCustomerId || null);
+      if (!fromLocal) {
+        return null;
+      }
+
+      const hydrated: CrmContextStoreEntry = {
+        customerId: fromLocal.customerId,
+        tags: fromLocal.tags,
+        invoices: fromLocal.invoices,
+        activity: fromLocal.activity
+      };
+      crmContextStoreRef.current.set(conversationId, hydrated);
+      return hydrated;
+    },
+    [orgId]
+  );
+
+  const upsertCrmContextStore = useCallback(
+    (
+      conversationId: string,
+      patch: {
+        customerId?: string | null;
+        tags?: CustomerTagItem[];
+        invoices?: CrmInvoiceItem[];
+        activity?: CrmActivityItem[];
+      }
+    ): CrmContextStoreEntry | null => {
+      const existing = crmContextStoreRef.current.get(conversationId);
+      const customerId = (patch.customerId ?? existing?.customerId ?? "").trim();
+      if (!customerId) {
+        return existing ?? null;
+      }
+
+      const next: CrmContextStoreEntry = {
+        customerId,
+        tags: patch.tags ?? existing?.tags ?? [],
+        invoices: patch.invoices ?? existing?.invoices ?? [],
+        activity: patch.activity ?? existing?.activity ?? []
+      };
+      crmContextStoreRef.current.set(conversationId, next);
+      if (orgId) {
+        writeConversationCrmContextLocalCache(orgId, conversationId, next);
+      }
+      return next;
+    },
+    [orgId]
   );
 
   useEffect(() => {
@@ -180,6 +295,16 @@ export function useInboxWorkspaceLoaders(state: InboxWorkspaceState) {
       loadConversationAbortRef.current?.abort();
       loadConversationsAbortRef.current?.abort();
     };
+  }, []);
+
+  useEffect(() => {
+    messageStoreRef.current.clear();
+    crmContextStoreRef.current.clear();
+  }, [orgId]);
+
+  useEffect(() => {
+    pruneConversationMessagesLocalCache();
+    pruneConversationCrmContextLocalCache();
   }, []);
 
   const playInboundNotification = useCallback(() => {
@@ -436,7 +561,7 @@ export function useInboxWorkspaceLoaders(state: InboxWorkspaceState) {
       return;
     }
 
-    const cached = messageStoreRef.current.get(conversationId);
+    const cached = getMessageStoreEntry(conversationId);
     const beforeMessageId = cached?.nextBeforeMessageId ?? cached?.rows[0]?.id ?? null;
     if (!beforeMessageId || !cached?.hasMore) {
       return;
@@ -447,18 +572,20 @@ export function useInboxWorkspaceLoaders(state: InboxWorkspaceState) {
       appendOlder: true,
       beforeMessageId
     });
-  }, [loadMessages]);
+  }, [getMessageStoreEntry, loadMessages]);
 
   const loadCustomerCrmContext = useCallback(
-    async (customerId: string, options?: { conversationId?: string }) => {
+    async (customerId: string, options?: { conversationId?: string; background?: boolean }) => {
       if (!orgId) {
         return;
       }
 
       const requestId = ++loadCustomerCrmContextRequestIdRef.current;
       const targetConversationId = options?.conversationId ?? selectedConversationIdRef.current;
-      setIsLoadingCrm(true);
-      setCrmError(null);
+      if (!options?.background) {
+        setIsLoadingCrm(true);
+        setCrmError(null);
+      }
       try {
         const tagsPayload = await fetchJsonCached<CustomerTagsResponse>(
           `/api/customers/${encodeURIComponent(customerId)}/tags?orgId=${encodeURIComponent(orgId)}`,
@@ -473,7 +600,14 @@ export function useInboxWorkspaceLoaders(state: InboxWorkspaceState) {
         if (targetConversationId && selectedConversationIdRef.current !== targetConversationId) {
           return;
         }
-        setTags(tagsPayload?.data?.tags ?? []);
+        const nextTags = tagsPayload?.data?.tags ?? [];
+        if (targetConversationId) {
+          upsertCrmContextStore(targetConversationId, {
+            customerId,
+            tags: nextTags
+          });
+        }
+        setTags(nextTags);
       } catch {
         if (requestId !== loadCustomerCrmContextRequestIdRef.current) {
           return;
@@ -481,23 +615,29 @@ export function useInboxWorkspaceLoaders(state: InboxWorkspaceState) {
         if (targetConversationId && selectedConversationIdRef.current !== targetConversationId) {
           return;
         }
-        setCrmError("Network error while loading CRM context.");
+        if (!options?.background) {
+          setCrmError("Network error while loading CRM context.");
+        }
       } finally {
-        if (requestId === loadCustomerCrmContextRequestIdRef.current) {
+        if (!options?.background && requestId === loadCustomerCrmContextRequestIdRef.current) {
           setIsLoadingCrm(false);
         }
       }
     },
-    [orgId, setCrmError, setIsLoadingCrm, setTags]
+    [orgId, setCrmError, setIsLoadingCrm, setTags, upsertCrmContextStore]
   );
 
   const loadConversationCrmContext = useCallback(
-    async (conversationId: string) => {
+    async (conversationId: string, options?: { background?: boolean; customerId?: string | null }) => {
       if (!orgId) {
         return;
       }
 
       const requestVersion = issueRequestVersion(loadConversationCrmContextRequestVersionsRef.current, conversationId);
+      if (!options?.background) {
+        setIsLoadingCrm(true);
+        setCrmError(null);
+      }
       try {
         const response = await fetch(
           `/api/conversations/${encodeURIComponent(conversationId)}/crm-context?orgId=${encodeURIComponent(orgId)}`,
@@ -513,8 +653,19 @@ export function useInboxWorkspaceLoaders(state: InboxWorkspaceState) {
         if (selectedConversationIdRef.current !== conversationId) {
           return;
         }
-        setCrmInvoices(payload?.data?.invoices ?? []);
-        setCrmActivity(payload?.data?.events ?? []);
+        const nextInvoices = payload?.data?.invoices ?? [];
+        const nextActivity = payload?.data?.events ?? [];
+        const cachedEntry = getCrmContextStoreEntry(conversationId, options?.customerId ?? null);
+        const resolvedCustomerId = (options?.customerId ?? cachedEntry?.customerId ?? "").trim();
+        if (resolvedCustomerId) {
+          upsertCrmContextStore(conversationId, {
+            customerId: resolvedCustomerId,
+            invoices: nextInvoices,
+            activity: nextActivity
+          });
+        }
+        setCrmInvoices(nextInvoices);
+        setCrmActivity(nextActivity);
       } catch {
         if (!isRequestVersionCurrent(loadConversationCrmContextRequestVersionsRef.current, conversationId, requestVersion)) {
           return;
@@ -522,12 +673,21 @@ export function useInboxWorkspaceLoaders(state: InboxWorkspaceState) {
         if (selectedConversationIdRef.current !== conversationId) {
           return;
         }
-        setCrmError("Network error while loading invoice timeline.");
-        setCrmInvoices([]);
-        setCrmActivity([]);
+        if (!options?.background) {
+          setCrmError("Network error while loading invoice timeline.");
+          const cachedEntry = getCrmContextStoreEntry(conversationId, options?.customerId ?? null);
+          if (!cachedEntry) {
+            setCrmInvoices([]);
+            setCrmActivity([]);
+          }
+        }
+      } finally {
+        if (!options?.background) {
+          setIsLoadingCrm(false);
+        }
       }
     },
-    [orgId, setCrmActivity, setCrmError, setCrmInvoices]
+    [getCrmContextStoreEntry, orgId, setCrmActivity, setCrmError, setCrmInvoices, setIsLoadingCrm, upsertCrmContextStore]
   );
 
   const loadConversation = useCallback(
@@ -542,11 +702,34 @@ export function useInboxWorkspaceLoaders(state: InboxWorkspaceState) {
         setError(null);
       }
 
+      let hasLocalMessageCache = false;
+      let hasLocalCrmCache = false;
       if (!options?.background) {
-        const cached = messageStoreRef.current.get(conversationId);
+        const rowSnapshot = conversationsRef.current.find((row) => row.id === conversationId);
+        if (rowSnapshot) {
+          setSelectedConversation({
+            ...rowSnapshot,
+            unreadCount: 0
+          });
+        }
+
+        const cached = getMessageStoreEntry(conversationId);
         if (cached) {
+          hasLocalMessageCache = true;
           setMessages(cached.rows);
           setHasMoreMessages(cached.hasMore);
+          setIsLoadingMessages(false);
+          setMessageError(null);
+        }
+
+        const cachedCrm = getCrmContextStoreEntry(conversationId, rowSnapshot?.customerId ?? null);
+        if (cachedCrm) {
+          hasLocalCrmCache = true;
+          setTags(cachedCrm.tags);
+          setCrmInvoices(cachedCrm.invoices);
+          setCrmActivity(cachedCrm.activity);
+          setIsLoadingCrm(false);
+          setCrmError(null);
         }
       }
 
@@ -619,9 +802,16 @@ export function useInboxWorkspaceLoaders(state: InboxWorkspaceState) {
 
         if (!options?.background) {
           if (conversation?.customerId) {
+            const crmBackgroundRefresh = hasLocalCrmCache;
             void Promise.all([
-              loadCustomerCrmContext(conversation.customerId, { conversationId: conversation.id }),
-              loadConversationCrmContext(conversation.id)
+              loadCustomerCrmContext(conversation.customerId, {
+                conversationId: conversation.id,
+                background: crmBackgroundRefresh
+              }),
+              loadConversationCrmContext(conversation.id, {
+                background: crmBackgroundRefresh,
+                customerId: conversation.customerId
+              })
             ]);
           } else {
             setTags([]);
@@ -630,7 +820,12 @@ export function useInboxWorkspaceLoaders(state: InboxWorkspaceState) {
           }
         }
 
-        await loadMessages(conversationId, { background: options?.background });
+        const shouldBackgroundRefresh = Boolean(options?.background || hasLocalMessageCache);
+        if (shouldBackgroundRefresh) {
+          void loadMessages(conversationId, { background: true });
+        } else {
+          void loadMessages(conversationId, { background: false });
+        }
       } catch (error) {
         if (error instanceof DOMException && error.name === "AbortError") {
           return;
@@ -661,21 +856,27 @@ export function useInboxWorkspaceLoaders(state: InboxWorkspaceState) {
       }
     },
     [
+      getCrmContextStoreEntry,
       loadConversationCrmContext,
       loadCustomerCrmContext,
       loadMessages,
       orgId,
       scheduleMarkConversationRead,
       setCrmActivity,
+      setCrmError,
       setCrmInvoices,
       setError,
       setHasMoreMessages,
       setIsLoadingConversation,
+      setIsLoadingCrm,
+      setIsLoadingMessages,
       setMessages,
+      setMessageError,
       setSelectedConversation,
       setSelectedConversationId,
       setSelectedProofMessageId,
-      setTags
+      setTags,
+      getMessageStoreEntry
     ]
   );
 
@@ -833,11 +1034,20 @@ export function useInboxWorkspaceLoaders(state: InboxWorkspaceState) {
         const nextConversationId =
           currentSelectedConversationId && nextRows.some((row) => row.id === currentSelectedConversationId)
             ? currentSelectedConversationId
-            : isConversationManuallyCleared
-              ? null
-              : nextRows[0]?.id ?? null;
+            : null;
 
         setSelectedConversationId(nextConversationId);
+
+        if (!nextConversationId && currentSelectedConversationId) {
+          setSelectedConversation(null);
+          setMessages([]);
+          setHasMoreMessages(false);
+          setSelectedProofMessageId(null);
+          setTags([]);
+          setCrmInvoices([]);
+          setCrmActivity([]);
+          return;
+        }
 
         if (nextConversationId) {
           if (currentSelectedConversationId !== nextConversationId || !isBackground) {
@@ -868,7 +1078,6 @@ export function useInboxWorkspaceLoaders(state: InboxWorkspaceState) {
     },
     [
       filter,
-      isConversationManuallyCleared,
       loadConversation,
       orgId,
       playInboundNotification,
@@ -937,6 +1146,11 @@ export function useInboxWorkspaceLoaders(state: InboxWorkspaceState) {
       return;
     }
 
+    const nextQuery = conversationSearchQuery.trim();
+    if (!nextQuery && !hasLoadedConversationListRef.current) {
+      return;
+    }
+
     if (conversationSearchDebounceRef.current) {
       clearTimeout(conversationSearchDebounceRef.current);
     }
@@ -998,7 +1212,7 @@ export function useInboxWorkspaceLoaders(state: InboxWorkspaceState) {
         if (currentSelectedId) {
           void loadMessages(currentSelectedId, { background: true });
         }
-      }, 15000);
+      }, REALTIME_FALLBACK_POLL_INTERVAL_MS);
     };
 
     const scheduleRefresh = () => {
@@ -1266,7 +1480,7 @@ export function useInboxWorkspaceLoaders(state: InboxWorkspaceState) {
             scheduleRefresh();
             const currentConversationId = selectedConversationIdRef.current;
             if (currentConversationId) {
-              void loadConversationCrmContext(currentConversationId);
+              void loadConversationCrmContext(currentConversationId, { background: true });
               void loadConversation(currentConversationId, { background: true });
             }
           },
@@ -1274,7 +1488,7 @@ export function useInboxWorkspaceLoaders(state: InboxWorkspaceState) {
             scheduleRefresh();
             const currentConversationId = selectedConversationIdRef.current;
             if (currentConversationId) {
-              void loadConversationCrmContext(currentConversationId);
+              void loadConversationCrmContext(currentConversationId, { background: true });
               void loadConversation(currentConversationId, { background: true });
             }
           },
@@ -1282,7 +1496,7 @@ export function useInboxWorkspaceLoaders(state: InboxWorkspaceState) {
             scheduleRefresh();
             const currentConversationId = selectedConversationIdRef.current;
             if (currentConversationId) {
-              void loadConversationCrmContext(currentConversationId);
+              void loadConversationCrmContext(currentConversationId, { background: true });
               void loadConversation(currentConversationId, { background: true });
             }
           },
@@ -1290,7 +1504,7 @@ export function useInboxWorkspaceLoaders(state: InboxWorkspaceState) {
             scheduleRefresh();
             const currentConversationId = selectedConversationIdRef.current;
             if (currentConversationId) {
-              void loadConversationCrmContext(currentConversationId);
+              void loadConversationCrmContext(currentConversationId, { background: true });
             }
           },
           onCustomerUpdated: scheduleRefresh,
@@ -1350,8 +1564,12 @@ export function useInboxWorkspaceLoaders(state: InboxWorkspaceState) {
       return "Belum ada bisnis tersedia.";
     }
 
+    if (conversations.length > 0 && metaTotal > conversations.length) {
+      return `${conversations.length}+ percakapan`;
+    }
+
     return `${metaTotal} percakapan`;
-  }, [metaTotal, orgId]);
+  }, [conversations.length, metaTotal, orgId]);
 
   const activeOrgRole = useMemo(() => {
     if (!orgId) {

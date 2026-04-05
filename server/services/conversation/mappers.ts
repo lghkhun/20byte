@@ -3,6 +3,27 @@ import type { ConversationStatus } from "@prisma/client";
 import type { ConversationSummary, ConversationListItem } from "@/server/services/conversation/types";
 import { resolveLastMessagePreview } from "@/server/services/conversation/utils";
 
+export function sanitizeConversationAvatarUrl(value: string | null | undefined): string | null {
+  const normalized = value?.trim() ?? "";
+  if (!normalized) {
+    return null;
+  }
+
+  try {
+    const parsed = new URL(normalized);
+    const hostname = parsed.hostname.toLowerCase();
+    if (hostname === "pps.whatsapp.net") {
+      return null;
+    }
+    if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
+      return null;
+    }
+    return parsed.toString();
+  } catch {
+    return null;
+  }
+}
+
 export function toConversationSummary(input: {
   conversation: {
     id: string;
@@ -38,7 +59,7 @@ export function toConversationSummary(input: {
     customerId: input.conversation.customerId,
     phoneE164: input.customer.phoneE164,
     customerDisplayName: input.customer.displayName,
-    customerAvatarUrl: input.customer.waProfilePicUrl,
+    customerAvatarUrl: sanitizeConversationAvatarUrl(input.customer.waProfilePicUrl),
     customerLeadStatus: input.customer.leadStatus,
     crmPipelineId: input.conversation.crmPipelineId,
     crmPipelineName: input.conversation.crmPipeline?.name ?? null,
@@ -99,7 +120,7 @@ export function toConversationListItem(row: {
     customerId: row.customerId,
     customerPhoneE164: row.customer.phoneE164,
     customerDisplayName: row.customer.displayName,
-    customerAvatarUrl: row.customer.waProfilePicUrl,
+    customerAvatarUrl: sanitizeConversationAvatarUrl(row.customer.waProfilePicUrl),
     customerLeadStatus: row.customer.leadStatus,
     crmPipelineId: row.crmPipelineId,
     crmPipelineName: row.crmPipeline?.name ?? null,

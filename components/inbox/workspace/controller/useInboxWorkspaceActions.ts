@@ -2,6 +2,7 @@
 
 import { useCallback } from "react";
 
+import type { MessageItem } from "@/components/inbox/types";
 import type { AssignConversationResponse, DeleteConversationResponse, SendMessageResponse, UpdateConversationStatusResponse } from "@/components/inbox/workspace/types";
 import { recordInboxTelemetry } from "@/components/inbox/workspace/controller/inboxTelemetry";
 
@@ -15,10 +16,10 @@ export function useInboxWorkspaceActions(state: InboxWorkspaceState, loaders: In
     orgId,
     selectedConversationId,
     selectedConversation,
-    realtimeConnectionState,
     isUpdatingConversationStatus,
     isAssigning,
     conversations,
+    setConversations,
     setMessageError,
     setAssignError,
     setIsAssigning,
@@ -37,28 +38,145 @@ export function useInboxWorkspaceActions(state: InboxWorkspaceState, loaders: In
 
   const { loadConversation, loadConversations, loadMessages } = loaders;
   const loadConversationsBackground = useCallback(() => loadConversations({ background: true }), [loadConversations]);
-  const reconcileSendWithoutRealtime = useCallback(async () => {
-    if (!selectedConversationId) {
-      return;
-    }
-
-    if (realtimeConnectionState === "connected") {
+  const reconcileAfterSend = useCallback(async (conversationId?: string | null) => {
+    const targetConversationId = (conversationId ?? selectedConversationId)?.trim() ?? "";
+    if (!targetConversationId) {
       return;
     }
 
     await Promise.all([
-      loadMessages(selectedConversationId, { background: true }),
+      loadMessages(targetConversationId, { background: true }),
       loadConversationsBackground()
     ]);
-  }, [loadConversationsBackground, loadMessages, realtimeConnectionState, selectedConversationId]);
+  }, [loadConversationsBackground, loadMessages, selectedConversationId]);
+
+  const appendOptimisticOutboundMessage = useCallback(
+    (input: {
+      conversationId: string;
+      type: MessageItem["type"];
+      text: string | null;
+      templateName?: string | null;
+      templateCategory?: MessageItem["templateCategory"];
+      templateLanguageCode?: string | null;
+    }) => {
+      const timestamp = new Date().toISOString();
+      const optimisticMessageId = `optimistic:${Date.now().toString(36)}:${Math.random().toString(36).slice(2, 8)}`;
+      const optimisticMessage: MessageItem = {
+        id: optimisticMessageId,
+        waMessageId: null,
+        direction: "OUTBOUND",
+        type: input.type,
+        text: input.text,
+        mediaUrl: null,
+        mimeType: null,
+        fileName: null,
+        templateName: input.templateName ?? null,
+        templateCategory: input.templateCategory ?? null,
+        templateLanguageCode: input.templateLanguageCode ?? null,
+        isAutomated: false,
+        sendStatus: "PENDING",
+        deliveryStatus: null,
+        sendError: null,
+        retryable: false,
+        sendAttemptCount: 0,
+        deliveredAt: null,
+        readAt: null,
+        createdAt: timestamp
+      };
+
+      setMessages((previousRows) => [...previousRows, optimisticMessage]);
+      setConversations((previousRows) => {
+        const target = previousRows.find((row) => row.id === input.conversationId);
+        if (!target) {
+          return previousRows;
+        }
+
+        const previewText = input.text?.trim() || (input.type === "TEMPLATE" ? `Template: ${input.templateName ?? "Template"}` : "Pesan terkirim");
+        const nextTarget = {
+          ...target,
+          status: "OPEN" as const,
+          lastMessagePreview: previewText,
+          lastMessageType: input.type,
+          lastMessageDirection: "OUTBOUND" as const,
+          lastMessageAt: timestamp,
+          updatedAt: timestamp
+        };
+
+        const nextRows = previousRows.filter((row) => row.id !== input.conversationId);
+        nextRows.unshift(nextTarget);
+        return nextRows;
+      });
+      setSelectedConversation((current) => {
+        if (!current || current.id !== input.conversationId) {
+          return current;
+        }
+
+        const previewText = input.text?.trim() || (input.type === "TEMPLATE" ? `Template: ${input.templateName ?? "Template"}` : "Pesan terkirim");
+        return {
+          ...current,
+          status: "OPEN",
+          lastMessagePreview: previewText,
+          lastMessageType: input.type,
+          lastMessageDirection: "OUTBOUND",
+          lastMessageAt: timestamp,
+          updatedAt: timestamp
+        };
+      });
+
+      return optimisticMessageId;
+    },
+    [setConversations, setMessages, setSelectedConversation]
+  );
+
+  const removeOptimisticMessage = useCallback((optimisticMessageId: string) => {
+    setMessages((previousRows) => previousRows.filter((row) => row.id !== optimisticMessageId));
+  }, [setMessages]);
+
+  const resolveOptimisticMessage = useCallback(
+    (input: {
+      optimisticMessageId: string;
+      serverMessageId?: string | null;
+      sendStatus?: MessageItem["sendStatus"];
+      deliveryStatus?: MessageItem["deliveryStatus"];
+      sendError?: string | null;
+      retryable?: boolean;
+      sendAttemptCount?: number;
+    }) => {
+      setMessages((previousRows) =>
+        previousRows.map((row) => {
+          if (row.id !== input.optimisticMessageId) {
+            return row;
+          }
+
+          return {
+            ...row,
+            id: input.serverMessageId?.trim() || row.id,
+            sendStatus: input.sendStatus ?? row.sendStatus,
+            deliveryStatus: input.deliveryStatus ?? row.deliveryStatus,
+            sendError: input.sendError ?? row.sendError,
+            retryable: input.retryable ?? row.retryable,
+            sendAttemptCount: input.sendAttemptCount ?? row.sendAttemptCount
+          };
+        })
+      );
+    },
+    [setMessages]
+  );
 
   const selectConversation = useCallback(
     (conversationId: string) => {
       setIsConversationManuallyCleared(false);
       setSelectedConversationId(conversationId);
+      const conversationSnapshot = conversations.find((item) => item.id === conversationId);
+      if (conversationSnapshot) {
+        setSelectedConversation({
+          ...conversationSnapshot,
+          unreadCount: 0
+        });
+      }
       void loadConversation(conversationId);
     },
-    [loadConversation, setIsConversationManuallyCleared, setSelectedConversationId]
+    [conversations, loadConversation, setIsConversationManuallyCleared, setSelectedConversation, setSelectedConversationId]
   );
 
   const clearSelectedConversation = useCallback(() => {
@@ -87,35 +205,47 @@ export function useInboxWorkspaceActions(state: InboxWorkspaceState, loaders: In
         return;
       }
 
+      const conversationId = selectedConversationId;
       const startedAt = performance.now();
       setMessageError(null);
+      const optimisticMessageId = appendOptimisticOutboundMessage({
+        conversationId,
+        type: "TEXT",
+        text
+      });
       const response = await fetch("/api/inbox/send", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ conversationId: selectedConversationId, type: "TEXT", text })
+        body: JSON.stringify({ conversationId, type: "TEXT", text })
       });
 
       const payload = (await response.json().catch(() => null)) as SendMessageResponse | null;
       if (!response.ok) {
         recordInboxTelemetry("send_latency_ms", Number((performance.now() - startedAt).toFixed(1)), {
           orgId,
-          conversationId: selectedConversationId
+          conversationId
         });
+        removeOptimisticMessage(optimisticMessageId);
         setMessageError(payload?.error?.message ?? "Gagal mengirim pesan.");
-        await Promise.all([
-          loadMessages(selectedConversationId, { background: true }),
-          loadConversationsBackground()
-        ]);
+        await reconcileAfterSend(conversationId);
         return;
       }
 
+      resolveOptimisticMessage({
+        optimisticMessageId,
+        serverMessageId: payload?.data?.message?.id ?? payload?.data?.message?.messageId ?? null,
+        sendStatus: payload?.data?.message?.sendStatus ?? "SENT",
+        deliveryStatus: payload?.data?.message?.deliveryStatus ?? "SENT",
+        sendError: payload?.data?.message?.sendError ?? null,
+        retryable: false
+      });
       recordInboxTelemetry("send_latency_ms", Number((performance.now() - startedAt).toFixed(1)), {
         orgId,
-        conversationId: selectedConversationId
+        conversationId
       });
-      await reconcileSendWithoutRealtime();
+      await reconcileAfterSend(conversationId);
     },
-    [loadConversationsBackground, loadMessages, orgId, reconcileSendWithoutRealtime, selectedConversationId, setMessageError]
+    [appendOptimisticOutboundMessage, orgId, reconcileAfterSend, removeOptimisticMessage, resolveOptimisticMessage, selectedConversationId, setMessageError]
   );
 
   const createConversation = useCallback(
@@ -161,13 +291,22 @@ export function useInboxWorkspaceActions(state: InboxWorkspaceState, loaders: In
         return;
       }
 
+      const conversationId = selectedConversationId;
       const startedAt = performance.now();
       setMessageError(null);
+      const optimisticMessageId = appendOptimisticOutboundMessage({
+        conversationId,
+        type: "TEMPLATE",
+        text: `Template: ${input.templateName}`,
+        templateName: input.templateName,
+        templateCategory: input.templateCategory,
+        templateLanguageCode: input.templateLanguageCode
+      });
       const response = await fetch("/api/inbox/send", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          conversationId: selectedConversationId,
+          conversationId,
           type: "TEMPLATE",
           templateName: input.templateName,
           templateCategory: input.templateCategory,
@@ -180,23 +319,29 @@ export function useInboxWorkspaceActions(state: InboxWorkspaceState, loaders: In
       if (!response.ok) {
         recordInboxTelemetry("send_latency_ms", Number((performance.now() - startedAt).toFixed(1)), {
           orgId,
-          conversationId: selectedConversationId
+          conversationId
         });
+        removeOptimisticMessage(optimisticMessageId);
         setMessageError(payload?.error?.message ?? "Gagal mengirim template pesan.");
-        await Promise.all([
-          loadMessages(selectedConversationId, { background: true }),
-          loadConversationsBackground()
-        ]);
+        await reconcileAfterSend(conversationId);
         return;
       }
 
+      resolveOptimisticMessage({
+        optimisticMessageId,
+        serverMessageId: payload?.data?.message?.id ?? payload?.data?.message?.messageId ?? null,
+        sendStatus: payload?.data?.message?.sendStatus ?? "SENT",
+        deliveryStatus: payload?.data?.message?.deliveryStatus ?? "SENT",
+        sendError: payload?.data?.message?.sendError ?? null,
+        retryable: false
+      });
       recordInboxTelemetry("send_latency_ms", Number((performance.now() - startedAt).toFixed(1)), {
         orgId,
-        conversationId: selectedConversationId
+        conversationId
       });
-      await reconcileSendWithoutRealtime();
+      await reconcileAfterSend(conversationId);
     },
-    [loadConversationsBackground, loadMessages, orgId, reconcileSendWithoutRealtime, selectedConversationId, setMessageError]
+    [appendOptimisticOutboundMessage, orgId, reconcileAfterSend, removeOptimisticMessage, resolveOptimisticMessage, selectedConversationId, setMessageError]
   );
 
   const sendAttachmentMessage = useCallback(
@@ -205,10 +350,11 @@ export function useInboxWorkspaceActions(state: InboxWorkspaceState, loaders: In
         return;
       }
 
+      const conversationId = selectedConversationId;
       const startedAt = performance.now();
       setMessageError(null);
       const body = new FormData();
-      body.set("conversationId", selectedConversationId);
+      body.set("conversationId", conversationId);
       body.set("type", attachment.mimeType.startsWith("image/") ? "IMAGE" : attachment.mimeType.startsWith("video/") ? "VIDEO" : attachment.mimeType.startsWith("audio/") ? "AUDIO" : "DOCUMENT");
       body.set("file", attachment.file, attachment.fileName);
 
@@ -221,23 +367,20 @@ export function useInboxWorkspaceActions(state: InboxWorkspaceState, loaders: In
       if (!response.ok) {
         recordInboxTelemetry("send_latency_ms", Number((performance.now() - startedAt).toFixed(1)), {
           orgId,
-          conversationId: selectedConversationId
+          conversationId
         });
         setMessageError(payload?.error?.message ?? "Gagal memproses lampiran.");
-        await Promise.all([
-          loadMessages(selectedConversationId, { background: true }),
-          loadConversationsBackground()
-        ]);
+        await reconcileAfterSend(conversationId);
         return;
       }
 
       recordInboxTelemetry("send_latency_ms", Number((performance.now() - startedAt).toFixed(1)), {
         orgId,
-        conversationId: selectedConversationId
+        conversationId
       });
-      await reconcileSendWithoutRealtime();
+      await reconcileAfterSend(conversationId);
     },
-    [loadConversationsBackground, loadMessages, orgId, reconcileSendWithoutRealtime, selectedConversationId, setMessageError]
+    [orgId, reconcileAfterSend, selectedConversationId, setMessageError]
   );
 
   const toggleSelectedConversationStatus = useCallback(async () => {
@@ -319,9 +462,9 @@ export function useInboxWorkspaceActions(state: InboxWorkspaceState, loaders: In
         return;
       }
 
-      await reconcileSendWithoutRealtime();
+      await reconcileAfterSend();
     },
-    [orgId, reconcileSendWithoutRealtime, selectedConversationId, setMessageError]
+    [orgId, reconcileAfterSend, selectedConversationId, setMessageError]
   );
 
   const assignSelectedConversationToMe = useCallback(async () => {

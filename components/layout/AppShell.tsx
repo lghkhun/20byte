@@ -9,6 +9,7 @@ import { MobileBottomNav } from "@/components/layout/MobileBottomNav";
 import { ThemeToggle } from "@/components/ui/theme-toggle";
 import { SidebarInset, SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
 import { fetchJsonCached } from "@/lib/client/fetchCache";
+import type { OwnerOnboardingStatus } from "@/server/services/onboardingService";
 
 type AppShellProps = {
   user: {
@@ -19,6 +20,7 @@ type AppShellProps = {
     primaryOrgId?: string | null;
     primaryOrgRole?: "OWNER" | "ADMIN" | "CS" | "ADVERTISER" | null;
   } | null;
+  ownerOnboardingStatus?: OwnerOnboardingStatus | null;
   children: React.ReactNode;
 };
 
@@ -89,7 +91,7 @@ const publicRoutes = new Set([
   "/faq"
 ]);
 
-export function AppShell({ user, children }: AppShellProps) {
+export function AppShell({ user, ownerOnboardingStatus = null, children }: AppShellProps) {
   const pathname = usePathname() ?? "";
   const router = useRouter();
   const lastLockStateRef = useRef<{ checkedAt: number; isLocked: boolean } | null>(null);
@@ -161,8 +163,8 @@ export function AppShell({ user, children }: AppShellProps) {
   }
 
   return (
-    <SidebarProvider defaultOpen={true} className="h-dvh overflow-hidden">
-      <AppSidebar user={user} />
+    <SidebarProvider defaultOpen={false} className="h-dvh overflow-hidden">
+      <AppSidebar user={user} ownerOnboardingStatus={ownerOnboardingStatus} />
       <SidebarInset className="h-full min-h-0 overflow-hidden md:m-0 md:rounded-none md:shadow-none">
         <main className="app-shell-main flex h-full min-h-0 flex-1 overflow-hidden p-2 pb-[5.25rem] md:p-4">
           <div className="app-shell-surface flex h-full min-h-0 w-full flex-1 flex-col overflow-hidden rounded-[28px] border border-border/80 bg-surface/90 shadow-[0_20px_60px_hsl(var(--foreground)/0.06)] backdrop-blur">

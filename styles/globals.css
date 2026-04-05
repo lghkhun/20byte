@@ -84,6 +84,18 @@ body {
   line-height: var(--app-line-height);
 }
 
+.emoji-render {
+  font-family:
+    "Space Grotesk",
+    "Apple Color Emoji",
+    "Segoe UI Emoji",
+    "Segoe UI Symbol",
+    "Noto Color Emoji",
+    system-ui,
+    -apple-system,
+    sans-serif;
+}
+
 @media (min-width: 1024px) and (max-width: 1366px), (min-width: 1024px) and (max-height: 800px) {
   :root {
     --app-font-size: 12.75px;

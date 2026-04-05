@@ -212,6 +212,7 @@ export async function POST(request: NextRequest) {
       actorUserId: auth.session.userId,
       orgId,
       conversationId: typeof body.conversationId === "string" ? body.conversationId : "",
+      dispatchMode: "SYNC",
       type,
       text: typeof body.text === "string" ? body.text : undefined,
       mediaId: mediaMeta?.mediaId,
@@ -224,11 +225,15 @@ export async function POST(request: NextRequest) {
       templateLanguageCode: typeof body.templateLanguageCode === "string" ? body.templateLanguageCode : undefined,
       templateComponents: templateComponents ?? undefined
     });
+    const responseMessage = {
+      ...message,
+      id: message.messageId
+    };
 
     return NextResponse.json(
       {
         data: {
-          message
+          message: responseMessage
         },
         meta: {}
       },

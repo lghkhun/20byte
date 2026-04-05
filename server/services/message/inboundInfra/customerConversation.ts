@@ -1,9 +1,14 @@
+import { readFile } from "fs/promises";
+import path from "path";
+
 import { ConversationStatus, type Prisma } from "@prisma/client";
 
+import { normalizePossibleE164 } from "@/lib/whatsapp/e164";
 import type { ResolvedAttribution } from "@/server/services/message/messageTypes";
 import { ServiceError } from "@/server/services/serviceError";
 
 const MAX_WA_PROFILE_PIC_URL_LENGTH = 191;
+const BAILEYS_AUTH_DIR = path.join(process.cwd(), ".runtime", "baileys-auth");
 
 function sanitizeWaProfilePicUrl(rawValue?: string): string | undefined {
   const value = (rawValue ?? "").trim();
@@ -30,6 +35,246 @@ function sanitizeWaProfilePicUrl(rawValue?: string): string | undefined {
   return undefined;
 }
 
+function extractDigits(raw: string | undefined): string {
+  return (raw ?? "").replace(/\D/g, "");
+}
+
+function getAuthFolder(orgId: string): string {
+  return path.join(BAILEYS_AUTH_DIR, orgId);
+}
+
+async function resolveCanonicalCustomerPhoneE164(orgId: string, customerPhoneE164: string): Promise<string> {
+  const normalizedInput = normalizePossibleE164(customerPhoneE164) ?? customerPhoneE164.trim();
+  const inputDigits = extractDigits(normalizedInput);
+  if (!inputDigits) {
+    return normalizedInput;
+  }
+
+  const reverseMappingPath = path.join(getAuthFolder(orgId), `lid-mapping-${inputDigits}_reverse.json`);
+  try {
+    const raw = await readFile(reverseMappingPath, "utf8");
+    const parsed = JSON.parse(raw) as unknown;
+    if (typeof parsed === "string") {
+      const mappedDigits = extractDigits(parsed);
+      const mappedE164 = normalizePossibleE164(mappedDigits);
+      if (mappedE164) {
+        return mappedE164;
+      }
+    }
+  } catch {
+    // ignore missing mapping file
+  }
+
+  return normalizePossibleE164(inputDigits) ?? normalizedInput;
+}
+
+async function collapseCustomerConversations(
+  tx: Prisma.TransactionClient,
+  orgId: string,
+  customerId: string
+): Promise<void> {
+  const conversations = await tx.conversation.findMany({
+    where: {
+      orgId,
+      customerId
+    },
+    select: {
+      id: true,
+      status: true,
+      unreadCount: true,
+      lastMessageAt: true,
+      updatedAt: true,
+      createdAt: true
+    },
+    orderBy: [{ updatedAt: "desc" }, { lastMessageAt: "desc" }, { createdAt: "desc" }]
+  });
+
+  if (conversations.length <= 1) {
+    return;
+  }
+
+  const primaryConversation = conversations[0];
+  const duplicateIds = conversations.slice(1).map((conversation) => conversation.id);
+  if (duplicateIds.length === 0) {
+    return;
+  }
+
+  await tx.message.updateMany({
+    where: {
+      orgId,
+      conversationId: {
+        in: duplicateIds
+      }
+    },
+    data: {
+      conversationId: primaryConversation.id
+    }
+  });
+
+  await tx.invoice.updateMany({
+    where: {
+      orgId,
+      conversationId: {
+        in: duplicateIds
+      }
+    },
+    data: {
+      conversationId: primaryConversation.id
+    }
+  });
+
+  const latestMessage = await tx.message.findFirst({
+    where: {
+      orgId,
+      conversationId: primaryConversation.id
+    },
+    orderBy: {
+      createdAt: "desc"
+    },
+    select: {
+      createdAt: true
+    }
+  });
+
+  const mergedUnreadCount = conversations.reduce((total, conversation) => total + conversation.unreadCount, 0);
+  const shouldOpen = conversations.some((conversation) => conversation.status === ConversationStatus.OPEN);
+
+  await tx.conversation.update({
+    where: {
+      id: primaryConversation.id
+    },
+    data: {
+      status: shouldOpen ? ConversationStatus.OPEN : primaryConversation.status,
+      unreadCount: mergedUnreadCount,
+      lastMessageAt: latestMessage?.createdAt ?? primaryConversation.lastMessageAt
+    }
+  });
+
+  await tx.conversation.deleteMany({
+    where: {
+      orgId,
+      id: {
+        in: duplicateIds
+      }
+    }
+  });
+}
+
+async function mergeLegacyCustomerIntoCanonical(
+  tx: Prisma.TransactionClient,
+  orgId: string,
+  legacyCustomerId: string,
+  canonicalCustomerId: string
+): Promise<void> {
+  if (!legacyCustomerId || !canonicalCustomerId || legacyCustomerId === canonicalCustomerId) {
+    return;
+  }
+
+  const legacyExists = await tx.customer.findFirst({
+    where: {
+      id: legacyCustomerId,
+      orgId
+    },
+    select: {
+      id: true
+    }
+  });
+  if (!legacyExists) {
+    return;
+  }
+
+  const canonicalExists = await tx.customer.findFirst({
+    where: {
+      id: canonicalCustomerId,
+      orgId
+    },
+    select: {
+      id: true
+    }
+  });
+  if (!canonicalExists) {
+    return;
+  }
+
+  const legacyTagLinks = await tx.customerTag.findMany({
+    where: {
+      orgId,
+      customerId: legacyCustomerId
+    },
+    select: {
+      tagId: true
+    }
+  });
+
+  for (const link of legacyTagLinks) {
+    const existingLink = await tx.customerTag.findUnique({
+      where: {
+        customerId_tagId: {
+          customerId: canonicalCustomerId,
+          tagId: link.tagId
+        }
+      },
+      select: {
+        id: true
+      }
+    });
+    if (!existingLink) {
+      await tx.customerTag.create({
+        data: {
+          orgId,
+          customerId: canonicalCustomerId,
+          tagId: link.tagId
+        }
+      });
+    }
+  }
+
+  await tx.customerTag.deleteMany({
+    where: {
+      orgId,
+      customerId: legacyCustomerId
+    }
+  });
+
+  await tx.customerNote.updateMany({
+    where: {
+      orgId,
+      customerId: legacyCustomerId
+    },
+    data: {
+      customerId: canonicalCustomerId
+    }
+  });
+
+  await tx.invoice.updateMany({
+    where: {
+      orgId,
+      customerId: legacyCustomerId
+    },
+    data: {
+      customerId: canonicalCustomerId
+    }
+  });
+
+  await tx.conversation.updateMany({
+    where: {
+      orgId,
+      customerId: legacyCustomerId
+    },
+    data: {
+      customerId: canonicalCustomerId
+    }
+  });
+
+  await collapseCustomerConversations(tx, orgId, canonicalCustomerId);
+
+  await tx.customer.delete({
+    where: {
+      id: legacyCustomerId
+    }
+  });
+}
+
 export async function getOrCreateCustomer(
   tx: Prisma.TransactionClient,
   orgId: string,
@@ -39,11 +284,12 @@ export async function getOrCreateCustomer(
   attribution?: ResolvedAttribution
 ) {
   const safeCustomerAvatarUrl = sanitizeWaProfilePicUrl(customerAvatarUrl);
+  const canonicalCustomerPhoneE164 = await resolveCanonicalCustomerPhoneE164(orgId, customerPhoneE164);
   const existing = await tx.customer.findUnique({
     where: {
       orgId_phoneE164: {
         orgId,
-        phoneE164: customerPhoneE164
+        phoneE164: canonicalCustomerPhoneE164
       }
     },
     select: {
@@ -56,6 +302,23 @@ export async function getOrCreateCustomer(
       medium: true
     }
   });
+
+  if (existing && canonicalCustomerPhoneE164 !== customerPhoneE164) {
+    const legacy = await tx.customer.findUnique({
+      where: {
+        orgId_phoneE164: {
+          orgId,
+          phoneE164: customerPhoneE164
+        }
+      },
+      select: {
+        id: true
+      }
+    });
+    if (legacy && legacy.id !== existing.id) {
+      await mergeLegacyCustomerIntoCanonical(tx, orgId, legacy.id, existing.id);
+    }
+  }
 
   if (existing) {
     const updateData: Prisma.CustomerUpdateInput = {};
@@ -104,12 +367,83 @@ export async function getOrCreateCustomer(
     };
   }
 
+  if (canonicalCustomerPhoneE164 !== customerPhoneE164) {
+    const legacy = await tx.customer.findUnique({
+      where: {
+        orgId_phoneE164: {
+          orgId,
+          phoneE164: customerPhoneE164
+        }
+      },
+      select: {
+        id: true,
+        source: true,
+        campaign: true,
+        adset: true,
+        ad: true,
+        platform: true,
+        medium: true
+      }
+    });
+
+    if (legacy) {
+      const updateData: Prisma.CustomerUpdateInput = {
+        phoneE164: canonicalCustomerPhoneE164
+      };
+      if (customerDisplayName) {
+        updateData.displayName = customerDisplayName;
+      }
+      if (safeCustomerAvatarUrl) {
+        updateData.waProfilePicUrl = safeCustomerAvatarUrl;
+      }
+      if (!legacy.source) {
+        const resolvedAdset = attribution?.adset ?? attribution?.platform ?? null;
+        const resolvedAd = attribution?.ad ?? attribution?.medium ?? null;
+        updateData.source = attribution?.source ?? "organic";
+        updateData.campaign = attribution?.campaign ?? null;
+        updateData.adset = resolvedAdset;
+        updateData.ad = resolvedAd;
+        updateData.platform = resolvedAdset;
+        updateData.medium = resolvedAd;
+        updateData.firstContactAt = new Date();
+      }
+
+      const updatedLegacy = await tx.customer.update({
+        where: {
+          id: legacy.id
+        },
+        data: updateData,
+        select: {
+          id: true,
+          source: true,
+          campaign: true,
+          adset: true,
+          ad: true,
+          platform: true,
+          medium: true
+        }
+      });
+
+      await collapseCustomerConversations(tx, orgId, updatedLegacy.id);
+
+      return {
+        id: updatedLegacy.id,
+        source: updatedLegacy.source ?? attribution?.source ?? "organic",
+        campaign: updatedLegacy.campaign ?? attribution?.campaign ?? null,
+        adset: updatedLegacy.adset ?? updatedLegacy.platform ?? attribution?.adset ?? attribution?.platform ?? null,
+        ad: updatedLegacy.ad ?? updatedLegacy.medium ?? attribution?.ad ?? attribution?.medium ?? null,
+        platform: updatedLegacy.platform ?? updatedLegacy.adset ?? attribution?.adset ?? attribution?.platform ?? null,
+        medium: updatedLegacy.medium ?? updatedLegacy.ad ?? attribution?.ad ?? attribution?.medium ?? null
+      };
+    }
+  }
+
   const createdAdset = attribution?.adset ?? attribution?.platform ?? null;
   const createdAd = attribution?.ad ?? attribution?.medium ?? null;
   return tx.customer.create({
     data: {
       orgId,
-      phoneE164: customerPhoneE164,
+      phoneE164: canonicalCustomerPhoneE164,
       displayName: customerDisplayName ?? null,
       waProfilePicUrl: safeCustomerAvatarUrl ?? null,
       source: attribution?.source ?? "organic",

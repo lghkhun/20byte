@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { MoreHorizontal, RefreshCw } from "lucide-react";
+import { MoreHorizontal, RefreshCw, Trash2, UserPlus } from "lucide-react";
 
 import { fetchOrganizationsCached } from "@/lib/client/orgsCache";
 import { notifyError, notifySuccess } from "@/lib/ui/notify";
@@ -12,6 +12,7 @@ import {
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuLabel,
+  DropdownMenuSeparator,
   DropdownMenuTrigger
 } from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
@@ -71,8 +72,11 @@ export function TeamSettings() {
   const [role, setRole] = useState<StaffRole>("CS");
   const [isLoading, setIsLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isUpdatingRoleForUserId, setIsUpdatingRoleForUserId] = useState<string | null>(null);
+  const [isDeletingUserId, setIsDeletingUserId] = useState<string | null>(null);
   const [isResendingForUserId, setIsResendingForUserId] = useState<string | null>(null);
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
+  const [memberPendingDelete, setMemberPendingDelete] = useState<OrgMember | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
   const [lastSetupLink, setLastSetupLink] = useState<string | null>(null);
@@ -89,25 +93,28 @@ export function TeamSettings() {
       !reachedLimitForNewMember
   );
 
+  const openCreateMemberDialog = useCallback(() => {
+    setName("");
+    setEmail("");
+    setRole("CS");
+    setLastSetupLink(null);
+    setLastSetupMailtoUrl(null);
+    setIsCreateDialogOpen(true);
+  }, []);
+
   const createAction = useMemo(
     () => (
       <Button
         type="button"
         disabled={reachedLimitForNewMember}
         className="h-10 rounded-xl"
-        onClick={() => {
-          setName("");
-          setEmail("");
-          setRole("CS");
-          setLastSetupLink(null);
-          setLastSetupMailtoUrl(null);
-          setIsCreateDialogOpen(true);
-        }}
+        onClick={openCreateMemberDialog}
       >
-        Undang Staff
+        <UserPlus className="mr-2 h-4 w-4" />
+        Tambahkan Anggota
       </Button>
     ),
-    [reachedLimitForNewMember]
+    [openCreateMemberDialog, reachedLimitForNewMember]
   );
 
   useSettingsHeaderAction("10-team-create", createAction);
@@ -230,9 +237,9 @@ export function TeamSettings() {
       setSuccess(
         requiresPasswordSetup
           ? emailDelivery
-            ? "Undangan berhasil dikirim via email."
-            : "Undangan dibuat, tapi email belum terkirim. Gunakan link aktivasi sebagai fallback."
-          : "Anggota berhasil ditambahkan ke business."
+            ? "Undangan anggota berhasil dikirim lewat email."
+            : "Anggota ditambahkan, tetapi email belum terkirim. Gunakan link aktivasi sebagai alternatif."
+          : "Anggota berhasil ditambahkan."
       );
     } catch (submitError) {
       setError(toErrorMessage(submitError, "Failed to invite member."));
@@ -288,6 +295,78 @@ export function TeamSettings() {
     }
   }
 
+  async function handleUpdateRole(member: OrgMember, nextRole: StaffRole) {
+    if (!activeBusiness || member.role === nextRole || isUpdatingRoleForUserId || isDeletingUserId) {
+      return;
+    }
+
+    try {
+      setIsUpdatingRoleForUserId(member.userId);
+      setError(null);
+      setSuccess(null);
+
+      const response = await fetch("/api/orgs/members", {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          orgId: activeBusiness.id,
+          userId: member.userId,
+          role: nextRole
+        })
+      });
+
+      const payload = (await response.json().catch(() => null)) as ApiError | null;
+      if (!response.ok) {
+        throw new Error(payload?.error?.message ?? "Failed to update member role.");
+      }
+
+      await loadMembers(activeBusiness.id);
+      setSuccess(`Role anggota berhasil diubah menjadi ${nextRole}.`);
+    } catch (updateError) {
+      setError(toErrorMessage(updateError, "Failed to update member role."));
+    } finally {
+      setIsUpdatingRoleForUserId(null);
+    }
+  }
+
+  async function handleDeleteMember() {
+    if (!activeBusiness || !memberPendingDelete || isDeletingUserId || isUpdatingRoleForUserId) {
+      return;
+    }
+
+    try {
+      setIsDeletingUserId(memberPendingDelete.userId);
+      setError(null);
+      setSuccess(null);
+
+      const response = await fetch("/api/orgs/members", {
+        method: "DELETE",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          orgId: activeBusiness.id,
+          userId: memberPendingDelete.userId
+        })
+      });
+
+      const payload = (await response.json().catch(() => null)) as ApiError | null;
+      if (!response.ok) {
+        throw new Error(payload?.error?.message ?? "Failed to delete member.");
+      }
+
+      await loadMembers(activeBusiness.id);
+      setSuccess("Anggota berhasil dihapus.");
+      setMemberPendingDelete(null);
+    } catch (deleteError) {
+      setError(toErrorMessage(deleteError, "Failed to delete member."));
+    } finally {
+      setIsDeletingUserId(null);
+    }
+  }
+
   async function handleCopySetupLink() {
     if (!lastSetupLink) {
       return;
@@ -304,7 +383,7 @@ export function TeamSettings() {
   return (
     <section className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <p className="text-sm text-muted-foreground">Owner dapat mengundang staff role CS/Advertiser lewat email agar onboarding lebih cepat.</p>
+        <p className="text-sm text-muted-foreground">Kelola anggota tim agar pekerjaan chat dan follow-up bisa dibagi dengan rapi.</p>
         <p className="text-xs text-muted-foreground">Anggota aktif non-owner: {nonOwnerCount}/{MAX_NON_OWNER_MEMBERS}</p>
       </div>
 
@@ -364,17 +443,40 @@ export function TeamSettings() {
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align="end">
                           <DropdownMenuLabel>Member actions</DropdownMenuLabel>
+                          {STAFF_ROLES.map((item) => (
+                            <DropdownMenuItem
+                              key={item}
+                              onClick={() => {
+                                void handleUpdateRole(member, item);
+                              }}
+                              disabled={member.role === item || Boolean(isUpdatingRoleForUserId) || Boolean(isDeletingUserId)}
+                            >
+                              {isUpdatingRoleForUserId === member.userId && member.role !== item ? "Menyimpan..." : `Set role ${item}`}
+                            </DropdownMenuItem>
+                          ))}
+                          <DropdownMenuSeparator />
                           {(member.role === "CS" || member.role === "ADVERTISER") ? (
                             <DropdownMenuItem
                               onClick={() => {
                                 void handleResendSetup(member.userId);
                               }}
-                              disabled={Boolean(isResendingForUserId)}
+                              disabled={Boolean(isResendingForUserId) || Boolean(isUpdatingRoleForUserId) || Boolean(isDeletingUserId)}
                             >
                               <RefreshCw className="mr-2 h-4 w-4" />
-                              {isResendingForUserId === member.userId ? "Resending..." : "Resend setup link"}
+                              {isResendingForUserId === member.userId ? "Mengirim ulang..." : "Kirim ulang link aktivasi"}
                             </DropdownMenuItem>
                           ) : null}
+                          <DropdownMenuSeparator />
+                          <DropdownMenuItem
+                            className="text-rose-600 focus:text-rose-700"
+                            onClick={() => {
+                              setMemberPendingDelete(member);
+                            }}
+                            disabled={Boolean(isUpdatingRoleForUserId) || Boolean(isDeletingUserId)}
+                          >
+                            <Trash2 className="mr-2 h-4 w-4" />
+                            Hapus anggota
+                          </DropdownMenuItem>
                         </DropdownMenuContent>
                       </DropdownMenu>
                     ) : null}
@@ -393,8 +495,8 @@ export function TeamSettings() {
       <Dialog open={isCreateDialogOpen} onOpenChange={setIsCreateDialogOpen}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Undang Staff</DialogTitle>
-            <DialogDescription>Undang via email dan tentukan role CS/Advertiser. Jika akun belum aktif, sistem menyiapkan link aktivasi.</DialogDescription>
+            <DialogTitle>Tambahkan Anggota</DialogTitle>
+            <DialogDescription>Tambahkan anggota lewat email dan tentukan peran CS/Advertiser. Jika akun belum aktif, sistem akan menyiapkan link aktivasi.</DialogDescription>
           </DialogHeader>
           <form onSubmit={handleCreateStaff} className="space-y-3">
             <Input
@@ -402,7 +504,7 @@ export function TeamSettings() {
               type="text"
               value={name}
               onChange={(event) => setName(event.target.value)}
-              placeholder="Nama staff"
+              placeholder="Nama anggota"
               className="h-10 rounded-xl"
             />
             <Input
@@ -433,9 +535,55 @@ export function TeamSettings() {
               >
                 Batal
               </Button>
-              <Button type="submit" disabled={!canSubmit}>{isSubmitting ? "Mengundang..." : "Kirim Undangan"}</Button>
+              <Button type="submit" disabled={!canSubmit}>{isSubmitting ? "Menambahkan..." : "Tambahkan Anggota"}</Button>
             </DialogFooter>
           </form>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={Boolean(memberPendingDelete)}
+        onOpenChange={(open) => {
+          if (!open && !isDeletingUserId) {
+            setMemberPendingDelete(null);
+          }
+        }}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Hapus Anggota</DialogTitle>
+            <DialogDescription>
+              Anggota{" "}
+              <span className="font-semibold text-foreground">
+                {memberPendingDelete?.name?.trim() || memberPendingDelete?.email || "-"}
+              </span>{" "}
+              akan kehilangan akses ke business ini.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="ghost"
+              onClick={() => {
+                if (!isDeletingUserId) {
+                  setMemberPendingDelete(null);
+                }
+              }}
+              disabled={Boolean(isDeletingUserId)}
+            >
+              Batal
+            </Button>
+            <Button
+              type="button"
+              variant="destructive"
+              onClick={() => {
+                void handleDeleteMember();
+              }}
+              disabled={Boolean(isDeletingUserId)}
+            >
+              {isDeletingUserId ? "Menghapus..." : "Hapus Anggota"}
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
     </section>

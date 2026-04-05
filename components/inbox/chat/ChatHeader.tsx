@@ -1,7 +1,7 @@
 import Image from "next/image";
-import { Ellipsis, Search, SendToBack, ShieldCheck, Trash2, X } from "lucide-react";
+import { Ellipsis, Search, SendToBack, ShieldCheck } from "lucide-react";
+import { useEffect, useState } from "react";
 
-import { IndicatorLegend } from "@/components/inbox/IndicatorLegend";
 import type { ConversationItem } from "@/components/inbox/types";
 import { Button } from "@/components/ui/button";
 import { toAvatarTone } from "@/components/inbox/chat/chatUtils";
@@ -17,8 +17,6 @@ type ChatHeaderProps = {
   onOpenSearch: () => void;
   onOpenTransfer: () => void;
   onOpenResolve: () => void;
-  onDeleteConversation: () => void;
-  onUnselectConversation: () => void;
   onToggleCrmPanel: () => void;
 };
 
@@ -32,15 +30,15 @@ export function ChatHeader({
   onOpenSearch,
   onOpenTransfer,
   onOpenResolve,
-  onDeleteConversation,
-  onUnselectConversation,
   onToggleCrmPanel
 }: ChatHeaderProps) {
+  const [avatarError, setAvatarError] = useState(false);
   const cachedCustomerAvatarUrl = useLocalImageCache(conversation?.customerAvatarUrl, {
     cacheKey: `chat-avatar:${conversation?.id ?? "none"}`,
     ttlMs: 24 * 60 * 60 * 1000,
     maxBytes: 180 * 1024
   });
+  const avatarSrc = !avatarError ? cachedCustomerAvatarUrl ?? conversation?.customerAvatarUrl ?? undefined : undefined;
   const activityTimestamp = conversation?.lastMessageAt ?? conversation?.updatedAt ?? null;
   const avatarPresenceActive =
     conversation?.status === "OPEN" &&
@@ -50,17 +48,22 @@ export function ChatHeader({
     conversation?.lastMessageDirection === "INBOUND" &&
     (conversation.lastMessageType === "IMAGE" || conversation.lastMessageType === "DOCUMENT");
 
+  useEffect(() => {
+    setAvatarError(false);
+  }, [conversation?.customerAvatarUrl]);
+
   return (
     <div className="flex items-center justify-between gap-3 border-b border-border/70 bg-card/95 px-4 py-3.5 sm:px-6 sm:py-4">
       <div className="flex min-w-0 flex-1 items-center gap-3">
-        {conversation?.customerAvatarUrl ? (
+        {avatarSrc ? (
           <div className="relative h-11 w-11 shrink-0 overflow-hidden rounded-full border border-border/70 shadow-sm">
             <Image
-              src={cachedCustomerAvatarUrl ?? conversation.customerAvatarUrl}
+              src={avatarSrc}
               alt={displayName}
               fill
               unoptimized
               className="object-cover"
+              onError={() => setAvatarError(true)}
             />
             <span
               className={`absolute -bottom-0.5 -right-0.5 h-3.5 w-3.5 rounded-full border-2 border-card ${
@@ -121,7 +124,6 @@ export function ChatHeader({
         </div>
       </div>
       <div className="flex shrink-0 items-center gap-0.5 rounded-2xl border border-border/80 bg-background/55 p-1 sm:gap-1.5">
-        <div className="hidden xl:block"><IndicatorLegend compact /></div>
         <Button
           type="button"
           variant="ghost"
@@ -156,28 +158,6 @@ export function ChatHeader({
           <ShieldCheck className="h-4.5 w-4.5" />
         </Button>
 
-        <Button
-          type="button"
-          variant="ghost"
-          size="icon"
-          disabled={!conversation}
-          className="rounded-lg text-muted-foreground hover:bg-muted hover:text-foreground"
-          title="Hapus chat"
-          onClick={onDeleteConversation}
-        >
-          <Trash2 className="h-4.5 w-4.5" />
-        </Button>
-        <Button
-          type="button"
-          variant="ghost"
-          size="icon"
-          disabled={!conversation}
-          className="rounded-lg text-muted-foreground hover:bg-muted hover:text-foreground"
-          title="Kembali ke daftar chat"
-          onClick={onUnselectConversation}
-        >
-          <X className="h-4.5 w-4.5" />
-        </Button>
         <Button
           type="button"
           variant="ghost"

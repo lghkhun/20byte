@@ -8,6 +8,8 @@ export type StoreInboundMessageInput = {
   shortlinkCode?: string;
   trackingId?: string;
   waMessageId: string;
+  replyToWaMessageId?: string;
+  replyPreviewText?: string;
   type: MessageType;
   text?: string;
   mediaId?: string;
@@ -31,6 +33,8 @@ export type SendOutboundMessageInput = {
   actorUserId: string;
   orgId: string;
   conversationId: string;
+  replyToMessageId?: string;
+  dispatchMode?: "SYNC" | "ASYNC";
   type: "TEXT" | "IMAGE" | "VIDEO" | "AUDIO" | "DOCUMENT" | "TEMPLATE" | "SYSTEM";
   text?: string;
   mediaId?: string;
@@ -67,6 +71,9 @@ export type ListMessagesInput = {
 export type MessageListItem = {
   id: string;
   waMessageId: string | null;
+  replyToMessageId: string | null;
+  replyToWaMessageId: string | null;
+  replyPreviewText: string | null;
   direction: MessageDirection;
   type: MessageType;
   text: string | null;

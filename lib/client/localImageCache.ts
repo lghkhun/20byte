@@ -18,9 +18,11 @@ type UseLocalImageCacheOptions = {
 const CACHE_PREFIX = "imgcache:v1:";
 const DEFAULT_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 const DEFAULT_MAX_BYTES = 350 * 1024;
+const FAILED_FETCH_RETRY_MS = 5 * 60 * 1000;
 
 const memoryCache = new Map<string, LocalImageCacheEntry>();
 const inflightCache = new Map<string, Promise<string | null>>();
+const failedFetchRetryAt = new Map<string, number>();
 
 function isDataUrl(value: string): boolean {
   return value.startsWith("data:");
@@ -94,11 +96,62 @@ function fileToDataUrl(file: Blob): Promise<string> {
   });
 }
 
+function toAbsoluteUrl(value: string): URL | null {
+  if (typeof window === "undefined") {
+    return null;
+  }
+
+  try {
+    return new URL(value, window.location.origin);
+  } catch {
+    return null;
+  }
+}
+
+function resolveFetchCredentials(source: string): RequestCredentials {
+  const parsed = toAbsoluteUrl(source);
+  if (!parsed || typeof window === "undefined") {
+    return "omit";
+  }
+  return parsed.origin === window.location.origin ? "include" : "omit";
+}
+
+function shouldAttemptCacheFetch(source: string): boolean {
+  const parsed = toAbsoluteUrl(source);
+  if (!parsed || typeof window === "undefined") {
+    return false;
+  }
+  if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
+    return false;
+  }
+  return parsed.origin === window.location.origin;
+}
+
+function hasRecentFetchFailure(source: string): boolean {
+  const retryAt = failedFetchRetryAt.get(source);
+  if (!retryAt) {
+    return false;
+  }
+  if (retryAt <= Date.now()) {
+    failedFetchRetryAt.delete(source);
+    return false;
+  }
+  return true;
+}
+
+function rememberFetchFailure(source: string): void {
+  failedFetchRetryAt.set(source, Date.now() + FAILED_FETCH_RETRY_MS);
+}
+
+function clearFetchFailure(source: string): void {
+  failedFetchRetryAt.delete(source);
+}
+
 async function fetchDataUrl(source: string, maxBytes: number): Promise<string | null> {
   const response = await fetch(source, {
     method: "GET",
     cache: "force-cache",
-    credentials: "include"
+    credentials: resolveFetchCredentials(source)
   });
   if (!response.ok) {
     throw new Error(`Failed to load image: ${response.status}`);
@@ -120,6 +173,7 @@ export function invalidateLocalImageCache(cacheKeyPrefix?: string): void {
   if (!cacheKeyPrefix) {
     memoryCache.clear();
     inflightCache.clear();
+    failedFetchRetryAt.clear();
     try {
       const keysToDelete: string[] = [];
       for (let index = 0; index < window.localStorage.length; index += 1) {
@@ -196,6 +250,11 @@ export function useLocalImageCache(source: string | null | undefined, options?: 
       return;
     }
 
+    if (!shouldAttemptCacheFetch(normalizedSource) || hasRecentFetchFailure(normalizedSource)) {
+      setResolvedSource(normalizedSource);
+      return;
+    }
+
     const storageKey = resolveStorageKey(cacheKey);
     const now = Date.now();
     const cached = readFromStorage(storageKey);
@@ -211,13 +270,20 @@ export function useLocalImageCache(source: string | null | undefined, options?: 
     setResolvedSource(normalizedSource);
 
     let active = true;
-    const inflightKey = `${storageKey}::${normalizedSource}`;
+    const inflightKey = `${normalizedSource}::${maxBytes}`;
     const inflight = inflightCache.get(inflightKey) ?? fetchDataUrl(normalizedSource, maxBytes);
     inflightCache.set(inflightKey, inflight);
 
     void inflight
       .then((dataUrl) => {
-        if (!active || !dataUrl) {
+        if (!dataUrl) {
+          rememberFetchFailure(normalizedSource);
+          return;
+        }
+
+        clearFetchFailure(normalizedSource);
+
+        if (!active) {
           return;
         }
 
@@ -230,6 +296,7 @@ export function useLocalImageCache(source: string | null | undefined, options?: 
         setResolvedSource(dataUrl);
       })
       .catch(() => {
+        rememberFetchFailure(normalizedSource);
         if (active) {
           setResolvedSource(normalizedSource);
         }
@@ -245,4 +312,3 @@ export function useLocalImageCache(source: string | null | undefined, options?: 
 
   return resolvedSource || undefined;
 }
-

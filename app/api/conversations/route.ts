@@ -28,7 +28,7 @@ function errorResponse(status: number, code: string, message: string) {
 
 function parseFilter(value: string | null): ConversationListFilter {
   if (!value) {
-    return "UNASSIGNED";
+    return "ALL";
   }
 
   const normalized = value.trim().toUpperCase();
@@ -36,7 +36,7 @@ function parseFilter(value: string | null): ConversationListFilter {
     return normalized;
   }
 
-  return "UNASSIGNED";
+  return "ALL";
 }
 
 function parseStatus(value: string | null): ConversationStatus {

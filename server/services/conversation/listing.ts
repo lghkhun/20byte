@@ -1,12 +1,59 @@
+import { readFile } from "fs/promises";
+import path from "path";
+
 import { ConversationStatus } from "@prisma/client";
 import type { Prisma } from "@prisma/client";
 
 import { prisma } from "@/lib/db/prisma";
+import { normalizePossibleE164 } from "@/lib/whatsapp/e164";
 import { requireInboxMembership } from "@/server/services/conversation/access";
-import { toConversationListItem } from "@/server/services/conversation/mappers";
+import { sanitizeConversationAvatarUrl, toConversationListItem } from "@/server/services/conversation/mappers";
 import type { ConversationListItem, ConversationListResult, ListConversationsInput } from "@/server/services/conversation/types";
 import { normalizeLimit, normalizePage, normalizeValue, resolveLastMessagePreview } from "@/server/services/conversation/utils";
 import { ServiceError } from "@/server/services/serviceError";
+
+const BAILEYS_AUTH_DIR = path.join(process.cwd(), ".runtime", "baileys-auth");
+
+function extractDigits(raw: string | undefined): string {
+  return (raw ?? "").replace(/\D/g, "");
+}
+
+async function resolveCanonicalConversationPhoneE164(
+  orgId: string,
+  phoneE164: string,
+  requestCache: Map<string, string>
+): Promise<string> {
+  const normalizedInput = normalizePossibleE164(phoneE164) ?? phoneE164.trim();
+  const digits = extractDigits(normalizedInput);
+  if (!digits) {
+    return normalizedInput;
+  }
+
+  const cached = requestCache.get(digits);
+  if (cached) {
+    return cached;
+  }
+
+  const reverseMappingPath = path.join(BAILEYS_AUTH_DIR, orgId, `lid-mapping-${digits}_reverse.json`);
+  try {
+    const raw = await readFile(reverseMappingPath, "utf8");
+    const parsed = JSON.parse(raw) as unknown;
+    if (typeof parsed === "string") {
+      const mappedDigits = extractDigits(parsed);
+      const mapped = normalizePossibleE164(mappedDigits);
+      if (mapped) {
+        requestCache.set(digits, mapped);
+        return mapped;
+      }
+    }
+  } catch {
+    // ignore missing mapping file
+  }
+
+  const fallback = normalizePossibleE164(digits) ?? normalizedInput;
+  requestCache.set(digits, fallback);
+  return fallback;
+}
 
 export async function listConversations(input: ListConversationsInput): Promise<ConversationListResult> {
   const orgId = normalizeValue(input.orgId);
@@ -16,7 +63,7 @@ export async function listConversations(input: ListConversationsInput): Promise<
 
   const page = normalizePage(input.page);
   const limit = normalizeLimit(input.limit);
-  const filter = input.filter ?? "UNASSIGNED";
+  const filter = input.filter ?? "ALL";
   const status = input.status ?? ConversationStatus.OPEN;
   const query = normalizeValue(input.query ?? "");
   const actorMembership = await requireInboxMembership(input.actorUserId, orgId);
@@ -60,13 +107,16 @@ export async function listConversations(input: ListConversationsInput): Promise<
     ];
   }
 
-  const [groupedCustomers, rows] = await prisma.$transaction([
-    prisma.conversation.groupBy({
-      by: ["customerId"],
+  const distinctProbeSize = page * limit + 1;
+
+  const [distinctCustomerProbe, rows] = await prisma.$transaction([
+    prisma.conversation.findMany({
       where,
-      orderBy: {
-        customerId: "asc"
-      }
+      distinct: ["customerId"],
+      select: {
+        customerId: true
+      },
+      take: distinctProbeSize
     }),
     prisma.conversation.findMany({
       where,
@@ -111,10 +161,39 @@ export async function listConversations(input: ListConversationsInput): Promise<
     })
   ]);
 
-  const total = groupedCustomers.length;
+  const hasMore = distinctCustomerProbe.length > page * limit;
+  const total = hasMore ? page * limit + 1 : distinctCustomerProbe.length;
+  const requestCanonicalPhoneCache = new Map<string, string>();
+  const conversationItems = await Promise.all(
+    rows.map(async (row) => {
+      const baseItem = toConversationListItem(row);
+      const canonicalPhone = await resolveCanonicalConversationPhoneE164(orgId, baseItem.customerPhoneE164, requestCanonicalPhoneCache);
+      if (canonicalPhone === baseItem.customerPhoneE164) {
+        return { item: baseItem, canonicalPhone };
+      }
+
+      return {
+        canonicalPhone,
+        item: {
+          ...baseItem,
+          customerPhoneE164: canonicalPhone
+        }
+      };
+    })
+  );
+
+  const dedupedConversations: ConversationListItem[] = [];
+  const seenCanonicalPhones = new Set<string>();
+  for (const row of conversationItems) {
+    if (seenCanonicalPhones.has(row.canonicalPhone)) {
+      continue;
+    }
+    seenCanonicalPhones.add(row.canonicalPhone);
+    dedupedConversations.push(row.item);
+  }
 
   return {
-    conversations: rows.map((row) => toConversationListItem(row)),
+    conversations: dedupedConversations,
     page,
     limit,
     total
@@ -190,7 +269,7 @@ export async function getConversationById(
     customerId: conversation.customerId,
     customerPhoneE164: conversation.customer.phoneE164,
     customerDisplayName: conversation.customer.displayName,
-    customerAvatarUrl: conversation.customer.waProfilePicUrl,
+    customerAvatarUrl: sanitizeConversationAvatarUrl(conversation.customer.waProfilePicUrl),
     customerLeadStatus: conversation.customer.leadStatus,
     crmPipelineId: conversation.crmPipelineId,
     crmPipelineName: conversation.crmPipeline?.name ?? null,

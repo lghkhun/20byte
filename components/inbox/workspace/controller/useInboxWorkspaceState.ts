@@ -9,7 +9,7 @@ export function useInboxWorkspaceState() {
   const [organizations, setOrganizations] = useState<OrgSummary[]>([]);
   const [hasLoadedOrganizations, setHasLoadedOrganizations] = useState(false);
   const [orgId, setOrgId] = useState<string | null>(null);
-  const [filter, setFilter] = useState<ConversationListFilter>("UNASSIGNED");
+  const [filter, setFilter] = useState<ConversationListFilter>("ALL");
   const [statusFilter, setStatusFilter] = useState<ConversationStatusFilter>("OPEN");
   const [conversations, setConversations] = useState<ConversationItem[]>([]);
   const [selectedConversationId, setSelectedConversationId] = useState<string | null>(null);

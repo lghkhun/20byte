@@ -10,16 +10,12 @@ type UseInboxSelectedConversationPersistenceInput = {
   orgId: string | null;
   selectedConversationId: string | null;
   conversations: ConversationLike[];
-  setSelectedConversationId: (conversationId: string | null) => void;
-  loadConversation: (conversationId: string) => Promise<void>;
 };
 
 export function useInboxSelectedConversationPersistence({
   orgId,
   selectedConversationId,
-  conversations,
-  setSelectedConversationId,
-  loadConversation
+  conversations
 }: UseInboxSelectedConversationPersistenceInput) {
   useEffect(() => {
     if (!orgId) {
@@ -39,17 +35,15 @@ export function useInboxSelectedConversationPersistence({
       return;
     }
 
-    const storedConversationId = window.localStorage.getItem(`${INBOX_SELECTED_CONVERSATION_PREFIX}:${orgId}`);
+    const storageKey = `${INBOX_SELECTED_CONVERSATION_PREFIX}:${orgId}`;
+    const storedConversationId = window.localStorage.getItem(storageKey);
     if (!storedConversationId) {
       return;
     }
 
     const exists = conversations.some((conversation) => conversation.id === storedConversationId);
-    if (!exists || storedConversationId === selectedConversationId) {
-      return;
+    if (!exists) {
+      window.localStorage.removeItem(storageKey);
     }
-
-    setSelectedConversationId(storedConversationId);
-    void loadConversation(storedConversationId);
-  }, [conversations, loadConversation, orgId, selectedConversationId, setSelectedConversationId]);
+  }, [conversations, orgId]);
 }

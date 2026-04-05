@@ -9,6 +9,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 
 import { NavMain } from "@/components/nav-main";
 import { NavUser } from "@/components/nav-user";
+import { SidebarOnboardingCard } from "@/components/onboarding/OwnerOnboardingView";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import {
@@ -23,6 +24,7 @@ import {
 } from "@/components/ui/sidebar";
 import { fetchJsonCached, invalidateFetchCache } from "@/lib/client/fetchCache";
 import { dismissNotify, notifyLoading } from "@/lib/ui/notify";
+import type { OwnerOnboardingStatus } from "@/server/services/onboardingService";
 
 type AppSidebarProps = {
   user: {
@@ -33,6 +35,7 @@ type AppSidebarProps = {
     primaryOrgId?: string | null;
     primaryOrgRole?: "OWNER" | "ADMIN" | "CS" | "ADVERTISER" | null;
   } | null;
+  ownerOnboardingStatus?: OwnerOnboardingStatus | null;
 };
 
 type BillingReminderPayload = {
@@ -147,7 +150,7 @@ function formatCountdown(value: string | null | undefined, nowMs: number): strin
     .padStart(2, "0")}`;
 }
 
-export function AppSidebar({ user }: AppSidebarProps) {
+export function AppSidebar({ user, ownerOnboardingStatus = null }: AppSidebarProps) {
   const pathname = usePathname();
   const router = useRouter();
   const [pendingPath, setPendingPath] = useState<string | null>(null);
@@ -463,6 +466,11 @@ export function AppSidebar({ user }: AppSidebarProps) {
             <p className="mt-1.5 text-[12px] font-medium leading-relaxed text-amber-900/80">
               Beri tahu Owner workspace Anda untuk segera melakukan perpanjangan.
             </p>
+          </div>
+        ) : null}
+        {ownerOnboardingStatus && !ownerOnboardingStatus.isComplete ? (
+          <div className="mx-2">
+            <SidebarOnboardingCard status={ownerOnboardingStatus} />
           </div>
         ) : null}
         <NavUser user={user} />

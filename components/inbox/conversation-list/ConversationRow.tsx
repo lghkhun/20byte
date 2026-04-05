@@ -1,4 +1,5 @@
 import Image from "next/image";
+import { useEffect, useState } from "react";
 
 import type { ConversationItem } from "@/components/inbox/types";
 import { formatTimestamp, getSourceBadge, toAvatarTone, toInitials } from "@/components/inbox/conversation-list/utils";
@@ -13,11 +14,13 @@ type ConversationRowProps = {
 };
 
 export function ConversationRow({ density, conversation, isSelected, nowMs, onSelect }: ConversationRowProps) {
+  const [avatarError, setAvatarError] = useState(false);
   const cachedCustomerAvatarUrl = useLocalImageCache(conversation.customerAvatarUrl, {
     cacheKey: `customer-avatar:${conversation.id}`,
     ttlMs: 24 * 60 * 60 * 1000,
     maxBytes: 180 * 1024
   });
+  const avatarSrc = !avatarError ? cachedCustomerAvatarUrl ?? conversation.customerAvatarUrl ?? undefined : undefined;
   const sourceBadge = getSourceBadge(conversation.source);
   const activityTimestamp = conversation.lastMessageAt ?? conversation.updatedAt;
   const avatarPresenceActive =
@@ -35,6 +38,10 @@ export function ConversationRow({ density, conversation, isSelected, nowMs, onSe
     `Ad: ${conversation.sourceAd ?? conversation.sourceMedium ?? "-"}`
   ].join("\n");
 
+  useEffect(() => {
+    setAvatarError(false);
+  }, [conversation.customerAvatarUrl]);
+
   return (
     <button
       type="button"
@@ -46,9 +53,16 @@ export function ConversationRow({ density, conversation, isSelected, nowMs, onSe
       }
     >
       <div className="flex items-start gap-3">
-        {conversation.customerAvatarUrl ? (
+        {avatarSrc ? (
           <div className={`relative ${density === "compact" ? "h-9 w-9" : "h-11 w-11"} shrink-0 overflow-hidden rounded-full border border-border/70 shadow-sm`}>
-            <Image src={cachedCustomerAvatarUrl ?? conversation.customerAvatarUrl} alt={conversation.customerDisplayName ?? conversation.customerPhoneE164} fill unoptimized className="object-cover" />
+            <Image
+              src={avatarSrc}
+              alt={conversation.customerDisplayName ?? conversation.customerPhoneE164}
+              fill
+              unoptimized
+              className="object-cover"
+              onError={() => setAvatarError(true)}
+            />
             <span
               className={`absolute -bottom-0.5 -right-0.5 h-3.5 w-3.5 rounded-full border-2 border-card shadow-sm ${
                 avatarPresenceActive ? "bg-emerald-500" : "bg-slate-300"

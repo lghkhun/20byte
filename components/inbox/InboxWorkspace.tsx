@@ -17,6 +17,7 @@ import { InvoiceDrawer } from "@/components/invoices/InvoiceDrawer";
 import { Button } from "@/components/ui/button";
 import { EmptyStatePanel, ErrorStatePanel } from "@/components/ui/state-panels";
 import { PanelRightClose, PanelRightOpen } from "lucide-react";
+import { notifySuccess, notifyWarning, notifyInfo } from "@/lib/ui/notify";
 
 export function InboxWorkspace() {
   const router = useRouter();
@@ -32,7 +33,6 @@ export function InboxWorkspace() {
     hasMoreConversations,
     conversations,
     selectedConversationId,
-    setSelectedConversationId,
     selectConversation,
     clearSelectedConversation,
     filter,
@@ -93,9 +93,7 @@ export function InboxWorkspace() {
   useInboxSelectedConversationPersistence({
     orgId,
     selectedConversationId,
-    conversations,
-    setSelectedConversationId,
-    loadConversation
+    conversations
   });
 
   const [mobilePane, setMobilePane] = useState<"list" | "chat">("list");
@@ -180,28 +178,31 @@ export function InboxWorkspace() {
     window.localStorage.setItem("inbox.crm.width", String(crmPanelWidth));
   }, [crmPanelWidth]);
 
+  const prevRealtimeStateRef = useRef(realtimeConnectionState);
+  useEffect(() => {
+    if (prevRealtimeStateRef.current !== realtimeConnectionState) {
+      if (realtimeConnectionState === "connected") {
+        notifySuccess("Realtime tersambung", { description: "Pesan inbox kini sinkron secara langsung." });
+      } else if (
+        realtimeConnectionState === "connecting" ||
+        realtimeConnectionState === "suspended" ||
+        realtimeConnectionState === "failed" ||
+        realtimeConnectionState === "disconnected"
+      ) {
+        if (prevRealtimeStateRef.current === "connected") {
+          notifyWarning("Koneksi realtime terputus", { description: "Sedang mencoba menyambungkan kembali..." });
+        }
+      } else if (realtimeConnectionState === "fallback") {
+        notifyInfo("Mode fallback aktif", { description: "Koneksi realtime lambat, menggunakan polling berkala." });
+      }
+      prevRealtimeStateRef.current = realtimeConnectionState;
+    }
+  }, [realtimeConnectionState]);
+
   const isCrmVisible = isDesktopCrmOpen && Boolean(selectedConversationId);
   const gridLayoutClass = isCrmVisible
     ? "grid h-full min-h-0 gap-2 lg:gap-3 lg:grid-cols-[var(--inbox-list-panel-width,340px)_minmax(0,1fr)_minmax(260px,var(--crm-panel-width))]"
     : "grid h-full min-h-0 gap-2 lg:gap-3 lg:grid-cols-[var(--inbox-list-panel-width,340px)_minmax(0,1fr)]";
-
-  const realtimeBanner =
-    realtimeConnectionState === "connected"
-      ? null
-      : realtimeConnectionState === "fallback"
-        ? {
-            text: "Realtime terputus, saat ini memakai fallback polling.",
-            className: "border-amber-500/30 bg-amber-500/10 text-amber-700 dark:text-amber-300"
-          }
-        : realtimeConnectionState === "connecting" || realtimeConnectionState === "initialized"
-          ? {
-              text: "Menyambungkan realtime inbox...",
-              className: "border-sky-500/30 bg-sky-500/10 text-sky-700 dark:text-sky-300"
-            }
-          : {
-              text: "Koneksi realtime bermasalah, mencoba reconnect otomatis.",
-              className: "border-destructive/30 bg-destructive/10 text-destructive"
-            };
 
   return (
     <section className="flex h-full min-h-0 flex-1 overflow-hidden">
@@ -218,10 +219,6 @@ export function InboxWorkspace() {
 
       {orgId ? (
         <div className="flex h-full min-h-0 flex-1 flex-col overflow-hidden">
-          {realtimeBanner ? (
-            <div className={`mb-2 rounded-xl border px-3 py-2 text-sm ${realtimeBanner.className}`}>{realtimeBanner.text}</div>
-          ) : null}
-
           <div className="mb-2 flex items-center gap-2 rounded-xl border border-border/80 bg-card/85 p-1.5 shadow-sm lg:hidden">
             <Button
               type="button"

@@ -14,7 +14,7 @@ export async function sendOutboundTextWithRetry(params: {
         toPhoneE164: params.to,
         text: params.text
       }),
-    { retries: 2, baseDelayMs: 1500, factor: 2, jitter: true }
+    { retries: 2, baseDelayMs: 600, factor: 2, jitter: true }
   );
 }
 
@@ -35,7 +35,7 @@ export async function sendOutboundTemplateWithRetry(params: {
         languageCode: params.languageCode,
         components: params.components
       }),
-    { retries: 2, baseDelayMs: 1500, factor: 2, jitter: true }
+    { retries: 2, baseDelayMs: 600, factor: 2, jitter: true }
   );
 }
 
@@ -60,6 +60,6 @@ export async function sendOutboundMediaWithRetry(params: {
         caption: params.caption,
         buffer: params.buffer
       }),
-    { retries: 2, baseDelayMs: 1500, factor: 2, jitter: true }
+    { retries: 2, baseDelayMs: 600, factor: 2, jitter: true }
   );
 }

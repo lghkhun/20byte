@@ -800,3 +800,122 @@ export async function addOrganizationMemberByEmail(
   });
   return result.member;
 }
+
+export async function updateOrganizationMemberRole(input: {
+  actorUserId: string;
+  orgId: string;
+  userId: string;
+  role: Role;
+}): Promise<OrganizationMemberSummary> {
+  const actorMembership = await requireMembership(input.actorUserId, input.orgId);
+  if (!canAssignOrganizationRole(actorMembership.role, input.role)) {
+    throw new ServiceError(403, "FORBIDDEN_ROLE_ASSIGNMENT", "Your role cannot assign this member role.");
+  }
+
+  const existingMembership = await prisma.orgMember.findUnique({
+    where: {
+      orgId_userId: {
+        orgId: input.orgId,
+        userId: input.userId
+      }
+    },
+    include: {
+      user: {
+        select: {
+          id: true,
+          email: true,
+          name: true
+        }
+      }
+    }
+  });
+
+  if (!existingMembership) {
+    throw new ServiceError(404, "ORG_MEMBER_NOT_FOUND", "Organization member not found.");
+  }
+
+  if (existingMembership.role === Role.OWNER) {
+    throw new ServiceError(400, "OWNER_ROLE_LOCKED", "Owner role cannot be changed from Team Settings.");
+  }
+
+  if (!canManageOrganizationMember(actorMembership.role, existingMembership.role)) {
+    throw new ServiceError(403, "FORBIDDEN_MEMBER_MODIFICATION", "Your role cannot modify this member.");
+  }
+
+  const updated = await prisma.orgMember.update({
+    where: {
+      orgId_userId: {
+        orgId: input.orgId,
+        userId: input.userId
+      }
+    },
+    data: {
+      role: input.role
+    },
+    include: {
+      user: {
+        select: {
+          id: true,
+          email: true,
+          name: true
+        }
+      }
+    }
+  });
+
+  return {
+    orgId: updated.orgId,
+    userId: updated.user.id,
+    role: updated.role,
+    email: updated.user.email,
+    name: updated.user.name,
+    createdAt: updated.createdAt
+  };
+}
+
+export async function removeOrganizationMember(input: {
+  actorUserId: string;
+  orgId: string;
+  userId: string;
+}): Promise<{ deleted: boolean }> {
+  const actorMembership = await requireMembership(input.actorUserId, input.orgId);
+
+  if (input.userId === input.actorUserId) {
+    throw new ServiceError(400, "SELF_MEMBER_DELETE_FORBIDDEN", "You cannot remove your own membership.");
+  }
+
+  const targetMembership = await prisma.orgMember.findUnique({
+    where: {
+      orgId_userId: {
+        orgId: input.orgId,
+        userId: input.userId
+      }
+    },
+    select: {
+      role: true
+    }
+  });
+
+  if (!targetMembership) {
+    throw new ServiceError(404, "ORG_MEMBER_NOT_FOUND", "Organization member not found.");
+  }
+
+  if (targetMembership.role === Role.OWNER) {
+    throw new ServiceError(400, "OWNER_DELETE_FORBIDDEN", "Owner cannot be removed from Team Settings.");
+  }
+
+  if (!canManageOrganizationMember(actorMembership.role, targetMembership.role)) {
+    throw new ServiceError(403, "FORBIDDEN_MEMBER_MODIFICATION", "Your role cannot modify this member.");
+  }
+
+  await prisma.orgMember.delete({
+    where: {
+      orgId_userId: {
+        orgId: input.orgId,
+        userId: input.userId
+      }
+    }
+  });
+
+  return { deleted: true };
+}

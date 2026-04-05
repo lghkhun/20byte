@@ -136,7 +136,11 @@ export function MessageBubble({
           </p>
         ) : null}
 
-        {message.text ? <p className="whitespace-pre-wrap break-words text-sm leading-relaxed text-foreground">{renderTextWithLinks(message.text)}</p> : null}
+        {message.text ? (
+          <p className="emoji-render whitespace-pre-wrap break-words text-sm leading-relaxed text-foreground">
+            {renderTextWithLinks(message.text)}
+          </p>
+        ) : null}
 
         {canUseAsProof ? (
           <div className="mt-2">

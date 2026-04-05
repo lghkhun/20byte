@@ -54,9 +54,12 @@ export function ConversationListPanel({
   const [newName, setNewName] = useState("");
   const [isCreating, setIsCreating] = useState(false);
   const [createError, setCreateError] = useState<string | null>(null);
-  const [showUnreadOnly, setShowUnreadOnly] = useState(false);
+  const [showUnreadOnly, setShowUnreadOnly] = useState(true);
   const [nowMs, setNowMs] = useState(() => Date.now());
   const searchInputRef = useRef<HTMLInputElement | null>(null);
+  const listScrollRef = useRef<HTMLDivElement | null>(null);
+  const loadMoreSentinelRef = useRef<HTMLDivElement | null>(null);
+  const loadMoreLockRef = useRef(false);
 
   const filteredConversations = useMemo(() => {
     const nextItems = conversations.filter((conversation) => {
@@ -80,6 +83,48 @@ export function ConversationListPanel({
     return () => window.clearInterval(timer);
   }, []);
 
+  useEffect(() => {
+    if (!hasMore || isLoading || error) {
+      return;
+    }
+
+    const root = listScrollRef.current;
+    const sentinel = loadMoreSentinelRef.current;
+    if (!root || !sentinel) {
+      return;
+    }
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        const entry = entries[0];
+        if (!entry?.isIntersecting) {
+          return;
+        }
+
+        if (loadMoreLockRef.current || isLoadingMore || !hasMore) {
+          return;
+        }
+
+        loadMoreLockRef.current = true;
+        onLoadMore();
+      },
+      {
+        root,
+        rootMargin: "120px 0px",
+        threshold: 0.05
+      }
+    );
+
+    observer.observe(sentinel);
+    return () => observer.disconnect();
+  }, [error, hasMore, isLoading, isLoadingMore, onLoadMore]);
+
+  useEffect(() => {
+    if (!isLoadingMore) {
+      loadMoreLockRef.current = false;
+    }
+  }, [isLoadingMore]);
+
   const tabItems = [
     {
       key: "all",
@@ -92,17 +137,7 @@ export function ConversationListPanel({
         onStatusChange("OPEN");
       }
     },
-    {
-      key: "unassigned",
-      label: "Belum Assign",
-      count: conversations.filter((item) => item.assignedToMemberId === null && item.status === "OPEN").length,
-      isActive: filter === "UNASSIGNED" && status === "OPEN" && !showUnreadOnly,
-      onClick: () => {
-        setShowUnreadOnly(false);
-        onFilterChange("UNASSIGNED");
-        onStatusChange("OPEN");
-      }
-    },
+
     {
       key: "unread",
       label: "Belum Dibaca",
@@ -193,7 +228,10 @@ export function ConversationListPanel({
         </div>
       </div>
 
-      <div className="inbox-scroll min-h-0 flex-1 overflow-y-auto overscroll-contain border-t border-border/70 bg-[linear-gradient(180deg,hsl(var(--background))/0.88,hsl(var(--muted))/0.2)]">
+      <div
+        ref={listScrollRef}
+        className="inbox-scroll min-h-0 flex-1 overflow-y-auto overscroll-contain border-t border-border/70 bg-[linear-gradient(180deg,hsl(var(--background))/0.88,hsl(var(--muted))/0.2)]"
+      >
         {isLoading ? <ConversationListSkeleton /> : null}
         {!isLoading && error ? <ErrorStatePanel title="Gagal Memuat Percakapan" message={error} /> : null}
 
@@ -219,22 +257,19 @@ export function ConversationListPanel({
         {!isLoading && !error && filteredConversations.length > 0 ? (
           <div className="px-4 py-3 sm:px-5">
             {hasMore ? (
-              <Button
-                type="button"
-                variant="outline"
-                className="h-9 w-full rounded-xl"
-                disabled={isLoadingMore}
-                onClick={onLoadMore}
+              <div
+                ref={loadMoreSentinelRef}
+                className="flex min-h-9 items-center justify-center rounded-xl border border-border/70 bg-background/60"
               >
                 {isLoadingMore ? (
-                  <>
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    Memuat chat lama...
-                  </>
+                  <span className="inline-flex items-center gap-2 text-xs text-muted-foreground">
+                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                    Memuat percakapan...
+                  </span>
                 ) : (
-                  "Muat Percakapan Lain"
+                  <span className="text-[11px] text-muted-foreground">Scroll untuk memuat lebih banyak</span>
                 )}
-              </Button>
+              </div>
             ) : (
               <p className="text-center text-xs text-muted-foreground">Semua percakapan sudah ditampilkan.</p>
             )}

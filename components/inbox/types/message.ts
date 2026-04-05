@@ -1,6 +1,9 @@
 export type MessageItem = {
   id: string;
   waMessageId: string | null;
+  replyToMessageId: string | null;
+  replyToWaMessageId: string | null;
+  replyPreviewText: string | null;
   direction: "INBOUND" | "OUTBOUND";
   type: "TEXT" | "IMAGE" | "VIDEO" | "AUDIO" | "DOCUMENT" | "TEMPLATE" | "SYSTEM";
   text: string | null;

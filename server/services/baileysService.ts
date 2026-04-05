@@ -8,8 +8,10 @@ import makeWASocket, {
   bindWaitForConnectionUpdate,
   downloadMediaMessage,
   fetchLatestWaWebVersion,
+  isHostedLidUser,
   isJidGroup,
   isJidStatusBroadcast,
+  isLidUser,
   jidNormalizedUser,
   useMultiFileAuthState,
   type WAVersion,
@@ -23,6 +25,7 @@ import { canAccessOrganizationSettings } from "@/lib/permissions/orgPermissions"
 import { normalizePossibleE164 } from "@/lib/whatsapp/e164";
 import { assertOrgBillingAccess } from "@/server/services/billingService";
 import { processBaileysOutboundStatusUpdate } from "@/server/services/message/baileysOutboundStatus";
+import { storeExternalOutboundMessage } from "@/server/services/message/externalOutbound";
 import { storeInboundMessage } from "@/server/services/message/inbound";
 import { ServiceError } from "@/server/services/serviceError";
 import { writeAuditLogSafe } from "@/server/services/auditLogService";
@@ -333,6 +336,148 @@ function formatDisplayPhone(digits: string): string {
   return digits ? `+${digits}` : "Connected via Baileys";
 }
 
+function extractJidUserPart(jid: string): string {
+  const localPart = jid.split("@")[0] ?? "";
+  return localPart.split(":")[0] ?? localPart;
+}
+
+async function readReverseLidMappingDigits(orgId: string, lidUserDigits: string): Promise<string | null> {
+  const normalizedLidUserDigits = extractDigits(lidUserDigits);
+  if (!normalizedLidUserDigits) {
+    return null;
+  }
+
+  const mappingPath = path.join(getAuthFolder(orgId), `lid-mapping-${normalizedLidUserDigits}_reverse.json`);
+  try {
+    const raw = await readFile(mappingPath, "utf8");
+    const parsed = JSON.parse(raw) as unknown;
+    if (typeof parsed !== "string") {
+      return null;
+    }
+    const mappedDigits = extractDigits(parsed);
+    return mappedDigits || null;
+  } catch {
+    return null;
+  }
+}
+
+async function readForwardLidMappingDigits(orgId: string, phoneDigits: string): Promise<string | null> {
+  const normalizedPhoneDigits = extractDigits(phoneDigits);
+  if (!normalizedPhoneDigits) {
+    return null;
+  }
+
+  const mappingPath = path.join(getAuthFolder(orgId), `lid-mapping-${normalizedPhoneDigits}.json`);
+  try {
+    const raw = await readFile(mappingPath, "utf8");
+    const parsed = JSON.parse(raw) as unknown;
+    if (typeof parsed !== "string") {
+      return null;
+    }
+    const mappedDigits = extractDigits(parsed);
+    return mappedDigits || null;
+  } catch {
+    return null;
+  }
+}
+
+async function resolvePnJidFromLid(orgId: string, lidJid: string, socket: WASocket): Promise<string | null> {
+  const normalizedLidJid = jidNormalizedUser(lidJid);
+  if (!normalizedLidJid || (!isLidUser(normalizedLidJid) && !isHostedLidUser(normalizedLidJid))) {
+    return null;
+  }
+
+  try {
+    const mappedPnJid = normalize(await socket.signalRepository.lidMapping.getPNForLID(normalizedLidJid) ?? undefined);
+    const normalizedMappedPnJid = jidNormalizedUser(mappedPnJid || undefined);
+    if (normalizedMappedPnJid && normalizedMappedPnJid.endsWith("@s.whatsapp.net")) {
+      return normalizedMappedPnJid;
+    }
+  } catch {
+    // fallback to local auth mapping files below
+  }
+
+  const lidUserDigits = extractDigits(extractJidUserPart(normalizedLidJid));
+  const mappedPnDigits = await readReverseLidMappingDigits(orgId, lidUserDigits);
+  if (!mappedPnDigits) {
+    return null;
+  }
+
+  return `${mappedPnDigits}@s.whatsapp.net`;
+}
+
+async function resolveCustomerPhoneE164ForInboundJid(orgId: string, remoteJid: string, socket: WASocket): Promise<string | null> {
+  const normalizedRemoteJid = jidNormalizedUser(remoteJid);
+  if (!normalizedRemoteJid) {
+    return null;
+  }
+
+  let sourceJid = normalizedRemoteJid;
+  if (isLidUser(normalizedRemoteJid) || isHostedLidUser(normalizedRemoteJid)) {
+    const mappedPnJid = await resolvePnJidFromLid(orgId, normalizedRemoteJid, socket);
+    if (!mappedPnJid) {
+      return null;
+    }
+    sourceJid = mappedPnJid;
+  }
+
+  const sourceDigits = extractDigits(extractJidUserPart(sourceJid));
+  if (!sourceDigits) {
+    return null;
+  }
+
+  if (!isLidUser(sourceJid) && !isHostedLidUser(sourceJid)) {
+    const mappedPnJid = await resolvePnJidFromLid(orgId, `${sourceDigits}@lid`, socket);
+    if (mappedPnJid) {
+      const mappedDigits = extractDigits(extractJidUserPart(mappedPnJid));
+      const normalizedMapped = normalizePossibleE164(mappedDigits);
+      if (normalizedMapped) {
+        return normalizedMapped;
+      }
+    }
+  }
+
+  const reverseMappedDigits = await readReverseLidMappingDigits(orgId, sourceDigits);
+  const normalizedDigits = reverseMappedDigits && reverseMappedDigits !== sourceDigits ? reverseMappedDigits : sourceDigits;
+  return normalizePossibleE164(normalizedDigits);
+}
+
+async function resolveOutboundDestinationJid(orgId: string, toPhoneE164: string, socket: WASocket): Promise<string> {
+  const directJid = toJid(toPhoneE164);
+  const destinationDigits = extractDigits(toPhoneE164);
+  if (!destinationDigits) {
+    return directJid;
+  }
+
+  const forwardMappedDigits = await readForwardLidMappingDigits(orgId, destinationDigits);
+  if (forwardMappedDigits && forwardMappedDigits !== destinationDigits) {
+    const forwardMappedJid = `${forwardMappedDigits}@s.whatsapp.net`;
+    if (DEBUG_BAILEYS_INBOUND) {
+      console.info(`[baileys] outbound mapped-forward-lid org=${orgId} from=${directJid} to=${forwardMappedJid}`);
+    }
+    return forwardMappedJid;
+  }
+
+  const reverseMappedDigits = await readReverseLidMappingDigits(orgId, destinationDigits);
+  if (reverseMappedDigits && reverseMappedDigits !== destinationDigits) {
+    const reverseMappedJid = `${reverseMappedDigits}@s.whatsapp.net`;
+    if (DEBUG_BAILEYS_INBOUND) {
+      console.info(`[baileys] outbound reverse-mapped-lid org=${orgId} from=${directJid} to=${reverseMappedJid}`);
+    }
+    return reverseMappedJid;
+  }
+
+  const mappedPnJid = await resolvePnJidFromLid(orgId, `${destinationDigits}@lid`, socket);
+  if (mappedPnJid && mappedPnJid !== directJid) {
+    if (DEBUG_BAILEYS_INBOUND) {
+      console.info(`[baileys] outbound remapped-lid org=${orgId} from=${directJid} to=${mappedPnJid}`);
+    }
+    return mappedPnJid;
+  }
+
+  return directJid;
+}
+
 function unwrapMessageContent(message: WAMessage["message"]): WAMessage["message"] {
   if (!message) {
     return message;
@@ -601,20 +746,12 @@ async function processInboundMessage(orgId: string, message: WAMessage, socket: 
   if (!remoteJid || isJidGroup(remoteJid) || isJidStatusBroadcast(remoteJid)) {
     return;
   }
+  const isFromMe = Boolean(message.key.fromMe);
 
-  if (message.key.fromMe) {
-    return;
-  }
-
-  const remoteLocalPart = remoteJid.split("@")[0] ?? "";
-  const remotePhoneCandidate = remoteLocalPart.split(":")[0] ?? remoteLocalPart;
-  const phoneDigits = extractDigits(remotePhoneCandidate);
-  const customerPhoneE164 = normalizePossibleE164(phoneDigits);
+  const customerPhoneE164 = await resolveCustomerPhoneE164ForInboundJid(orgId, remoteJid, socket);
   if (!customerPhoneE164) {
     if (DEBUG_BAILEYS_INBOUND) {
-      console.info(
-        `[baileys] inbound ignored-invalid-phone org=${orgId} remoteJid=${remoteJid} localPart=${remoteLocalPart} candidate=${remotePhoneCandidate}`
-      );
+      console.info(`[baileys] inbound ignored-unresolved-phone org=${orgId} remoteJid=${remoteJid}`);
     }
     return;
   }
@@ -644,12 +781,41 @@ async function processInboundMessage(orgId: string, message: WAMessage, socket: 
     }
   }
 
+  const waMessageId = normalize(message.key.id ?? undefined);
+  if (!waMessageId) {
+    return;
+  }
+
+  if (isFromMe) {
+    const outboundResult = await storeExternalOutboundMessage({
+      orgId,
+      customerPhoneE164,
+      customerDisplayName: normalize(message.pushName ?? undefined),
+      customerAvatarUrl,
+      waMessageId,
+      type: kind.type,
+      text: kind.text,
+      mediaId: mediaPath,
+      mediaUrl,
+      mimeType: kind.mimeType,
+      fileName: kind.fileName,
+      fileSize: kind.fileLength,
+      durationSec: kind.durationSec
+    });
+
+    if (DEBUG_BAILEYS_INBOUND && !outboundResult.stored) {
+      const reason = outboundResult.duplicate ? "duplicate" : "ignored";
+      console.info(`[baileys] outbound-from-device ${reason} org=${orgId} waMessageId=${waMessageId || "-"} remoteJid=${remoteJid}`);
+    }
+    return;
+  }
+
   const inboundResult = await storeInboundMessage({
     orgId,
     customerPhoneE164,
     customerDisplayName: normalize(message.pushName ?? undefined),
     customerAvatarUrl,
-    waMessageId: normalize(message.key.id ?? undefined),
+    waMessageId,
     type: kind.type,
     text: kind.text,
     mediaId: mediaPath,
@@ -662,7 +828,7 @@ async function processInboundMessage(orgId: string, message: WAMessage, socket: 
 
   if (DEBUG_BAILEYS_INBOUND && !inboundResult.stored) {
     const reason = inboundResult.duplicate ? "duplicate" : "ignored";
-    console.info(`[baileys] inbound ${reason} org=${orgId} waMessageId=${normalize(message.key.id ?? undefined) || "-"} remoteJid=${remoteJid}`);
+    console.info(`[baileys] inbound ${reason} org=${orgId} waMessageId=${waMessageId || "-"} remoteJid=${remoteJid}`);
   }
 }
 
@@ -722,17 +888,15 @@ async function processPresenceUpdate(
   update: {
     id: string;
     presences: Record<string, { lastKnownPresence: "unavailable" | "available" | "composing" | "recording" | "paused" }>;
-  }
+  },
+  socket: WASocket
 ): Promise<void> {
   const remoteJid = jidNormalizedUser(update.id ?? undefined);
   if (!remoteJid || isJidGroup(remoteJid) || isJidStatusBroadcast(remoteJid)) {
     return;
   }
 
-  const remoteLocalPart = remoteJid.split("@")[0] ?? "";
-  const remotePhoneCandidate = remoteLocalPart.split(":")[0] ?? remoteLocalPart;
-  const phoneDigits = extractDigits(remotePhoneCandidate);
-  const customerPhoneE164 = normalizePossibleE164(phoneDigits);
+  const customerPhoneE164 = await resolveCustomerPhoneE164ForInboundJid(orgId, remoteJid, socket);
   if (!customerPhoneE164) {
     return;
   }
@@ -878,7 +1042,7 @@ async function createSocketForOrg(orgId: string, entry: SessionEntry): Promise<W
 
   socket.ev.on("presence.update", async (presenceUpdate) => {
     try {
-      await processPresenceUpdate(orgId, presenceUpdate);
+      await processPresenceUpdate(orgId, presenceUpdate, socket);
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : "Unknown presence processing error";
       console.error(`[baileys] presence update processing failed for org ${orgId}: ${errorMessage}`);
@@ -1187,10 +1351,12 @@ export async function sendBaileysTextMessage(input: {
   toPhoneE164: string;
   text: string;
 }): Promise<string | null> {
-  const send = async (socket: WASocket) =>
-    socket.sendMessage(toJid(input.toPhoneE164), {
+  const send = async (socket: WASocket) => {
+    const jid = await resolveOutboundDestinationJid(input.orgId, input.toPhoneE164, socket);
+    return socket.sendMessage(jid, {
       text: input.text
     });
+  };
 
   let socket = await ensureConnectedSocketForOrg(input.orgId);
 
@@ -1219,7 +1385,7 @@ export async function sendBaileysMediaMessage(input: {
   buffer: Buffer;
 }): Promise<string | null> {
   const send = async (socket: WASocket) => {
-    const jid = toJid(input.toPhoneE164);
+    const jid = await resolveOutboundDestinationJid(input.orgId, input.toPhoneE164, socket);
     if (input.type === "IMAGE") {
       const response = await socket.sendMessage(jid, {
         image: input.buffer,
@@ -1484,6 +1650,11 @@ export async function writeBaileysAuditLog(actorUserId: string, orgId: string, a
   });
 }
 
-if (process.env.NODE_ENV !== "test") {
+const shouldBootstrapBaileysSessions =
+  process.env.NODE_ENV !== "test" &&
+  process.env.NEXT_PHASE !== "phase-production-build" &&
+  process.env.DISABLE_BAILEYS_BOOTSTRAP !== "1";
+
+if (shouldBootstrapBaileysSessions) {
   void bootstrapConnectedBaileysSessions();
 }

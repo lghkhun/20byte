@@ -10,6 +10,7 @@ import { ThemeProvider } from "@/components/providers/ThemeProvider";
 import { Toaster } from "@/components/ui/sonner";
 import { SESSION_COOKIE_NAME, verifySessionToken } from "@/lib/auth/session";
 import { cn } from "@/lib/utils";
+import { getOwnerOnboardingStatus } from "@/server/services/onboardingService";
 import { isSuperadmin } from "@/server/services/platformAccessService";
 import { getPrimaryOrganizationForUser } from "@/server/services/organizationService";
 
@@ -32,6 +33,10 @@ export default async function RootLayout({
       getPrimaryOrganizationForUser(session.userId).catch(() => null)
     ])
     : [false, null];
+  const ownerOnboardingStatus =
+    session && primaryOrganization?.role === "OWNER"
+      ? await getOwnerOnboardingStatus(session.userId).catch(() => null)
+      : null;
 
   return (
     <html lang="en" suppressHydrationWarning className="h-full">
@@ -54,6 +59,7 @@ export default async function RootLayout({
                   }
                 : null
             }
+            ownerOnboardingStatus={ownerOnboardingStatus}
           >
             {children}
           </AppShell>

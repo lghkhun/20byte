@@ -428,6 +428,11 @@ model Message {
   readAt           DateTime?
   retryable        Boolean            @default(false)
 
+  // Reply metadata (WhatsApp quoted message context)
+  replyToMessageId   String?
+  replyToWaMessageId String?
+  replyPreviewText   String?
+
   createdAt        DateTime           @default(now())
 
   org              Org                @relation(fields: [orgId], references: [id])
@@ -437,6 +442,7 @@ model Message {
   @@index([conversationId, createdAt])
   @@index([orgId, conversationId, createdAt], map: "msg_org_conv_created_idx")
   @@index([orgId, createdAt])
+  @@index([orgId, conversationId, replyToMessageId, createdAt], map: "msg_org_conv_reply_created_idx")
 }
 
 model ServiceCatalogItem {

@@ -11,6 +11,8 @@
     "lint": "next lint",
     "typecheck": "tsc --noEmit --incremental false",
     "test": "NODE_ENV=test tsx --test tests/**/*.test.ts",
+    "test:integration": "RUN_DB_INTEGRATION_TESTS=1 NODE_ENV=test tsx --test tests/integration/**/*.test.ts",
+    "test:all": "RUN_DB_INTEGRATION_TESTS=1 NODE_ENV=test tsx --test tests/**/*.test.ts",
     "smoke:ui": "node scripts/smoke-ui.mjs",
     "smoke:ui:customers-deep": "node scripts/smoke-ui-customers-deep.mjs",
     "smoke:ui:inbox-deep": "node scripts/smoke-ui-inbox-deep.mjs",
@@ -22,7 +24,8 @@
     "smoke:ui:full:report": "npm run smoke:ui:full && npm run smoke:ui:report",
     "audit:cross-org-write-coverage": "node scripts/audit-cross-org-write-coverage.mjs",
     "audit:fetch-latency": "node scripts/audit-fetch-latency.mjs",
-    "quality:check": "npm run lint && npm run typecheck && npm test && npm run audit:cross-org-write-coverage"
+    "quality:check": "npm run lint && npm run typecheck && npm test && npm run audit:cross-org-write-coverage",
+    "quality:check:production": "npm run lint && npm run typecheck && npm run build && npm run test:all && npm run audit:cross-org-write-coverage && npm audit --omit=dev"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1024.0",

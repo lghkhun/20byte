@@ -1,7 +1,7 @@
 "use client";
 
 import { type FormEvent, type KeyboardEvent, useRef, useState } from "react";
-import EmojiPicker, { Theme } from "emoji-picker-react";
+import EmojiPicker, { EmojiStyle, Theme } from "emoji-picker-react";
 import { Paperclip, Smile } from "lucide-react";
 
 import { AttachmentPendingBar } from "@/components/inbox/input/AttachmentPendingBar";
@@ -167,6 +167,7 @@ export function MessageInput({
           <div className="absolute bottom-[calc(100%_+_12px)] right-0 z-20 overflow-hidden rounded-2xl border border-border bg-card shadow-2xl">
             <EmojiPicker
               lazyLoadEmojis
+              emojiStyle={EmojiStyle.APPLE}
               theme={resolvedTheme === "dark" ? Theme.DARK : Theme.LIGHT}
               onEmojiClick={(emojiData) => {
                 onTextValueChange(`${textValue}${emojiData.emoji}`);

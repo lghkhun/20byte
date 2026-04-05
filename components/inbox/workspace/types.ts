@@ -103,6 +103,7 @@ export type SendMessageResponse = {
   data?: {
     message?: {
       id: string;
+      messageId?: string;
       sendStatus?: "PENDING" | "SENT" | "FAILED";
       deliveryStatus?: "SENT" | "DELIVERED" | "READ" | null;
       sendError?: string | null;

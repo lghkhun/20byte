@@ -29,6 +29,14 @@ import {
   LEAD_STATUS_OPTIONS,
   formatLeadSettingLabel
 } from "@/lib/crm/leadSettingsConfig";
+import {
+  buildPipelineCacheScopeKey,
+  pruneCrmPanelLocalCache,
+  readLeadSettingsLocalCache,
+  readPipelineStagesLocalCache,
+  writeLeadSettingsLocalCache,
+  writePipelineStagesLocalCache
+} from "@/components/inbox/workspace/controller/crmPanelLocalCache";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 
@@ -44,6 +52,13 @@ type PipelineStageOption = {
   stageName: string;
   stageColor: string;
   position: number;
+};
+
+const DEFAULT_LEAD_SETTINGS: CustomerLeadSettings = {
+  leadStatus: "NEW_LEAD",
+  businessCategory: null,
+  crmStageId: null,
+  notes: null
 };
 
 type CrmContextPanelProps = {
@@ -185,10 +200,7 @@ export function CrmContextPanel({
   const [isSavingAssignment, setIsSavingAssignment] = useState(false);
   const [assignModalError, setAssignModalError] = useState<string | null>(null);
   const [leadSettings, setLeadSettings] = useState<CustomerLeadSettings>({
-    leadStatus: "NEW_LEAD",
-    businessCategory: null,
-    crmStageId: null,
-    notes: null
+    ...DEFAULT_LEAD_SETTINGS
   });
   const [newBusinessCategory, setNewBusinessCategory] = useState("");
   const [customBusinessCategories, setCustomBusinessCategories] = useState<string[]>([]);
@@ -223,9 +235,17 @@ export function CrmContextPanel({
     initialFocusRef: assignModalCloseButtonRef
   });
 
+  useEffect(() => {
+    pruneCrmPanelLocalCache();
+  }, []);
+
   const canOperateInvoice =
     activeOrgRole === "OWNER" || activeOrgRole === "ADMIN" || activeOrgRole === "CS";
   const activityTimestamp = conversation?.lastMessageAt ?? conversation?.updatedAt ?? null;
+  const conversationOrgId = conversation?.orgId ?? null;
+  const conversationCustomerId = conversation?.customerId ?? null;
+  const conversationCrmStageId = conversation?.crmStageId ?? null;
+  const conversationCrmPipelineId = conversation?.crmPipelineId ?? null;
   const avatarPresenceActive =
     conversation?.status === "OPEN" &&
     Boolean(activityTimestamp) &&
@@ -247,15 +267,34 @@ export function CrmContextPanel({
     let ignore = false;
 
     async function loadLeadSettings() {
-      if (!conversation) {
+      if (!conversationOrgId || !conversationCustomerId) {
+        setLeadSettings({ ...DEFAULT_LEAD_SETTINGS });
+        setNoteContent("");
+        setIsLoadingLeadSettings(false);
+        setLeadSettingsError(null);
         return;
       }
 
-      setIsLoadingLeadSettings(true);
-      setLeadSettingsError(null);
+      const cached = readLeadSettingsLocalCache(conversationOrgId, conversationCustomerId);
+      const hasCached = Boolean(cached);
+      if (cached) {
+        setLeadSettings({
+          leadStatus: cached.leadStatus,
+          businessCategory: cached.businessCategory,
+          crmStageId: cached.crmStageId ?? conversationCrmStageId,
+          notes: cached.notes
+        });
+        setNoteContent(cached.notes ?? "");
+        setIsLoadingLeadSettings(false);
+        setLeadSettingsError(null);
+      } else {
+        setIsLoadingLeadSettings(true);
+        setLeadSettingsError(null);
+      }
+
       try {
         const response = await fetch(
-          `/api/customers/${encodeURIComponent(conversation.customerId)}?orgId=${encodeURIComponent(conversation.orgId)}`,
+          `/api/customers/${encodeURIComponent(conversationCustomerId)}?orgId=${encodeURIComponent(conversationOrgId)}`,
           { cache: "no-store" }
         );
         const payload = (await response.json().catch(() => null)) as {
@@ -270,7 +309,7 @@ export function CrmContextPanel({
           error?: { message?: string };
         } | null;
         if (!response.ok) {
-          if (!ignore) {
+          if (!ignore && !hasCached) {
             setLeadSettingsError(payload?.error?.message ?? "Failed to load lead settings.");
           }
           return;
@@ -278,16 +317,19 @@ export function CrmContextPanel({
 
         const customer = payload?.data?.customer;
         if (!ignore && customer) {
-          setLeadSettings({
+          const nextLeadSettings: CustomerLeadSettings = {
             leadStatus: customer.leadStatus ?? "NEW_LEAD",
             businessCategory: customer.businessCategory ?? null,
-            crmStageId: customer.crmStageId ?? conversation.crmStageId ?? null,
+            crmStageId: customer.crmStageId ?? conversationCrmStageId,
             notes: customer.remarks ?? null
-          });
-          setNoteContent(customer.remarks ?? "");
+          };
+          setLeadSettings(nextLeadSettings);
+          setNoteContent(nextLeadSettings.notes ?? "");
+          writeLeadSettingsLocalCache(conversationOrgId, conversationCustomerId, nextLeadSettings);
+          setLeadSettingsError(null);
         }
       } catch {
-        if (!ignore) {
+        if (!ignore && !hasCached) {
           setLeadSettingsError("Network error while loading lead settings.");
         }
       } finally {
@@ -301,22 +343,30 @@ export function CrmContextPanel({
     return () => {
       ignore = true;
     };
-  }, [conversation]);
+  }, [conversationCrmStageId, conversationCustomerId, conversationOrgId]);
 
   useEffect(() => {
     let ignore = false;
 
     async function loadPipelineStages() {
-      if (!conversation) {
+      if (!conversationOrgId) {
         setPipelineId(null);
         setPipelineStages([]);
         return;
       }
 
+      const scope = buildPipelineCacheScopeKey(conversationCrmPipelineId);
+      const cached = readPipelineStagesLocalCache(conversationOrgId, scope);
+      const hasCached = Boolean(cached);
+      if (cached) {
+        setPipelineId(cached.pipelineId ?? conversationCrmPipelineId);
+        setPipelineStages(cached.stages);
+      }
+
       try {
-        const query = conversation.crmPipelineId
-          ? `?pipelineId=${encodeURIComponent(conversation.crmPipelineId)}&status=OPEN&orgId=${encodeURIComponent(conversation.orgId)}`
-          : `?status=OPEN&orgId=${encodeURIComponent(conversation.orgId)}`;
+        const query = conversationCrmPipelineId
+          ? `?pipelineId=${encodeURIComponent(conversationCrmPipelineId)}&status=OPEN&orgId=${encodeURIComponent(conversationOrgId)}`
+          : `?status=OPEN&orgId=${encodeURIComponent(conversationOrgId)}`;
         const response = await fetch(`/api/crm/pipelines/board${query}`, { cache: "no-store" });
         const payload = (await response.json().catch(() => null)) as {
           data?: {
@@ -333,7 +383,7 @@ export function CrmContextPanel({
           error?: { message?: string };
         } | null;
         if (!response.ok) {
-          if (!ignore) {
+          if (!ignore && !hasCached) {
             setLeadSettingsError(payload?.error?.message ?? "Failed to load pipeline stages.");
           }
           return;
@@ -341,20 +391,32 @@ export function CrmContextPanel({
 
         const board = payload?.data?.board;
         if (!ignore) {
-          setPipelineId(board?.pipeline?.id ?? conversation.crmPipelineId ?? null);
-          setPipelineStages(
-            (board?.columns ?? [])
-              .map((item) => ({
-                stageId: item.stageId,
-                stageName: item.stageName,
-                stageColor: item.stageColor,
-                position: item.position
-              }))
-              .sort((a, b) => a.position - b.position)
-          );
+          const nextPipelineId = board?.pipeline?.id ?? conversationCrmPipelineId;
+          const nextStages = (board?.columns ?? [])
+            .map((item) => ({
+              stageId: item.stageId,
+              stageName: item.stageName,
+              stageColor: item.stageColor,
+              position: item.position
+            }))
+            .sort((a, b) => a.position - b.position);
+
+          setPipelineId(nextPipelineId);
+          setPipelineStages(nextStages);
+          writePipelineStagesLocalCache(conversationOrgId, scope, {
+            pipelineId: nextPipelineId,
+            stages: nextStages
+          });
+          if (nextPipelineId) {
+            const resolvedScope = buildPipelineCacheScopeKey(nextPipelineId);
+            writePipelineStagesLocalCache(conversationOrgId, resolvedScope, {
+              pipelineId: nextPipelineId,
+              stages: nextStages
+            });
+          }
         }
       } catch {
-        if (!ignore) {
+        if (!ignore && !hasCached) {
           setLeadSettingsError("Network error while loading pipeline stages.");
         }
       }
@@ -364,7 +426,7 @@ export function CrmContextPanel({
     return () => {
       ignore = true;
     };
-  }, [conversation]);
+  }, [conversationCrmPipelineId, conversationOrgId]);
 
   const timelineItems = useMemo(() => {
     if (!conversation) {
@@ -460,6 +522,10 @@ export function CrmContextPanel({
       }
 
       setLeadSettings((current) => ({ ...current, notes: noteContent.trim() || null }));
+      writeLeadSettingsLocalCache(conversation.orgId, conversation.customerId, {
+        ...leadSettings,
+        notes: noteContent.trim() || null
+      });
       await onRefreshConversation();
     } catch {
       setLeadSettingsError("Network error while saving notes.");
@@ -601,6 +667,8 @@ export function CrmContextPanel({
         }
       }
 
+      writeLeadSettingsLocalCache(conversation.orgId, conversation.customerId, leadSettings);
+
       await onRefreshConversation();
     } catch {
       setLeadSettingsError("Network error while saving lead settings.");
@@ -609,7 +677,7 @@ export function CrmContextPanel({
     }
   }
 
-  if (isLoading) {
+  if (isLoading && !conversation) {
     return (
       <aside className="inbox-scroll h-full min-h-0 overflow-y-auto overscroll-contain rounded-[20px] border border-border/80 bg-card/95 p-4 shadow-sm">
         <p className="text-sm text-muted-foreground">Loading CRM context...</p>

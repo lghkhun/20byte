@@ -4,7 +4,9 @@ import { type NextRequest, NextResponse } from "next/server";
 import { requireApiSession } from "@/lib/auth/middleware";
 import {
   inviteOrganizationMemberByEmail,
-  listOrganizationMembers
+  listOrganizationMembers,
+  removeOrganizationMember,
+  updateOrganizationMemberRole
 } from "@/server/services/organizationService";
 import { ServiceError } from "@/server/services/serviceError";
 
@@ -13,6 +15,17 @@ type AddMemberRequest = {
   email?: unknown;
   name?: unknown;
   role?: unknown;
+};
+
+type UpdateMemberRequest = {
+  orgId?: unknown;
+  userId?: unknown;
+  role?: unknown;
+};
+
+type DeleteMemberRequest = {
+  orgId?: unknown;
+  userId?: unknown;
 };
 
 const ASSIGNABLE_MEMBER_ROLES = new Set<Role>([Role.CS, Role.ADVERTISER]);
@@ -120,5 +133,109 @@ export async function POST(request: NextRequest) {
     }
 
     return errorResponse(500, "ORG_MEMBER_INVITE_FAILED", "Failed to invite business member.");
+  }
+}
+
+export async function PATCH(request: NextRequest) {
+  const auth = requireApiSession(request);
+  if (auth.response) {
+    return auth.response;
+  }
+
+  let body: UpdateMemberRequest;
+  try {
+    body = (await request.json()) as UpdateMemberRequest;
+  } catch {
+    return errorResponse(400, "INVALID_JSON", "Request body must be valid JSON.");
+  }
+
+  const orgId = typeof body.orgId === "string" ? body.orgId.trim() : "";
+  const userId = typeof body.userId === "string" ? body.userId.trim() : "";
+  const role = parseAssignableRole(body.role);
+
+  if (!orgId) {
+    return errorResponse(400, "MISSING_ORG_ID", "orgId is required.");
+  }
+
+  if (!userId) {
+    return errorResponse(400, "MISSING_USER_ID", "userId is required.");
+  }
+
+  if (!role) {
+    return errorResponse(400, "INVALID_ROLE", "role must be one of: CS, ADVERTISER.");
+  }
+
+  try {
+    const member = await updateOrganizationMemberRole({
+      actorUserId: auth.session.userId,
+      orgId,
+      userId,
+      role
+    });
+
+    return NextResponse.json(
+      {
+        data: {
+          member
+        },
+        meta: {}
+      },
+      { status: 200 }
+    );
+  } catch (error) {
+    if (error instanceof ServiceError) {
+      return errorResponse(error.status, error.code, error.message);
+    }
+
+    return errorResponse(500, "ORG_MEMBER_UPDATE_FAILED", "Failed to update business member.");
+  }
+}
+
+export async function DELETE(request: NextRequest) {
+  const auth = requireApiSession(request);
+  if (auth.response) {
+    return auth.response;
+  }
+
+  let body: DeleteMemberRequest;
+  try {
+    body = (await request.json()) as DeleteMemberRequest;
+  } catch {
+    return errorResponse(400, "INVALID_JSON", "Request body must be valid JSON.");
+  }
+
+  const orgId = typeof body.orgId === "string" ? body.orgId.trim() : "";
+  const userId = typeof body.userId === "string" ? body.userId.trim() : "";
+
+  if (!orgId) {
+    return errorResponse(400, "MISSING_ORG_ID", "orgId is required.");
+  }
+
+  if (!userId) {
+    return errorResponse(400, "MISSING_USER_ID", "userId is required.");
+  }
+
+  try {
+    const deleted = await removeOrganizationMember({
+      actorUserId: auth.session.userId,
+      orgId,
+      userId
+    });
+
+    return NextResponse.json(
+      {
+        data: {
+          deleted
+        },
+        meta: {}
+      },
+      { status: 200 }
+    );
+  } catch (error) {
+    if (error instanceof ServiceError) {
+      return errorResponse(error.status, error.code, error.message);
+    }
+
+    return errorResponse(500, "ORG_MEMBER_DELETE_FAILED", "Failed to delete business member.");
   }
 }

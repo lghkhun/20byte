@@ -10,6 +10,9 @@ export async function storeOutboundRecord(params: {
   orgId: string;
   conversationId: string;
   type: "TEXT" | "IMAGE" | "VIDEO" | "AUDIO" | "DOCUMENT" | "TEMPLATE" | "SYSTEM";
+  replyToMessageId?: string | null;
+  replyToWaMessageId?: string | null;
+  replyPreviewText?: string | null;
   text?: string;
   mediaId?: string | null;
   mediaUrl?: string | null;
@@ -33,6 +36,9 @@ export async function storeOutboundRecord(params: {
         orgId: params.orgId,
         conversationId: params.conversationId,
         waMessageId: params.waMessageId ?? null,
+        replyToMessageId: params.replyToMessageId ?? null,
+        replyToWaMessageId: params.replyToWaMessageId ?? null,
+        replyPreviewText: params.replyPreviewText ?? null,
         direction: MessageDirection.OUTBOUND,
         type: params.type,
         text: params.text,
