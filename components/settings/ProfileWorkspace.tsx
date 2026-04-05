@@ -39,19 +39,19 @@ export function ProfileWorkspace() {
 
   return (
     <div className="flex h-full min-h-0 flex-1 flex-col overflow-hidden">
-      <section className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-[28px] border border-border/70 bg-card/95 px-3 py-2 shadow-sm md:px-4 md:py-3">
+      <section className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-3xl border border-border/60 bg-card px-3 py-2 shadow-[0_2px_10px_-4px_rgba(0,0,0,0.02)] md:px-6 md:py-5">
         <section aria-label="Profile Settings content" className="inbox-scroll min-h-0 flex-1 overflow-y-auto overscroll-contain pr-1">
-          <div className="sticky top-0 z-10 -mx-1 mb-5 border-b border-border/70 bg-card/95 px-1 pb-3 pt-1 backdrop-blur supports-[backdrop-filter]:bg-card/85">
+          <div className="sticky top-0 z-10 -mx-1 mb-5 border-b border-border/50 bg-card/95 px-1 pb-4 pt-1 backdrop-blur supports-[backdrop-filter]:bg-card/85">
             <div className="px-2 py-2">
               <div className="flex flex-col gap-3 xl:flex-row xl:items-start xl:justify-between">
-                <div className="flex items-start gap-3">
-                  <div className="rounded-2xl bg-primary/10 p-2.5 text-primary">
-                    <UserCog className="h-5 w-5" />
+                <div className="flex items-start gap-4">
+                  <div className="rounded-2xl bg-gradient-to-br from-primary/20 to-primary/5 p-3 text-primary ring-1 ring-inset ring-primary/20">
+                    <UserCog className="h-6 w-6" />
                   </div>
                   <div>
-                    <h2 className="text-lg font-semibold text-foreground md:text-xl">Profile Settings</h2>
-                    <p className="mt-1 max-w-3xl text-sm leading-6 text-muted-foreground">
-                      Perbarui identitas akun, foto avatar, dan keamanan login tanpa bercampur dengan pengaturan bisnis.
+                    <h2 className="text-[22px] font-bold tracking-tight text-foreground md:text-[26px]">Profile Settings</h2>
+                    <p className="mt-1.5 max-w-3xl text-[14px] font-medium leading-relaxed text-muted-foreground/80">
+                      Perbarui identitas akun, foto avatar, dan keamanan login.
                     </p>
                   </div>
                 </div>

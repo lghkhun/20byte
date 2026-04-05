@@ -81,108 +81,126 @@ export function AuthForm({ mode }: AuthFormProps) {
   }
 
   return (
-    <div className="mx-auto w-full max-w-md rounded-xl border border-border bg-surface/80 p-6">
-      <h1 className="text-xl font-semibold">{isLogin ? "Sign in to 20byte" : "Create your account"}</h1>
-      <p className="mt-1 text-sm text-muted-foreground">
-        {isLogin ? "Use your email atau WhatsApp dan password untuk lanjut." : "Start with your team account credentials."}
-      </p>
-
-      <form className="mt-6 space-y-4" onSubmit={handleSubmit}>
-        {!isLogin ? (
-          <div className="space-y-2">
-            <label className="text-sm font-medium" htmlFor="name">
-              Name
-            </label>
-            <Input
-              id="name"
-              name="name"
-              autoComplete="name"
-              value={name}
-              onChange={(event) => setName(event.target.value)}
-              placeholder="Jane Doe"
-            />
-          </div>
-        ) : null}
-
-        <div className="space-y-2">
-          <label className="text-sm font-medium" htmlFor="email">
-            {isLogin ? "Email atau WhatsApp" : "Email"}
-          </label>
-          <Input
-            id="email"
-            name="email"
-            type={isLogin ? "text" : "email"}
-            autoComplete={isLogin ? "username" : "email"}
-            required
-            value={email}
-            onChange={(event) => setEmail(event.target.value)}
-            placeholder={isLogin ? "you@company.com atau 08xxxxxx" : "you@company.com"}
-          />
+    <div className="relative mx-auto w-full max-w-[420px] overflow-hidden rounded-3xl border border-border/60 bg-gradient-to-b from-card to-background/50 p-6 shadow-[0_8px_32px_-8px_rgba(0,0,0,0.08)] sm:p-8">
+      <div className="pointer-events-none absolute inset-0 z-0 bg-gradient-to-br from-primary/5 via-transparent to-transparent opacity-70" />
+      <div className="relative z-10">
+        <div className="text-center">
+          <h1 className="text-2xl font-bold tracking-tight text-foreground md:text-[28px]">{isLogin ? "Welcome back" : "Create an account"}</h1>
+          <p className="mt-2 text-[14px] font-medium leading-relaxed text-muted-foreground/80">
+            {isLogin ? "Sign in to your team workspace to continue." : "Start setting up your team workspace credentials."}
+          </p>
         </div>
 
-        {!isLogin ? (
-          <div className="space-y-2">
-            <label className="text-sm font-medium" htmlFor="phone">
-              WhatsApp Number
+        <form className="mt-8 space-y-5" onSubmit={handleSubmit}>
+          {!isLogin ? (
+            <div className="space-y-2.5">
+              <label className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground/80" htmlFor="name">
+                Full Name
+              </label>
+              <Input
+                id="name"
+                name="name"
+                autoComplete="name"
+                value={name}
+                onChange={(event) => setName(event.target.value)}
+                placeholder="Jane Doe"
+                className="h-12 rounded-xl bg-muted/20 font-medium text-foreground transition-all focus-visible:bg-transparent"
+              />
+            </div>
+          ) : null}
+
+          <div className="space-y-2.5">
+            <label className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground/80" htmlFor="email">
+              {isLogin ? "Email atau WhatsApp" : "Email Address"}
             </label>
             <Input
-              id="phone"
-              name="phone"
-              type="text"
-              autoComplete="tel"
+              id="email"
+              name="email"
+              type={isLogin ? "text" : "email"}
+              autoComplete={isLogin ? "username" : "email"}
               required
-              value={phone}
-              onChange={(event) => setPhone(event.target.value)}
-              placeholder="+628123456789 atau 08123456789"
+              value={email}
+              onChange={(event) => setEmail(event.target.value)}
+              placeholder={isLogin ? "you@company.com atau 08xxxxxx" : "you@company.com"}
+              className="h-12 rounded-xl bg-muted/20 font-medium text-foreground transition-all focus-visible:bg-transparent"
             />
           </div>
-        ) : null}
 
-        <div className="space-y-2">
-          <label className="text-sm font-medium" htmlFor="password">
-            Password
-          </label>
-          <Input
-            id="password"
-            name="password"
-            type="password"
-            autoComplete={isLogin ? "current-password" : "new-password"}
-            required
-            value={password}
-            onChange={(event) => setPassword(event.target.value)}
-            placeholder="At least 8 characters"
-          />
-        </div>
+          {!isLogin ? (
+            <div className="space-y-2.5">
+              <label className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground/80" htmlFor="phone">
+                WhatsApp Number
+              </label>
+              <Input
+                id="phone"
+                name="phone"
+                type="text"
+                autoComplete="tel"
+                required
+                value={phone}
+                onChange={(event) => setPhone(event.target.value)}
+                placeholder="+628123456789 atau 08123456789"
+                className="h-12 rounded-xl bg-muted/20 font-medium text-foreground transition-all focus-visible:bg-transparent"
+              />
+            </div>
+          ) : null}
 
-        {error ? (
-          <p className="rounded-md border border-destructive/50 bg-destructive/10 px-3 py-2 text-sm text-destructive">
-            {error}
-          </p>
-        ) : null}
+          <div className="space-y-2.5">
+            <label className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground/80" htmlFor="password">
+              Password
+            </label>
+            <Input
+              id="password"
+              name="password"
+              type="password"
+              autoComplete={isLogin ? "current-password" : "new-password"}
+              required
+              value={password}
+              onChange={(event) => setPassword(event.target.value)}
+              placeholder="At least 8 characters"
+              className="h-12 rounded-xl bg-muted/20 font-medium text-foreground transition-all focus-visible:bg-transparent"
+            />
+            {isLogin ? (
+              <div className="flex justify-end pt-1">
+                <Link className="text-xs font-semibold text-primary underline-offset-4 hover:underline" href="/forgot-password">
+                  Lupa password?
+                </Link>
+              </div>
+            ) : null}
+          </div>
 
-        {success ? (
-          <p className="rounded-md border border-primary/40 bg-primary/10 px-3 py-2 text-sm text-primary">
-            {success}
-          </p>
-        ) : null}
+          {error ? (
+            <p className="rounded-xl border border-rose-500/30 bg-rose-500/10 px-4 py-3 text-sm font-medium text-rose-600 shadow-sm">
+              {error}
+            </p>
+          ) : null}
 
-        <Button className="w-full" type="submit" disabled={isSubmitting}>
-          {isSubmitting
-            ? isLogin
-              ? "Signing in..."
-              : "Creating account..."
-            : isLogin
-              ? "Sign in"
-              : "Create account"}
-        </Button>
-      </form>
+          {success ? (
+            <p className="rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-4 py-3 text-sm font-medium text-emerald-600 shadow-sm">
+              {success}
+            </p>
+          ) : null}
 
-      <p className="mt-4 text-center text-sm text-muted-foreground">
-        {isLogin ? "No account yet? " : "Already have an account? "}
-        <Link className="text-primary hover:underline" href={isLogin ? "/register" : "/login"}>
-          {isLogin ? "Register here" : "Sign in"}
-        </Link>
-      </p>
+          <div className="pt-2">
+            <Button className="h-12 w-full rounded-xl font-bold shadow-md shadow-primary/20 text-[15px]" type="submit" disabled={isSubmitting}>
+              {isSubmitting
+                ? isLogin
+                  ? "Signing in..."
+                  : "Creating account..."
+                : isLogin
+                  ? "Sign in"
+                  : "Create account"}
+            </Button>
+          </div>
+        </form>
+
+        <p className="mt-8 text-center text-[13px] font-medium text-muted-foreground/80">
+          {isLogin ? "Belum punya akun? " : "Sudah punya akun? "}
+          <Link className="font-bold text-primary underline-offset-4 hover:underline" href={isLogin ? "/register" : "/login"}>
+            {isLogin ? "Daftar di sini" : "Login di sini"}
+          </Link>
+        </p>
+      </div>
     </div>
   );
 }

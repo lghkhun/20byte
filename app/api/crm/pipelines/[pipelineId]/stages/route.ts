@@ -19,11 +19,7 @@ function withServerTiming<T>(response: T, startedAt: number): T {
 
 export async function POST(
   request: NextRequest,
-  context: {
-    params: {
-      pipelineId: string;
-    };
-  }
+  context: { params: Promise<{pipelineId: string;}> }
 ) {
   const startedAt = performance.now();
   const auth = requireApiSession(request);
@@ -43,7 +39,7 @@ export async function POST(
     const pipeline = await createCrmPipelineStage({
       actorUserId: auth.session.userId,
       orgId,
-      pipelineId: context.params.pipelineId,
+      pipelineId: (await context.params).pipelineId,
       name: typeof body.name === "string" ? body.name : "",
       color: typeof body.color === "string" ? body.color : ""
     });

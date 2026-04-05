@@ -5,13 +5,9 @@ import { getPublicInvoiceByToken } from "@/server/services/publicInvoiceService"
 
 export async function GET(
   _request: NextRequest,
-  context: {
-    params: {
-      token: string;
-    };
-  }
+  context: { params: Promise<{token: string;}> }
 ) {
-  const token = context.params.token?.trim();
+  const token = (await context.params).token?.trim();
   if (!token) {
     return NextResponse.json(
       {

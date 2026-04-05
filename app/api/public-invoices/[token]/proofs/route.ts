@@ -64,11 +64,7 @@ function parseMilestoneType(value: FormDataEntryValue | null): PaymentMilestoneT
 
 export async function POST(
   request: NextRequest,
-  context: {
-    params: {
-      token: string;
-    };
-  }
+  context: { params: Promise<{token: string;}> }
 ) {
   let formData: FormData;
   try {
@@ -92,7 +88,7 @@ export async function POST(
   try {
     const invoice = await prisma.invoice.findUnique({
       where: {
-        publicToken: context.params.token
+        publicToken: (await context.params).token
       },
       select: {
         id: true,

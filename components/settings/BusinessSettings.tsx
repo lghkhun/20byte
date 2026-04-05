@@ -140,8 +140,8 @@ export function BusinessSettings() {
   const canSave = useMemo(() => Boolean(name.trim()) && !isSaving, [isSaving, name]);
   const saveAction = useMemo(
     () => (
-      <Button disabled={!canSave} type="submit" form={formId} className="h-10 rounded-xl">
-        {isSaving ? "Saving..." : "Simpan Business"}
+      <Button disabled={!canSave} type="submit" form={formId} className="h-11 rounded-xl px-6 font-semibold shadow-md shadow-primary/20">
+        {isSaving ? "Menyimpan..." : "Simpan Business"}
       </Button>
     ),
     [canSave, formId, isSaving]
@@ -273,15 +273,15 @@ export function BusinessSettings() {
 
       {!isLoading ? (
         <form id={formId} className="space-y-6" onSubmit={handleSubmit}>
-          <div className="grid gap-4 lg:grid-cols-2">
-            <div className="space-y-2">
-              <label className="text-sm font-medium text-foreground" htmlFor="business-name">
+          <div className="grid gap-5 lg:grid-cols-2">
+            <div className="space-y-2.5">
+              <label className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground/80" htmlFor="business-name">
                 Nama Business
               </label>
-              <Input id="business-name" value={name} onChange={(event) => setName(event.target.value)} className="rounded-md" />
+              <Input id="business-name" value={name} onChange={(event) => setName(event.target.value)} className="h-11 rounded-xl bg-muted/20 font-medium text-foreground transition-all focus-visible:bg-transparent" />
             </div>
-            <div className="space-y-2">
-              <label className="text-sm font-medium text-foreground" htmlFor="business-legal-name">
+            <div className="space-y-2.5">
+              <label className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground/80" htmlFor="business-legal-name">
                 Nama Legal
               </label>
               <Input
@@ -289,34 +289,34 @@ export function BusinessSettings() {
                 value={legalName}
                 onChange={(event) => setLegalName(event.target.value)}
                 placeholder="PT / CV / Yayasan / Firma / dll."
-                className="rounded-md"
+                className="h-11 rounded-xl bg-muted/20 font-medium text-foreground transition-all focus-visible:bg-transparent"
               />
             </div>
-            <div className="space-y-2">
-              <label className="text-sm font-medium text-foreground" htmlFor="business-responsible-name">
-                Nama Pimpinan / Direktur / Penanggung Jawab
+            <div className="space-y-2.5">
+              <label className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground/80" htmlFor="business-responsible-name">
+                Nama Penanggung Jawab
               </label>
               <Input
                 id="business-responsible-name"
                 value={responsibleName}
                 onChange={(event) => setResponsibleName(event.target.value)}
-                className="rounded-md"
+                className="h-11 rounded-xl bg-muted/20 font-medium text-foreground transition-all focus-visible:bg-transparent"
               />
             </div>
-            <div className="space-y-2">
-              <label className="text-sm font-medium text-foreground" htmlFor="business-phone">
+            <div className="space-y-2.5">
+              <label className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground/80" htmlFor="business-phone">
                 Nomor Telepon Business
               </label>
-              <Input id="business-phone" value={businessPhone} onChange={(event) => setBusinessPhone(event.target.value)} className="rounded-md" />
+              <Input id="business-phone" value={businessPhone} onChange={(event) => setBusinessPhone(event.target.value)} className="h-11 rounded-xl bg-muted/20 font-medium text-foreground transition-all focus-visible:bg-transparent" />
             </div>
-            <div className="space-y-2">
-              <label className="text-sm font-medium text-foreground" htmlFor="business-email">
+            <div className="space-y-2.5">
+              <label className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground/80" htmlFor="business-email">
                 Email Business
               </label>
-              <Input id="business-email" value={businessEmail} onChange={(event) => setBusinessEmail(event.target.value)} className="rounded-md" />
+              <Input id="business-email" value={businessEmail} onChange={(event) => setBusinessEmail(event.target.value)} className="h-11 rounded-xl bg-muted/20 font-medium text-foreground transition-all focus-visible:bg-transparent" />
             </div>
-            <div className="space-y-2">
-              <label className="text-sm font-medium text-foreground" htmlFor="business-npwp">
+            <div className="space-y-2.5">
+              <label className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground/80" htmlFor="business-npwp">
                 NPWP Business
               </label>
               <Input
@@ -324,18 +324,18 @@ export function BusinessSettings() {
                 value={businessNpwp}
                 onChange={(event) => setBusinessNpwp(formatNpwpInput(event.target.value))}
                 placeholder="00.000.000.0-000.000"
-                className="rounded-md"
+                className="h-11 rounded-xl bg-muted/20 font-medium text-foreground transition-all focus-visible:bg-transparent"
               />
             </div>
-            <div className="space-y-2 lg:col-span-2">
-              <label className="text-sm font-medium text-foreground" htmlFor="business-address">
-                Alamat Business
+            <div className="space-y-2.5 lg:col-span-2">
+              <label className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground/80" htmlFor="business-address">
+                Alamat Lengkap
               </label>
               <textarea
                 id="business-address"
                 value={businessAddress}
                 onChange={(event) => setBusinessAddress(event.target.value)}
-                className="min-h-24 w-full rounded-md border border-border bg-background px-3 py-2 text-sm outline-none"
+                className="min-h-28 w-full rounded-xl border border-input bg-muted/20 px-4 py-3 text-[14px] font-medium outline-none transition-all placeholder:text-muted-foreground focus-visible:bg-transparent focus-visible:ring-1 focus-visible:ring-ring"
               />
             </div>
           </div>
@@ -374,8 +374,8 @@ export function BusinessSettings() {
             </p>
           )}
 
-          {error ? <p className="rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm text-destructive">{error}</p> : null}
-          {success ? <p className="rounded-md border border-primary/40 bg-primary/10 px-3 py-2 text-sm text-primary">{success}</p> : null}
+          {error ? <p className="rounded-xl border border-rose-500/30 bg-rose-500/10 px-4 py-3 text-sm font-medium text-rose-600 shadow-sm mt-6">{error}</p> : null}
+          {success ? <p className="rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-4 py-3 text-sm font-medium text-emerald-600 shadow-sm mt-6">{success}</p> : null}
         </form>
       ) : null}
     </section>

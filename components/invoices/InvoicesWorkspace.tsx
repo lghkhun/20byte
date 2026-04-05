@@ -873,6 +873,7 @@ export function InvoicesWorkspace() {
 
   useEffect(() => {
     isMountedRef.current = true;
+    const pendingInvoiceIds = realtimePendingInvoiceIdsRef.current;
     return () => {
       isMountedRef.current = false;
       invoicesAbortControllerRef.current?.abort();
@@ -883,7 +884,7 @@ export function InvoicesWorkspace() {
         clearTimeout(realtimeRefreshTimeoutRef.current);
         realtimeRefreshTimeoutRef.current = null;
       }
-      realtimePendingInvoiceIdsRef.current.clear();
+      pendingInvoiceIds.clear();
     };
   }, []);
 
@@ -1351,6 +1352,14 @@ export function InvoicesWorkspace() {
           >
             Buat Invoice
           </Button>
+        </div>
+        <div
+          className={`inline-flex items-center rounded-full border px-3 py-1 text-xs font-medium ${realtimeBadgeTone(
+            realtimeConnectionState
+          )}`}
+          aria-live="polite"
+        >
+          {realtimeBadgeLabel(realtimeConnectionState)}
         </div>
       </div>
 

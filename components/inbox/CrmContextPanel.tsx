@@ -14,7 +14,6 @@ import {
 } from "lucide-react";
 
 import { ActivityTimelineSection } from "@/components/inbox/crm/ActivityTimelineSection";
-import { IndicatorLegend } from "@/components/inbox/IndicatorLegend";
 import { InvoicesSection } from "@/components/inbox/crm/InvoicesSection";
 import type {
   CrmActivityItem,
@@ -256,7 +255,7 @@ export function CrmContextPanel({
       setLeadSettingsError(null);
       try {
         const response = await fetch(
-          `/api/customers/${encodeURIComponent(conversation.customerId)}`,
+          `/api/customers/${encodeURIComponent(conversation.customerId)}?orgId=${encodeURIComponent(conversation.orgId)}`,
           { cache: "no-store" }
         );
         const payload = (await response.json().catch(() => null)) as {
@@ -316,8 +315,8 @@ export function CrmContextPanel({
 
       try {
         const query = conversation.crmPipelineId
-          ? `?pipelineId=${encodeURIComponent(conversation.crmPipelineId)}&status=OPEN`
-          : "?status=OPEN";
+          ? `?pipelineId=${encodeURIComponent(conversation.crmPipelineId)}&status=OPEN&orgId=${encodeURIComponent(conversation.orgId)}`
+          : `?status=OPEN&orgId=${encodeURIComponent(conversation.orgId)}`;
         const response = await fetch(`/api/crm/pipelines/board${query}`, { cache: "no-store" });
         const payload = (await response.json().catch(() => null)) as {
           data?: {
@@ -447,6 +446,7 @@ export function CrmContextPanel({
             "Content-Type": "application/json"
           },
           body: JSON.stringify({
+            orgId: conversation.orgId,
             remarks: noteContent.trim() || null
           })
         }
@@ -525,6 +525,7 @@ export function CrmContextPanel({
           "Content-Type": "application/json"
         },
         body: JSON.stringify({
+          orgId: conversation.orgId,
           conversationId: conversation.id,
           assigneeUserId: selectedAssignee
         })
@@ -562,6 +563,7 @@ export function CrmContextPanel({
             "Content-Type": "application/json"
           },
           body: JSON.stringify({
+            orgId: conversation.orgId,
             leadStatus: leadSettings.leadStatus,
             businessCategory: leadSettings.businessCategory
           })
@@ -584,6 +586,7 @@ export function CrmContextPanel({
               "Content-Type": "application/json"
             },
             body: JSON.stringify({
+              orgId: conversation.orgId,
               pipelineId,
               stageId: leadSettings.crmStageId
             })

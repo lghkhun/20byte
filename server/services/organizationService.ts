@@ -3,6 +3,8 @@ import { Role } from "@prisma/client";
 import { prisma } from "@/lib/db/prisma";
 import { getProxyAssetUrl, getPublicObjectKeyFromUrl } from "@/lib/r2/client";
 import { assertOrgBillingAccess } from "@/server/services/billingService";
+import { createAccountSetupToken } from "@/server/services/accountSetupService";
+import { sendTransactionalEmail } from "@/server/services/emailService";
 import {
   canAssignOrganizationRole,
   canManageOrganizationMember,
@@ -25,6 +27,10 @@ type AddOrganizationMemberInput = {
   orgId: string;
   email: string;
   role: Role;
+};
+
+type InviteOrganizationMemberInput = AddOrganizationMemberInput & {
+  name?: string;
 };
 
 type OrganizationSummary = {
@@ -54,6 +60,19 @@ type OrganizationMemberSummary = {
   email: string;
   name: string | null;
   createdAt: Date;
+};
+
+type OrganizationMemberInvitation = {
+  setupLink: string | null;
+  expiresAt: Date | null;
+  mailtoUrl: string | null;
+  requiresPasswordSetup: boolean;
+  emailDelivery: boolean | null;
+};
+
+type OrganizationMemberInviteResult = {
+  member: OrganizationMemberSummary;
+  invitation: OrganizationMemberInvitation;
 };
 
 function normalizeAssetUrlForClient(value: string | null): string | null {
@@ -94,6 +113,100 @@ function normalizeOptionalEmail(value: string | null | undefined): string | null
   }
 
   return normalizeAndValidateEmail(normalized);
+}
+
+function normalizeOptionalName(value: string | undefined): string | null {
+  const normalized = value?.trim() ?? "";
+  if (!normalized) {
+    return null;
+  }
+
+  return normalized.slice(0, 120);
+}
+
+function formatInviteRoleLabel(role: Role): string {
+  if (role === Role.ADVERTISER) {
+    return "Advertiser";
+  }
+
+  return "Customer Service (CS)";
+}
+
+function buildInviteMailtoUrl(input: {
+  email: string;
+  orgName: string;
+  role: Role;
+  setupLink: string;
+  expiresAt: Date;
+}): string {
+  const subject = `Undangan bergabung di ${input.orgName} via 20byte`;
+  const expiresAtLabel = new Intl.DateTimeFormat("id-ID", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit"
+  }).format(input.expiresAt);
+  const body = [
+    "Halo,",
+    "",
+    `Anda diundang untuk bergabung ke bisnis "${input.orgName}" di 20byte sebagai ${formatInviteRoleLabel(input.role)}.`,
+    "Silakan aktivasi akun melalui link berikut:",
+    input.setupLink,
+    "",
+    `Link berlaku sampai ${expiresAtLabel}.`,
+    "",
+    "Terima kasih."
+  ].join("\n");
+
+  return `mailto:${encodeURIComponent(input.email)}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+}
+
+function buildInviteEmailPayload(input: {
+  orgName: string;
+  role: Role;
+  setupLink: string;
+  expiresAt: Date;
+  name: string | null;
+}): { subject: string; text: string; html: string } {
+  const subject = `Undangan bergabung di ${input.orgName} via 20byte`;
+  const expiresAtLabel = new Intl.DateTimeFormat("id-ID", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit"
+  }).format(input.expiresAt);
+  const greeting = input.name?.trim() || "Tim";
+  const roleLabel = formatInviteRoleLabel(input.role);
+  const text = [
+    `Halo ${greeting},`,
+    "",
+    `Anda diundang untuk bergabung ke bisnis "${input.orgName}" di 20byte sebagai ${roleLabel}.`,
+    "Silakan aktivasi akun melalui link berikut:",
+    input.setupLink,
+    "",
+    `Link berlaku sampai ${expiresAtLabel}.`,
+    "",
+    "Terima kasih."
+  ].join("\n");
+  const html = `
+    <div style="font-family:Arial,sans-serif;color:#111827;line-height:1.6">
+      <p>Halo ${greeting},</p>
+      <p>Anda diundang untuk bergabung ke bisnis <strong>${input.orgName}</strong> di 20byte sebagai <strong>${roleLabel}</strong>.</p>
+      <p>Silakan aktivasi akun Anda melalui tombol berikut:</p>
+      <p>
+        <a href="${input.setupLink}" style="display:inline-block;padding:10px 16px;background:#10b981;color:#ffffff;text-decoration:none;border-radius:8px;font-weight:600">
+          Aktivasi Akun
+        </a>
+      </p>
+      <p>Atau buka link ini langsung:</p>
+      <p><a href="${input.setupLink}">${input.setupLink}</a></p>
+      <p style="color:#6b7280">Link berlaku sampai ${expiresAtLabel}.</p>
+    </div>
+  `.trim();
+
+  return { subject, text, html };
 }
 
 function isMissingBusinessNpwpFieldError(error: unknown): boolean {
@@ -500,30 +613,57 @@ export async function listOrganizationMembers(
   }));
 }
 
-export async function addOrganizationMemberByEmail(
-  input: AddOrganizationMemberInput
-): Promise<OrganizationMemberSummary> {
+export async function inviteOrganizationMemberByEmail(
+  input: InviteOrganizationMemberInput
+): Promise<OrganizationMemberInviteResult> {
   const actorMembership = await requireMembership(input.actorUserId, input.orgId);
   if (!canAssignOrganizationRole(actorMembership.role, input.role)) {
     throw new ServiceError(403, "FORBIDDEN_ROLE_ASSIGNMENT", "Your role cannot assign this member role.");
   }
 
   const normalizedEmail = normalizeAndValidateEmail(input.email);
+  const normalizedName = normalizeOptionalName(input.name);
 
-  const user = await prisma.user.findUnique({
+  const organization = await prisma.org.findUnique({
+    where: {
+      id: input.orgId
+    },
+    select: {
+      name: true
+    }
+  });
+
+  if (!organization) {
+    throw new ServiceError(404, "ORG_NOT_FOUND", "Organization not found.");
+  }
+
+  const existingUser = await prisma.user.findUnique({
     where: {
       email: normalizedEmail
     },
     select: {
       id: true,
       email: true,
-      name: true
+      name: true,
+      passwordHash: true
     }
   });
 
-  if (!user) {
-    throw new ServiceError(404, "USER_NOT_FOUND", "User with this email does not exist.");
-  }
+  const user =
+    existingUser ??
+    (await prisma.user.create({
+      data: {
+        email: normalizedEmail,
+        name: normalizedName,
+        passwordHash: null
+      },
+      select: {
+        id: true,
+        email: true,
+        name: true,
+        passwordHash: true
+      }
+    }));
 
   const existingMembership = await prisma.orgMember.findUnique({
     where: {
@@ -588,12 +728,75 @@ export async function addOrganizationMemberByEmail(
     }
   });
 
-  return {
-    orgId: membership.orgId,
-    userId: user.id,
-    role: membership.role,
-    email: user.email,
-    name: user.name,
-    createdAt: membership.createdAt
+  let invitation: OrganizationMemberInvitation = {
+    setupLink: null,
+    expiresAt: null,
+    mailtoUrl: null,
+    requiresPasswordSetup: false,
+    emailDelivery: null
   };
+
+  if (!user.passwordHash) {
+    const tokenInfo = await createAccountSetupToken({
+      userId: user.id,
+      orgId: input.orgId,
+      createdByUserId: input.actorUserId
+    });
+
+    let emailDelivery = false;
+    const emailPayload = buildInviteEmailPayload({
+      orgName: organization.name,
+      role: membership.role,
+      setupLink: tokenInfo.setupLink,
+      expiresAt: tokenInfo.expiresAt,
+      name: user.name
+    });
+
+    try {
+      await sendTransactionalEmail({
+        to: user.email,
+        subject: emailPayload.subject,
+        text: emailPayload.text,
+        html: emailPayload.html
+      });
+      emailDelivery = true;
+    } catch {
+      emailDelivery = false;
+    }
+
+    invitation = {
+      setupLink: tokenInfo.setupLink,
+      expiresAt: tokenInfo.expiresAt,
+      mailtoUrl: buildInviteMailtoUrl({
+        email: user.email,
+        orgName: organization.name,
+        role: membership.role,
+        setupLink: tokenInfo.setupLink,
+        expiresAt: tokenInfo.expiresAt
+      }),
+      requiresPasswordSetup: true,
+      emailDelivery
+    };
+  }
+
+  return {
+    member: {
+      orgId: membership.orgId,
+      userId: user.id,
+      role: membership.role,
+      email: user.email,
+      name: user.name,
+      createdAt: membership.createdAt
+    },
+    invitation
+  };
+}
+
+export async function addOrganizationMemberByEmail(
+  input: AddOrganizationMemberInput
+): Promise<OrganizationMemberSummary> {
+  const result = await inviteOrganizationMemberByEmail({
+    ...input
+  });
+  return result.member;
 }

@@ -57,11 +57,7 @@ function parseBankAccountsJson(raw: string): Array<{ bankName: string; accountNu
 
 export async function GET(
   request: NextRequest,
-  context: {
-    params: {
-      invoiceId: string;
-    };
-  }
+  context: { params: Promise<{invoiceId: string;}> }
 ) {
   const auth = requireApiSession(request);
   if (auth.response) {
@@ -77,7 +73,7 @@ export async function GET(
 
     const invoice = await prisma.invoice.findFirst({
       where: {
-        id: context.params.invoiceId,
+        id: (await context.params).invoiceId,
         orgId
       },
       select: {
@@ -175,11 +171,7 @@ export async function GET(
 
 export async function DELETE(
   request: NextRequest,
-  context: {
-    params: {
-      invoiceId: string;
-    };
-  }
+  context: { params: Promise<{invoiceId: string;}> }
 ) {
   const auth = requireApiSession(request);
   if (auth.response) {
@@ -194,7 +186,7 @@ export async function DELETE(
     const deleted = await deleteDraftInvoice({
       actorUserId: auth.session.userId,
       orgId,
-      invoiceId: context.params.invoiceId
+      invoiceId: (await context.params).invoiceId
     });
 
     return NextResponse.json(

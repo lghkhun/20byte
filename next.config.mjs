@@ -1,8 +1,6 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  experimental: {
-    serverComponentsExternalPackages: ["ably", "baileys", "ws", "bufferutil", "utf-8-validate"]
-  },
+  serverExternalPackages: ["ably", "baileys", "ws", "bufferutil", "utf-8-validate"],
   webpack: (config, { isServer }) => {
     if (isServer) {
       const externalPackages = {

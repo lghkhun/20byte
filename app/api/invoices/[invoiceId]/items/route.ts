@@ -148,11 +148,7 @@ function parseMilestones(value: unknown): InvoiceMilestoneInput[] | undefined | 
 
 export async function PATCH(
   request: NextRequest,
-  context: {
-    params: {
-      invoiceId: string;
-    };
-  }
+  context: { params: Promise<{invoiceId: string;}> }
 ) {
   const auth = requireApiSession(request);
   if (auth.response) {
@@ -184,7 +180,7 @@ export async function PATCH(
     const invoice = await editInvoiceItems({
       actorUserId: auth.session.userId,
       orgId,
-      invoiceId: context.params.invoiceId,
+      invoiceId: (await context.params).invoiceId,
       notes: typeof body.notes === "string" ? body.notes : undefined,
       terms: typeof body.terms === "string" ? body.terms : undefined,
       items,

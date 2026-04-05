@@ -33,20 +33,16 @@ function inferMimeType(fileName: string): string {
 
 export async function GET(
   request: NextRequest,
-  context: {
-    params: {
-      orgId: string;
-      fileName: string;
-    };
-  }
+  context: { params: Promise<{orgId: string;
+      fileName: string;}> }
 ) {
   const auth = requireApiSession(request);
   if (auth.response) {
     return auth.response;
   }
 
-  const orgId = context.params.orgId?.trim() ?? "";
-  const fileName = path.basename(context.params.fileName ?? "");
+  const orgId = (await context.params).orgId?.trim() ?? "";
+  const fileName = path.basename((await context.params).fileName ?? "");
   if (!orgId || !fileName) {
     return NextResponse.json(
       {

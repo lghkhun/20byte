@@ -6,7 +6,6 @@ import type { ConversationItem } from "@/components/inbox/types";
 import { Button } from "@/components/ui/button";
 import { toAvatarTone } from "@/components/inbox/chat/chatUtils";
 import { useLocalImageCache } from "@/lib/client/localImageCache";
-import { formatLeadSettingLabel } from "@/lib/crm/leadSettingsConfig";
 
 type ChatHeaderProps = {
   conversation: ConversationItem | null;
@@ -157,6 +156,28 @@ export function ChatHeader({
           <ShieldCheck className="h-4.5 w-4.5" />
         </Button>
 
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon"
+          disabled={!conversation}
+          className="rounded-lg text-muted-foreground hover:bg-muted hover:text-foreground"
+          title="Hapus chat"
+          onClick={onDeleteConversation}
+        >
+          <Trash2 className="h-4.5 w-4.5" />
+        </Button>
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon"
+          disabled={!conversation}
+          className="rounded-lg text-muted-foreground hover:bg-muted hover:text-foreground"
+          title="Kembali ke daftar chat"
+          onClick={onUnselectConversation}
+        >
+          <X className="h-4.5 w-4.5" />
+        </Button>
         <Button
           type="button"
           variant="ghost"

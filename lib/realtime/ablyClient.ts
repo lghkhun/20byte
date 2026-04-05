@@ -34,6 +34,9 @@ type ConversationUpdatedPayload = {
   conversationId: string;
   assignedToMemberId: string | null;
   status: "OPEN" | "CLOSED";
+  crmPipelineId?: string | null;
+  crmStageId?: string | null;
+  crmStageName?: string | null;
 };
 
 type ConversationTypingPayload = {
@@ -189,7 +192,10 @@ function parseConversationUpdatedPayload(data: AblyMessageData, orgId: string): 
     typeof data.timestamp !== "string" ||
     typeof data.conversationId !== "string" ||
     (data.assignedToMemberId !== null && typeof data.assignedToMemberId !== "string") ||
-    (data.status !== "OPEN" && data.status !== "CLOSED")
+    (data.status !== "OPEN" && data.status !== "CLOSED") ||
+    (data.crmPipelineId !== undefined && data.crmPipelineId !== null && typeof data.crmPipelineId !== "string") ||
+    (data.crmStageId !== undefined && data.crmStageId !== null && typeof data.crmStageId !== "string") ||
+    (data.crmStageName !== undefined && data.crmStageName !== null && typeof data.crmStageName !== "string")
   ) {
     return null;
   }
@@ -201,7 +207,16 @@ function parseConversationUpdatedPayload(data: AblyMessageData, orgId: string): 
     timestamp: data.timestamp,
     conversationId: data.conversationId,
     assignedToMemberId: data.assignedToMemberId,
-    status: data.status
+    status: data.status,
+    ...(data.crmPipelineId === undefined
+      ? {}
+      : { crmPipelineId: typeof data.crmPipelineId === "string" ? data.crmPipelineId : null }),
+    ...(data.crmStageId === undefined
+      ? {}
+      : { crmStageId: typeof data.crmStageId === "string" ? data.crmStageId : null }),
+    ...(data.crmStageName === undefined
+      ? {}
+      : { crmStageName: typeof data.crmStageName === "string" ? data.crmStageName : null })
   };
 }
 

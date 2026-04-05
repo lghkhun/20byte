@@ -14,6 +14,9 @@ export async function publishConversationUpdated(input: {
   conversationId: string;
   assignedToMemberId: string | null;
   status: "OPEN" | "CLOSED";
+  crmPipelineId?: string | null;
+  crmStageId?: string | null;
+  crmStageName?: string | null;
 }): Promise<void> {
   await publishConversationUpdatedEvent(input);
 }

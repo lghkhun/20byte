@@ -30,11 +30,7 @@ function errorResponse(status: number, code: string, message: string) {
 
 export async function PATCH(
   request: NextRequest,
-  context: {
-    params: {
-      itemId: string;
-    };
-  }
+  context: { params: Promise<{itemId: string;}> }
 ) {
   const auth = requireApiSession(request);
   if (auth.response) {
@@ -56,7 +52,7 @@ export async function PATCH(
     const item = await updateCatalogItem({
       actorUserId: auth.session.userId,
       orgId,
-      itemId: context.params.itemId,
+      itemId: (await context.params).itemId,
       name: typeof body.name === "string" ? body.name : undefined,
       category: typeof body.category === "string" ? body.category : undefined,
       unit: typeof body.unit === "string" ? body.unit : undefined,
@@ -86,11 +82,7 @@ export async function PATCH(
 
 export async function DELETE(
   request: NextRequest,
-  context: {
-    params: {
-      itemId: string;
-    };
-  }
+  context: { params: Promise<{itemId: string;}> }
 ) {
   const auth = requireApiSession(request);
   if (auth.response) {
@@ -102,7 +94,7 @@ export async function DELETE(
       auth.session.userId,
       request.nextUrl.searchParams.get("orgId")?.trim() ?? ""
     );
-    await deleteCatalogItem(auth.session.userId, orgId, context.params.itemId);
+    await deleteCatalogItem(auth.session.userId, orgId, (await context.params).itemId);
 
     return NextResponse.json(
       {

@@ -1,15 +1,25 @@
 import type { NextRequest } from "next/server";
+import { timingSafeEqual } from "crypto";
 
 import { errorResponse, successResponse } from "@/lib/api/http";
 import { getPakasirConfig } from "@/lib/env";
 import { processPakasirWebhook } from "@/server/services/billingService";
 import { ServiceError } from "@/server/services/serviceError";
 
+function hasSameToken(expected: string, provided: string): boolean {
+  const expectedBuffer = Buffer.from(expected, "utf8");
+  const providedBuffer = Buffer.from(provided, "utf8");
+  if (expectedBuffer.length !== providedBuffer.length) {
+    return false;
+  }
+  return timingSafeEqual(expectedBuffer, providedBuffer);
+}
+
 export async function POST(request: NextRequest) {
   const webhookToken = getPakasirConfig().webhookToken;
   if (webhookToken) {
     const providedToken = request.headers.get("x-pakasir-token")?.trim() ?? "";
-    if (!providedToken || providedToken !== webhookToken) {
+    if (!providedToken || !hasSameToken(webhookToken, providedToken)) {
       return errorResponse(401, "INVALID_WEBHOOK_TOKEN", "Invalid webhook token.");
     }
   }

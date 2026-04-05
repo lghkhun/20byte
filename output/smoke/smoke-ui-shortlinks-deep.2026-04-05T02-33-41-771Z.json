@@ -1,0 +1,12 @@
+{
+  "suite": "smoke-ui-shortlinks-deep",
+  "status": "passed",
+  "baseUrl": "http://localhost:3000",
+  "startedAt": "2026-04-05T02:33:35.163Z",
+  "endedAt": "2026-04-05T02:33:41.771Z",
+  "durationMs": 6608,
+  "failures": [],
+  "skippedReason": null,
+  "error": null,
+  "meta": {}
+}

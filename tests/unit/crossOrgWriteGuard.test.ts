@@ -41,9 +41,24 @@ const CASES: ServiceGuardCase[] = [
     expectUpdateMany: true
   },
   {
+    label: "conversation delete write-path",
+    file: "server/services/conversation/delete.ts",
+    expectUpdateMany: true,
+    expectDeleteMany: true,
+    requiredPatterns: [
+      /existingConversation\s*=\s*await\s+prisma\.conversation\.findFirst\(\{[\s\S]*?id:\s*conversationId[\s\S]*?orgId[\s\S]*?\}\)/,
+      /tx\.conversation\.delete\(\{[\s\S]*?where:\s*\{\s*id:\s*conversationId[\s\S]*?\}\)/
+    ]
+  },
+  {
     label: "shortlinkService write-path",
     file: "server/services/shortlinkService.ts",
     strictNoDirectWrite: true,
+    expectUpdateMany: true
+  },
+  {
+    label: "accountSetupService write-path",
+    file: "server/services/accountSetupService.ts",
     expectUpdateMany: true
   },
   {
@@ -56,7 +71,12 @@ const CASES: ServiceGuardCase[] = [
     label: "crmPipelineService write-path",
     file: "server/services/crmPipelineService.ts",
     strictNoDirectWrite: true,
-    expectUpdateMany: true
+    expectUpdateMany: true,
+    requiredPatterns: [
+      /pipelineInOrg\s*=\s*await\s+prisma\.crmPipeline\.findFirst\(\{[\s\S]*?id:\s*pipelineId[\s\S]*?orgId[\s\S]*?\}\)/,
+      /if\s*\(!pipelineInOrg\)\s*\{[\s\S]*?CRM_PIPELINE_NOT_FOUND/,
+      /await\s+prisma\.\$transaction\(\s*async\s*\(tx\)/
+    ]
   },
   {
     label: "crmService write-path",
@@ -114,11 +134,23 @@ const CASES: ServiceGuardCase[] = [
     expectUpdateMany: true
   },
   {
+    label: "invoice access write-path",
+    file: "server/services/invoice/access.ts",
+    expectUpdateMany: true
+  },
+  {
     label: "storageService tx-path",
     file: "server/services/storageService.ts",
     strictNoDirectWrite: true,
     expectUpdateMany: true,
     expectDeleteMany: true
+  },
+  {
+    label: "superadminService write-path",
+    file: "server/services/superadminService.ts",
+    requiredPatterns: [
+      /prisma\.platformMember\.deleteMany\(\{[\s\S]*?where:\s*\{\s*userId[\s\S]*?\}\s*\}\)/
+    ]
   }
 ];
 

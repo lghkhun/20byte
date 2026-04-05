@@ -43,6 +43,9 @@ export type ConversationUpdatedEventPayload = BaseEventPayload & {
   conversationId: string;
   assignedToMemberId: string | null;
   status: "OPEN" | "CLOSED";
+  crmPipelineId?: string | null;
+  crmStageId?: string | null;
+  crmStageName?: string | null;
 };
 
 export type ConversationTypingEventPayload = BaseEventPayload & {
@@ -96,6 +99,18 @@ function requireTrimmed(value: string, fieldName: string): string {
   }
 
   return normalized;
+}
+
+function normalizeOptionalTrimmed(value: string | null | undefined): string | null | undefined {
+  if (value === undefined) {
+    return undefined;
+  }
+  if (value === null) {
+    return null;
+  }
+
+  const normalized = value.trim();
+  return normalized || null;
 }
 
 export function buildOrgChannelName(orgId: string): string {
@@ -153,7 +168,14 @@ export function buildConversationUpdatedEventPayload(input: {
   conversationId: string;
   assignedToMemberId: string | null;
   status: "OPEN" | "CLOSED";
+  crmPipelineId?: string | null;
+  crmStageId?: string | null;
+  crmStageName?: string | null;
 }): ConversationUpdatedEventPayload {
+  const crmPipelineId = normalizeOptionalTrimmed(input.crmPipelineId);
+  const crmStageId = normalizeOptionalTrimmed(input.crmStageId);
+  const crmStageName = normalizeOptionalTrimmed(input.crmStageName);
+
   return {
     type: "conversation.updated",
     orgId: requireTrimmed(input.orgId, "orgId"),
@@ -161,7 +183,10 @@ export function buildConversationUpdatedEventPayload(input: {
     timestamp: nowIso(),
     conversationId: requireTrimmed(input.conversationId, "conversationId"),
     assignedToMemberId: input.assignedToMemberId,
-    status: input.status
+    status: input.status,
+    ...(crmPipelineId !== undefined ? { crmPipelineId } : {}),
+    ...(crmStageId !== undefined ? { crmStageId } : {}),
+    ...(crmStageName !== undefined ? { crmStageName } : {})
   };
 }
 

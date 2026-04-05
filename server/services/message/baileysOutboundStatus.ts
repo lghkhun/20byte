@@ -78,7 +78,10 @@ export async function processBaileysOutboundStatusUpdate(
     orgId,
     conversationId: updated.conversationId,
     assignedToMemberId: updated.assignedToMemberId,
-    status: updated.conversationStatus
+    status: updated.conversationStatus,
+    crmPipelineId: updated.crmPipelineId,
+    crmStageId: updated.crmStageId,
+    crmStageName: updated.crmStageName
   });
 
   return updated;

@@ -18,7 +18,7 @@ export default function PrivacyPolicyPage() {
           <section>
             <h2 className="mb-3 text-xl font-semibold text-foreground">1. Pendahuluan</h2>
             <p>
-              Kami di 20byte ("Kami", "Platform") menghargai privasi informasi pengguna kami ("Anda", "Pengguna"). 
+              Kami di 20byte (&quot;Kami&quot;, &quot;Platform&quot;) menghargai privasi informasi pengguna kami (&quot;Anda&quot;, &quot;Pengguna&quot;).
               Kebijakan privasi ini menjelaskan bagaimana kami mengumpulkan, menggunakan, 
               melindungi, dan mengungkapkan setiap data yang kami kembangkan atau kami kelola ketika Anda menggunakan platform 20byte.
             </p>

@@ -1,5 +1,6 @@
 import { type NextRequest, NextResponse } from "next/server";
 
+import { publishCustomerUpdatedEvent } from "@/lib/ably/publisher";
 import { requireApiSession } from "@/lib/auth/middleware";
 import { prisma } from "@/lib/db/prisma";
 import { canAccessCustomerDirectory } from "@/lib/permissions/orgPermissions";
@@ -208,6 +209,13 @@ export async function PATCH(request: NextRequest) {
 
       return updated.count;
     });
+
+    for (const customerId of customerIds) {
+      void publishCustomerUpdatedEvent({
+        orgId,
+        customerId
+      });
+    }
 
     return NextResponse.json({
       data: {

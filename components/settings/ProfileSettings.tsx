@@ -58,8 +58,8 @@ export function ProfileSettings() {
   const canSubmit = Boolean(!isLoading && !isSaving && name.trim() && phone.trim());
   const saveAction = useMemo(
     () => (
-      <Button disabled={!canSubmit} type="submit" form={formId} className="h-10 rounded-xl">
-        {isSaving ? "Saving..." : "Simpan Profil"}
+      <Button disabled={!canSubmit} type="submit" form={formId} className="h-11 rounded-xl px-6 font-semibold shadow-md shadow-primary/20">
+        {isSaving ? "Menyimpan..." : "Simpan Profil"}
       </Button>
     ),
     [canSubmit, formId, isSaving]
@@ -204,21 +204,21 @@ export function ProfileSettings() {
       {!isLoading ? (
         <form id={formId} className="space-y-4" onSubmit={handleSubmit}>
           <div className="space-y-3">
-            <label className="text-sm font-medium text-foreground">Avatar</label>
-            <div className="flex flex-col gap-4 rounded-2xl border border-border/70 bg-background/40 p-4 sm:flex-row sm:items-center">
-              <div className="relative flex h-20 w-20 shrink-0 items-center justify-center overflow-hidden rounded-2xl border border-border/70 bg-muted/50">
+            <label className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground/80">Avatar</label>
+            <div className="flex flex-col gap-5 rounded-[20px] border border-border/50 bg-gradient-to-br from-card to-background/50 p-5 sm:flex-row sm:items-center shadow-[0_2px_10px_-4px_rgba(0,0,0,0.02)]">
+              <div className="relative flex h-[88px] w-[88px] shrink-0 items-center justify-center overflow-hidden rounded-[20px] border border-border/60 bg-muted/30 shadow-inner">
                 {avatarUrl ? (
                   <Image src={cachedAvatarUrl ?? avatarUrl} alt={name || email} fill unoptimized className="object-cover" />
                 ) : (
-                  <UserCircle2 className="h-10 w-10 text-muted-foreground" />
+                  <UserCircle2 className="h-10 w-10 text-muted-foreground/50" />
                 )}
               </div>
-              <div className="space-y-2">
-                <p className="text-sm text-muted-foreground">Upload PNG atau JPG maksimal 2 MB untuk foto profil akun Anda.</p>
-                <Button type="button" variant="secondary" className="h-10 rounded-xl" disabled={isUploadingAvatar} asChild>
+              <div className="space-y-3">
+                <p className="text-[13px] font-medium text-muted-foreground/80">Upload PNG atau JPG maksimal 2 MB untuk foto profil akun Anda.</p>
+                <Button type="button" variant="outline" className="h-10 rounded-xl font-semibold shadow-sm hover:bg-muted/30" disabled={isUploadingAvatar} asChild>
                   <label className="cursor-pointer">
                     <Camera className="mr-2 h-4 w-4" />
-                    {isUploadingAvatar ? "Uploading..." : "Upload Avatar"}
+                    {isUploadingAvatar ? "Uploading..." : "Pilih Avatar"}
                     <input
                       type="file"
                       accept="image/png,image/jpeg"
@@ -237,20 +237,20 @@ export function ProfileSettings() {
             </div>
           </div>
 
-          <div className="space-y-2">
-            <label className="text-sm font-medium text-foreground" htmlFor="profile-email">
+          <div className="space-y-2.5">
+            <label className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground/80" htmlFor="profile-email">
               Email
             </label>
             <Input
               id="profile-email"
               value={email}
               disabled
-              className="bg-background/60 text-muted-foreground"
+              className="h-11 rounded-xl bg-muted/30 font-medium text-muted-foreground/70"
             />
           </div>
 
-          <div className="space-y-2">
-            <label className="text-sm font-medium text-foreground" htmlFor="profile-name">
+          <div className="space-y-2.5">
+            <label className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground/80" htmlFor="profile-name">
               Display Name
             </label>
             <Input
@@ -258,11 +258,12 @@ export function ProfileSettings() {
               value={name}
               onChange={(event) => setName(event.target.value)}
               placeholder="Your name"
+              className="h-11 rounded-xl bg-muted/20 font-medium text-foreground transition-all focus-visible:bg-transparent"
             />
           </div>
 
-          <div className="space-y-2">
-            <label className="text-sm font-medium text-foreground" htmlFor="profile-phone">
+          <div className="space-y-2.5">
+            <label className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground/80" htmlFor="profile-phone">
               WhatsApp Number
             </label>
             <Input
@@ -271,43 +272,52 @@ export function ProfileSettings() {
               onChange={(event) => setPhone(event.target.value)}
               placeholder="+628123456789 atau 08123456789"
               required
+              className="h-11 rounded-xl bg-muted/20 font-medium text-foreground transition-all focus-visible:bg-transparent"
             />
           </div>
 
-          <div className="grid gap-3 md:grid-cols-2">
-            <div className="space-y-2">
-              <label className="text-sm font-medium text-foreground" htmlFor="current-password">
-                Current Password
-              </label>
-              <Input
-                id="current-password"
-                type="password"
-                value={currentPassword}
-                onChange={(event) => setCurrentPassword(event.target.value)}
-                placeholder="Current password"
-              />
+          <div className="space-y-4 pt-4 border-t border-border/40 mt-6">
+            <div className="space-y-1">
+              <h3 className="text-[14px] font-bold text-foreground">Ganti Password</h3>
+              <p className="text-[12px] font-medium text-muted-foreground/80">Kosongkan jika Anda tidak ingin mengganti password Anda.</p>
             </div>
-            <div className="space-y-2">
-              <label className="text-sm font-medium text-foreground" htmlFor="new-password">
-                New Password
-              </label>
-              <Input
-                id="new-password"
-                type="password"
-                value={newPassword}
-                onChange={(event) => setNewPassword(event.target.value)}
-                placeholder="At least 8 characters"
-              />
+            <div className="grid gap-4 md:grid-cols-2">
+              <div className="space-y-2.5">
+                <label className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground/80" htmlFor="current-password">
+                  Password Saat Ini
+                </label>
+                <Input
+                  id="current-password"
+                  type="password"
+                  value={currentPassword}
+                  onChange={(event) => setCurrentPassword(event.target.value)}
+                  placeholder="Current password"
+                  className="h-11 rounded-xl bg-muted/20 font-medium text-foreground transition-all focus-visible:bg-transparent"
+                />
+              </div>
+              <div className="space-y-2.5">
+                <label className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground/80" htmlFor="new-password">
+                  Password Baru
+                </label>
+                <Input
+                  id="new-password"
+                  type="password"
+                  value={newPassword}
+                  onChange={(event) => setNewPassword(event.target.value)}
+                  placeholder="At least 8 characters"
+                  className="h-11 rounded-xl bg-muted/20 font-medium text-foreground transition-all focus-visible:bg-transparent"
+                />
+              </div>
             </div>
           </div>
 
           {error ? (
-            <p className="rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm text-destructive">
+            <p className="rounded-xl border border-rose-500/30 bg-rose-500/10 px-4 py-3 text-sm font-medium text-rose-600 shadow-sm mt-6">
               {error}
             </p>
           ) : null}
           {success ? (
-            <p className="rounded-md border border-primary/40 bg-primary/10 px-3 py-2 text-sm text-primary">
+            <p className="rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-4 py-3 text-sm font-medium text-emerald-600 shadow-sm mt-6">
               {success}
             </p>
           ) : null}

@@ -83,9 +83,11 @@ function formatDelta(delta: ReturnType<typeof calculateDelta>) {
 export default async function DashboardPage({
   searchParams
 }: {
-  searchParams?: { from?: string; to?: string };
+  searchParams?: Promise<{ from?: string; to?: string }>;
 }) {
-  const token = cookies().get(SESSION_COOKIE_NAME)?.value;
+  const resolvedSearchParams = searchParams ? await searchParams : undefined;
+  const cookieStore = await cookies();
+  const token = cookieStore.get(SESSION_COOKIE_NAME)?.value;
   const session = token ? verifySessionToken(token) : null;
   if (!session) {
     return null;
@@ -98,8 +100,8 @@ export default async function DashboardPage({
 
   const today = startOfDay(new Date());
   const defaultFrom = new Date(today.getTime() - 29 * MS_PER_DAY);
-  let rangeFrom = startOfDay(parseDateParam(searchParams?.from, defaultFrom));
-  const rangeTo = endOfDay(parseDateParam(searchParams?.to, today));
+  let rangeFrom = startOfDay(parseDateParam(resolvedSearchParams?.from, defaultFrom));
+  const rangeTo = endOfDay(parseDateParam(resolvedSearchParams?.to, today));
 
   if (rangeFrom.getTime() > rangeTo.getTime()) {
     rangeFrom = startOfDay(rangeTo);
@@ -267,66 +269,68 @@ export default async function DashboardPage({
   return (
     <section className="flex h-full min-h-0 flex-1 flex-col overflow-hidden p-3 md:p-5">
       <div className="inbox-scroll flex min-h-0 flex-1 flex-col gap-5 overflow-y-auto overscroll-contain pr-1">
-        <div className="flex flex-col gap-4 rounded-[28px] border border-border/70 bg-[linear-gradient(135deg,hsl(var(--card)),hsl(var(--card))/0.96),radial-gradient(circle_at_top_left,hsl(var(--primary)/0.12),transparent_32%),radial-gradient(circle_at_bottom_right,hsl(var(--accent)/0.16),transparent_34%)] p-5 shadow-sm lg:flex-row lg:items-center lg:justify-between">
-          <div className="flex flex-wrap items-center gap-3">
-            <div className="inline-flex items-center gap-3 rounded-2xl border border-primary/30 bg-primary/10 px-3 py-2 text-primary">
-              <span className="flex h-8 w-8 items-center justify-center rounded-xl bg-primary text-primary-foreground">
+        <div className="flex flex-col gap-5 rounded-3xl border border-border/60 bg-card p-5 shadow-[0_2px_10px_-4px_rgba(0,0,0,0.02)] lg:flex-row lg:items-center lg:justify-between">
+          <div className="flex flex-wrap items-center gap-4">
+            <div className="inline-flex items-center gap-3 rounded-2xl border border-primary/20 bg-primary/5 px-3.5 py-2.5 text-primary transition-colors hover:bg-primary/10">
+              <span className="flex h-9 w-9 items-center justify-center rounded-[14px] bg-gradient-to-br from-primary to-primary/80 shadow-sm text-primary-foreground">
                 <Building2 className="h-4 w-4" />
               </span>
               <div className="leading-tight">
-                <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-primary/80">Business aktif</p>
-                <p className="text-sm font-semibold text-primary">{business.name}</p>
+                <p className="text-[10px] font-bold uppercase tracking-widest text-primary/70">Business aktif</p>
+                <p className="text-[15px] font-bold tracking-tight text-primary">{business.name}</p>
               </div>
             </div>
-            <Badge variant="outline" className="rounded-full border-border/70 bg-background/60 px-3 py-1 text-foreground">
-              {formatDateParam(rangeFrom)} sampai {formatDateParam(rangeTo)}
+            <Badge variant="outline" className="rounded-xl border-border/80 bg-muted/30 px-3 py-1.5 font-mono text-[13px] font-medium text-muted-foreground shadow-sm">
+              {formatDateParam(rangeFrom)} &mdash; {formatDateParam(rangeTo)}
             </Badge>
           </div>
-          <DashboardDateRangePicker from={formatDateParam(rangeFrom)} to={formatDateParam(rangeTo)} />
+          <div className="flex shrink-0">
+            <DashboardDateRangePicker from={formatDateParam(rangeFrom)} to={formatDateParam(rangeTo)} />
+          </div>
         </div>
 
         <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
           {metrics.map(({ label, value, hint, delta, detail, icon: Icon, accent, iconClass }) => (
-            <article key={label} className="relative overflow-hidden rounded-[24px] border border-border/70 bg-card/95 p-4 shadow-sm">
-              <div className={cn("absolute inset-0 bg-gradient-to-br opacity-90", accent)} />
+            <article key={label} className="group relative overflow-hidden rounded-3xl border border-border/60 bg-card p-5 shadow-[0_2px_10px_-4px_rgba(0,0,0,0.02)] transition-shadow hover:shadow-[0_4px_24px_-4px_rgba(0,0,0,0.06)]">
               <div className="relative flex items-start justify-between gap-3">
-                <div>
+                <div className="flex-1">
                   <div className="flex items-center gap-2">
-                    <p className="text-xs font-semibold uppercase tracking-[0.08em] text-muted-foreground">{label}</p>
+                    <p className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground/80">{label}</p>
                     <HoverCard openDelay={120}>
                       <HoverCardTrigger asChild>
-                        <button type="button" className="inline-flex h-5 w-5 items-center justify-center rounded-full border border-border/70 bg-background/70 text-muted-foreground">
-                          <Info className="h-3 w-3" />
+                        <button type="button" className="inline-flex h-5 w-5 items-center justify-center rounded-full text-muted-foreground/50 hover:bg-muted/50 hover:text-foreground">
+                          <Info className="h-3.5 w-3.5" />
                         </button>
                       </HoverCardTrigger>
-                      <HoverCardContent align="start" className="w-72 rounded-2xl border-border/70">
+                      <HoverCardContent align="start" className="w-72 rounded-2xl border-border/60 shadow-lg">
                         <p className="text-sm font-semibold text-foreground">{label}</p>
                         <p className="mt-2 text-sm leading-6 text-muted-foreground">{detail}</p>
                       </HoverCardContent>
                     </HoverCard>
                   </div>
-                  <p className="mt-2 text-[1.9rem] font-semibold leading-none tracking-tight text-foreground">{value}</p>
-                  <div className="mt-2 flex items-center gap-2 text-[11px] font-medium">
+                  <p className="mt-3 text-[2rem] font-bold leading-none tracking-tight text-foreground">{value}</p>
+                  
+                  <div className="mt-4 flex items-center gap-2 text-[11px] font-semibold">
                     <span
                       className={cn(
-                        "inline-flex items-center gap-1 rounded-full border px-2 py-0.5",
+                        "inline-flex items-center gap-0.5 rounded-md px-1.5 py-0.5 border",
                         delta.direction === "up"
-                          ? "border-emerald-200 bg-emerald-50 text-emerald-700"
+                          ? "border-emerald-200 bg-emerald-50 text-emerald-600"
                           : delta.direction === "down"
-                            ? "border-rose-200 bg-rose-50 text-rose-700"
-                            : "border-border/70 bg-background/70 text-muted-foreground"
+                            ? "border-rose-200 bg-rose-50 text-rose-600"
+                            : "border-border/60 bg-muted/40 text-muted-foreground"
                       )}
                     >
-                      {delta.direction === "up" ? <ArrowUpRight className="h-3.5 w-3.5" /> : null}
-                      {delta.direction === "down" ? <ArrowDownRight className="h-3.5 w-3.5" /> : null}
+                      {delta.direction === "up" ? <ArrowUpRight className="h-3 w-3" /> : null}
+                      {delta.direction === "down" ? <ArrowDownRight className="h-3 w-3" /> : null}
                       {delta.label}
                     </span>
-                    <span className="text-muted-foreground">vs periode sebelumnya</span>
+                    <span className="text-muted-foreground/70 font-medium">vs periode lalu</span>
                   </div>
-                  <p className="mt-2 text-sm leading-5 text-muted-foreground">{hint}</p>
+                  <p className="mt-2 text-[11px] font-medium leading-relaxed text-muted-foreground/60">{hint}</p>
                 </div>
-                <div className="flex h-10 w-10 items-center justify-center rounded-xl border border-background/80 bg-background/80 shadow-sm">
-                  <Icon className={cn("h-4 w-4", iconClass)} />
+                <div className={cn("flex h-12 w-12 shrink-0 items-center justify-center rounded-[18px] bg-gradient-to-br", accent, iconClass)}>
+                  <Icon className="h-5 w-5" />
                 </div>
               </div>
             </article>
@@ -334,70 +338,70 @@ export default async function DashboardPage({
         </div>
 
         <div className="grid items-start gap-5 2xl:grid-cols-[minmax(0,1.6fr)_minmax(360px,0.9fr)]">
-          <article className="overflow-hidden rounded-[30px] border border-border/70 bg-card/95 shadow-sm">
-            <div className="flex flex-col gap-3 border-b border-border/70 px-5 py-5 lg:flex-row lg:items-end lg:justify-between">
+          <article className="overflow-hidden rounded-3xl border border-border/60 bg-card shadow-[0_2px_10px_-4px_rgba(0,0,0,0.02)]">
+            <div className="flex flex-col gap-3 border-b border-border/50 px-6 py-5 lg:flex-row lg:items-end lg:justify-between">
               <div>
-                <p className="text-sm font-medium text-muted-foreground">Message Volume</p>
-                <h2 className="mt-1 text-2xl font-semibold tracking-tight text-foreground">Inbound vs outbound per hari</h2>
-                <p className="mt-1 text-sm text-muted-foreground">Hover chart untuk melihat detail harian per tanggal.</p>
+                <p className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground/80">Message Volume</p>
+                <h2 className="mt-1.5 text-[22px] font-bold tracking-tight text-foreground">Inbound vs outbound per hari</h2>
+                <p className="mt-1.5 text-[13px] font-medium text-muted-foreground/80">Hover chart untuk melihat detail harian per tanggal.</p>
               </div>
-              <div className="flex flex-wrap items-center gap-3 text-sm">
-                <div className="inline-flex items-center gap-2 rounded-full bg-emerald-500/10 px-3 py-1 text-emerald-700">
-                  <span className="h-2.5 w-2.5 rounded-full bg-emerald-500" />Inbound
+              <div className="flex flex-wrap items-center gap-3 text-[12px] font-semibold">
+                <div className="inline-flex items-center gap-2 rounded-lg bg-emerald-500/10 px-2.5 py-1 text-emerald-700 ring-1 ring-inset ring-emerald-500/20">
+                  <span className="h-2 w-2 rounded-full bg-emerald-500" />Inbound
                 </div>
-                <div className="inline-flex items-center gap-2 rounded-full bg-sky-500/10 px-3 py-1 text-sky-700">
-                  <span className="h-2.5 w-2.5 rounded-full bg-sky-500" />Outbound
+                <div className="inline-flex items-center gap-2 rounded-lg bg-sky-500/10 px-2.5 py-1 text-sky-700 ring-1 ring-inset ring-sky-500/20">
+                  <span className="h-2 w-2 rounded-full bg-sky-500" />Outbound
                 </div>
               </div>
             </div>
-            <div className="px-4 pb-4 pt-5">
+            <div className="px-5 pb-5 pt-6">
               <DashboardMessageChart data={dailySeries} />
             </div>
           </article>
 
-          <article className="rounded-[30px] border border-border/70 bg-card/95 p-5 shadow-sm">
+          <article className="rounded-3xl border border-border/60 bg-card p-6 shadow-[0_2px_10px_-4px_rgba(0,0,0,0.02)]">
             <div className="flex items-center justify-between gap-3">
               <div>
-                <p className="text-sm font-medium text-muted-foreground">Invoice Snapshot</p>
-                <h2 className="mt-1 text-2xl font-semibold tracking-tight text-foreground">Status invoice di rentang aktif</h2>
+                <p className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground/80">Invoice Snapshot</p>
+                <h2 className="mt-1 text-[22px] font-bold tracking-tight text-foreground">Status rentang aktif</h2>
               </div>
-              <div className="rounded-2xl border border-border/70 bg-background/70 px-3 py-2 text-right">
-                <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">Total</p>
-                <p className="text-lg font-semibold text-foreground">{formatInteger(totalInvoicesInRange)}</p>
+              <div className="rounded-xl border border-border/50 bg-background/50 px-3 py-2 text-right shadow-sm">
+                <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Total</p>
+                <p className="text-lg font-bold leading-tight text-foreground">{formatInteger(totalInvoicesInRange)}</p>
               </div>
             </div>
-            <div className="mt-5 space-y-3">
+            <div className="mt-6 space-y-3">
               {invoiceSummaryPreview.map((item) => (
-                <div key={item.key} className="rounded-2xl border border-border/70 bg-background/50 p-3">
+                <div key={item.key} className="group rounded-2xl border border-border/50 bg-gradient-to-br from-card to-background/50 p-4 shadow-[0_2px_10px_-4px_rgba(0,0,0,0.02)] transition-shadow hover:shadow-[0_4px_16px_-4px_rgba(0,0,0,0.06)]">
                   <div className="flex items-center justify-between gap-3">
-                    <div className="flex items-center gap-2">
-                      <span className={cn("rounded-full border px-2.5 py-1 text-xs font-semibold", item.tone)}>{item.label}</span>
-                      <span className="text-sm text-muted-foreground">{formatInteger(item.count)} invoice</span>
+                    <div className="flex items-center gap-2.5">
+                      <span className={cn("rounded-lg border px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.15em]", item.tone)}>{item.label}</span>
+                      <span className="text-[13px] font-semibold text-muted-foreground/90">{formatInteger(item.count)} invoice</span>
                     </div>
-                    <span className="text-sm font-semibold text-foreground">{formatMoney(item.totalCents)}</span>
+                    <span className="text-[15px] font-bold text-foreground">{formatMoney(item.totalCents)}</span>
                   </div>
-                  <div className="mt-2 flex items-center gap-2 text-xs">
+                  <div className="mt-3 flex items-center gap-2 text-[11px]">
                     <span
                       className={cn(
-                        "inline-flex items-center gap-1 rounded-full border px-2 py-1",
+                        "inline-flex items-center gap-0.5 rounded-md border px-1.5 py-0.5 font-semibold",
                         item.delta.direction === "up"
-                          ? "border-emerald-200 bg-emerald-50 text-emerald-700"
+                          ? "border-emerald-200 bg-emerald-50 text-emerald-600"
                           : item.delta.direction === "down"
-                            ? "border-rose-200 bg-rose-50 text-rose-700"
-                            : "border-border/70 bg-background/70 text-muted-foreground"
+                            ? "border-rose-200 bg-rose-50 text-rose-600"
+                            : "border-border/60 bg-muted/40 text-muted-foreground"
                       )}
                     >
-                      {item.delta.direction === "up" ? <ArrowUpRight className="h-3.5 w-3.5" /> : null}
-                      {item.delta.direction === "down" ? <ArrowDownRight className="h-3.5 w-3.5" /> : null}
+                      {item.delta.direction === "up" ? <ArrowUpRight className="h-3 w-3" /> : null}
+                      {item.delta.direction === "down" ? <ArrowDownRight className="h-3 w-3" /> : null}
                       {item.delta.label}
                     </span>
-                    <span className="text-muted-foreground">vs jumlah invoice status yang sama</span>
+                    <span className="font-medium text-muted-foreground/70">vs jumlah invoice yang sama</span>
                   </div>
                 </div>
               ))}
-              <div className="pt-1 text-right">
-                <Link href="/invoices" className="text-sm font-medium text-primary hover:underline">
-                  Lihat semua status di menu Invoice
+              <div className="pt-2 text-right">
+                <Link href="/invoices" className="text-[13px] font-semibold text-primary underline-offset-4 hover:underline">
+                  Lihat semua status di menu Invoice &rarr;
                 </Link>
               </div>
             </div>

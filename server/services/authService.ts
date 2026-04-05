@@ -5,6 +5,8 @@ import { logAuthFailure } from "@/lib/logging/auth";
 import { getProxyAssetUrl, getPublicObjectKeyFromUrl } from "@/lib/r2/client";
 import { normalizePossibleE164, normalizeWhatsAppDestination } from "@/lib/whatsapp/e164";
 import { ensureBillingRecordForOrg } from "@/server/services/billingService";
+import { createAccountSetupToken } from "@/server/services/accountSetupService";
+import { sendTransactionalEmail } from "@/server/services/emailService";
 import { createOrganizationForUser } from "@/server/services/organizationService";
 import { ServiceError } from "@/server/services/serviceError";
 
@@ -19,6 +21,11 @@ type LoginUserInput = {
   identifier?: unknown;
   email?: unknown;
   password?: unknown;
+};
+
+type ForgotPasswordInput = {
+  identifier?: unknown;
+  email?: unknown;
 };
 
 type AuthenticatedUser = {
@@ -107,6 +114,52 @@ function normalizePassword(value: unknown): string {
 function isValidEmail(email: string): boolean {
   const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
   return emailRegex.test(email);
+}
+
+function buildResetPasswordEmail(input: {
+  name: string | null;
+  setupLink: string;
+  expiresAt: Date;
+}): { subject: string; text: string; html: string } {
+  const subject = "Atur ulang password akun 20byte";
+  const expiresAtLabel = new Intl.DateTimeFormat("id-ID", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit"
+  }).format(input.expiresAt);
+  const greeting = input.name?.trim() || "Tim";
+
+  const text = [
+    `Halo ${greeting},`,
+    "",
+    "Kami menerima permintaan reset password untuk akun 20byte Anda.",
+    "Klik link berikut untuk membuat password baru:",
+    input.setupLink,
+    "",
+    `Link berlaku sampai ${expiresAtLabel}.`,
+    "Jika Anda tidak merasa meminta reset password, abaikan email ini."
+  ].join("\n");
+
+  const html = `
+    <div style="font-family:Arial,sans-serif;color:#111827;line-height:1.6">
+      <p>Halo ${greeting},</p>
+      <p>Kami menerima permintaan reset password untuk akun 20byte Anda.</p>
+      <p>Klik tombol berikut untuk membuat password baru:</p>
+      <p>
+        <a href="${input.setupLink}" style="display:inline-block;padding:10px 16px;background:#10b981;color:#ffffff;text-decoration:none;border-radius:8px;font-weight:600">
+          Atur Ulang Password
+        </a>
+      </p>
+      <p>Atau buka link ini langsung:</p>
+      <p><a href="${input.setupLink}">${input.setupLink}</a></p>
+      <p style="color:#6b7280">Link berlaku sampai ${expiresAtLabel}.</p>
+      <p style="color:#6b7280">Jika Anda tidak merasa meminta reset password, abaikan email ini.</p>
+    </div>
+  `.trim();
+
+  return { subject, text, html };
 }
 
 export async function registerUser(input: RegisterUserInput): Promise<RegisterResult> {
@@ -226,7 +279,11 @@ export async function loginUser(input: LoginUserInput): Promise<LoginResult> {
       reason: "LOGIN_USER_NOT_FOUND",
       email: email || normalizedPhone || identifierRaw
     });
-    throw new ServiceError(401, "INVALID_CREDENTIALS", "Email or password is invalid.");
+    throw new ServiceError(
+      401,
+      "INVALID_CREDENTIALS",
+      "Email/WhatsApp atau password salah. Jika lupa, gunakan fitur Lupa password."
+    );
   }
 
   if (!user.passwordHash) {
@@ -239,7 +296,11 @@ export async function loginUser(input: LoginUserInput): Promise<LoginResult> {
       reason: "LOGIN_INVALID_PASSWORD",
       email
     });
-    throw new ServiceError(401, "INVALID_CREDENTIALS", "Email or password is invalid.");
+    throw new ServiceError(
+      401,
+      "INVALID_CREDENTIALS",
+      "Email/WhatsApp atau password salah. Jika lupa, gunakan fitur Lupa password."
+    );
   }
 
   const authUser: AuthenticatedUser = {
@@ -252,6 +313,82 @@ export async function loginUser(input: LoginUserInput): Promise<LoginResult> {
     user: authUser,
     sessionToken: createSessionToken(authUser)
   };
+}
+
+export async function requestPasswordReset(input: ForgotPasswordInput): Promise<{ accepted: true }> {
+  const identifierRaw = normalizeIdentifier(input.identifier) || normalizeIdentifier(input.email);
+  const normalizedEmailCandidate = normalizeEmail(identifierRaw);
+  const email = isValidEmail(normalizedEmailCandidate) ? normalizedEmailCandidate : "";
+  const normalizedPhone = normalizePossibleE164(identifierRaw) ?? normalizeWhatsAppDestination(identifierRaw);
+
+  if (!email && !normalizedPhone) {
+    throw new ServiceError(400, "INVALID_IDENTIFIER", "Masukkan email atau nomor WhatsApp yang valid.");
+  }
+
+  const user = await prisma.user.findFirst({
+    where: email
+      ? {
+          email
+        }
+      : {
+          phoneE164: normalizedPhone ?? undefined
+        },
+    select: {
+      id: true,
+      email: true,
+      name: true,
+      isSuspended: true
+    }
+  });
+
+  if (!user || user.isSuspended) {
+    return { accepted: true };
+  }
+
+  const membership = await prisma.orgMember.findFirst({
+    where: {
+      userId: user.id
+    },
+    select: {
+      orgId: true
+    },
+    orderBy: {
+      createdAt: "asc"
+    }
+  });
+
+  if (!membership) {
+    return { accepted: true };
+  }
+
+  const tokenInfo = await createAccountSetupToken({
+    userId: user.id,
+    orgId: membership.orgId
+  });
+  const emailPayload = buildResetPasswordEmail({
+    name: user.name,
+    setupLink: tokenInfo.setupLink,
+    expiresAt: tokenInfo.expiresAt
+  });
+
+  try {
+    await sendTransactionalEmail({
+      to: user.email,
+      subject: emailPayload.subject,
+      text: emailPayload.text,
+      html: emailPayload.html
+    });
+  } catch (error) {
+    if (error instanceof ServiceError && error.code === "EMAIL_PROVIDER_NOT_CONFIGURED" && process.env.NODE_ENV !== "production") {
+      console.warn(
+        `[auth] EMAIL_PROVIDER_NOT_CONFIGURED. Dev fallback reset link for ${user.email}: ${tokenInfo.setupLink}`
+      );
+    } else {
+      throw error;
+    }
+  }
+
+  return { accepted: true };
 }
 
 export async function getProfile(userId: string): Promise<ProfileResult> {

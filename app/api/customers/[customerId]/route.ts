@@ -1,5 +1,6 @@
 import { type NextRequest, NextResponse } from "next/server";
 
+import { publishCustomerUpdatedEvent } from "@/lib/ably/publisher";
 import { requireApiSession } from "@/lib/auth/middleware";
 import { prisma } from "@/lib/db/prisma";
 import { canAccessCustomerDirectory } from "@/lib/permissions/orgPermissions";
@@ -93,11 +94,7 @@ async function requireCustomerDirectoryAccess(userId: string, orgId: string) {
 
 export async function GET(
   request: NextRequest,
-  context: {
-    params: {
-      customerId: string;
-    };
-  }
+  context: { params: Promise<{customerId: string;}> }
 ) {
   const auth = requireApiSession(request);
   if (auth.response) {
@@ -111,7 +108,7 @@ export async function GET(
     );
     await requireCustomerDirectoryAccess(auth.session.userId, orgId);
 
-    const customerId = context.params.customerId?.trim() ?? "";
+    const customerId = (await context.params).customerId?.trim() ?? "";
     if (!customerId) {
       return errorResponse(400, "MISSING_CUSTOMER_ID", "customerId is required.");
     }
@@ -252,11 +249,7 @@ export async function GET(
 
 export async function PUT(
   request: NextRequest,
-  context: {
-    params: {
-      customerId: string;
-    };
-  }
+  context: { params: Promise<{customerId: string;}> }
 ) {
   const auth = requireApiSession(request);
   if (auth.response) {
@@ -277,7 +270,7 @@ export async function PUT(
     );
     await requireCustomerDirectoryAccess(auth.session.userId, orgId);
 
-    const customerId = context.params.customerId?.trim() ?? "";
+    const customerId = (await context.params).customerId?.trim() ?? "";
     if (!customerId) {
       return errorResponse(400, "MISSING_CUSTOMER_ID", "customerId is required.");
     }
@@ -418,6 +411,11 @@ export async function PUT(
       return updated;
     });
 
+    void publishCustomerUpdatedEvent({
+      orgId,
+      customerId: customer.id
+    });
+
     return NextResponse.json({ data: { customer }, meta: {} }, { status: 200 });
   } catch (error) {
     if (error instanceof ServiceError) {
@@ -437,11 +435,7 @@ export async function PUT(
 
 export async function DELETE(
   request: NextRequest,
-  context: {
-    params: {
-      customerId: string;
-    };
-  }
+  context: { params: Promise<{customerId: string;}> }
 ) {
   const auth = requireApiSession(request);
   if (auth.response) {
@@ -455,7 +449,7 @@ export async function DELETE(
     );
     await requireCustomerDirectoryAccess(auth.session.userId, orgId);
 
-    const customerId = context.params.customerId?.trim() ?? "";
+    const customerId = (await context.params).customerId?.trim() ?? "";
     if (!customerId) {
       return errorResponse(400, "MISSING_CUSTOMER_ID", "customerId is required.");
     }
@@ -504,6 +498,11 @@ export async function DELETE(
           })
         }
       });
+    });
+
+    void publishCustomerUpdatedEvent({
+      orgId,
+      customerId: customer.id
     });
 
     return NextResponse.json({ data: { deleted: { id: customer.id } }, meta: {} }, { status: 200 });

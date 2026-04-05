@@ -73,8 +73,8 @@ export default function SetPasswordPage() {
 
   return (
     <div className="mx-auto w-full max-w-md rounded-xl border border-border bg-surface/80 p-6">
-      <h1 className="text-xl font-semibold">Aktivasi Akun</h1>
-      <p className="mt-1 text-sm text-muted-foreground">Buat password baru untuk mulai login ke 20byte.</p>
+      <h1 className="text-xl font-semibold">Atur Password</h1>
+      <p className="mt-1 text-sm text-muted-foreground">Gunakan halaman ini untuk aktivasi akun baru atau reset password.</p>
 
       <form className="mt-6 space-y-4" onSubmit={handleSubmit}>
         <div className="space-y-2">

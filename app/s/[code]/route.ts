@@ -61,13 +61,10 @@ async function findShortlinkByCode(code: string) {
 
 export async function GET(
   request: NextRequest,
-  context: {
-    params: {
-      code: string;
-    };
-  }
+  context: { params: Promise<{ code: string }> }
 ) {
-  const code = normalize(context.params.code);
+  const params = await context.params;
+  const code = normalize(params.code);
   if (!code) {
     return NextResponse.json(
       {

@@ -83,7 +83,10 @@ export async function updateConversationStatus(input: UpdateConversationStatusIn
     orgId: updatedConversation.orgId,
     conversationId: updatedConversation.id,
     assignedToMemberId: updatedConversation.assignedToMemberId,
-    status: updatedConversation.status
+    status: updatedConversation.status,
+    crmPipelineId: updatedConversation.crmPipelineId,
+    crmStageId: updatedConversation.crmStageId,
+    crmStageName: updatedConversation.crmStage?.name ?? null
   });
 
   return toConversationSummary({
@@ -121,7 +124,14 @@ export async function markConversationAsRead(input: MarkConversationAsReadInput)
       orgId: true,
       status: true,
       assignedToMemberId: true,
-      unreadCount: true
+      unreadCount: true,
+      crmPipelineId: true,
+      crmStageId: true,
+      crmStage: {
+        select: {
+          name: true
+        }
+      }
     }
   });
 
@@ -148,7 +158,10 @@ export async function markConversationAsRead(input: MarkConversationAsReadInput)
       orgId: conversation.orgId,
       conversationId: conversation.id,
       assignedToMemberId: conversation.assignedToMemberId,
-      status: conversation.status
+      status: conversation.status,
+      crmPipelineId: conversation.crmPipelineId,
+      crmStageId: conversation.crmStageId,
+      crmStageName: conversation.crmStage?.name ?? null
     });
   }
 

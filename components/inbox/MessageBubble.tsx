@@ -101,15 +101,15 @@ export function MessageBubble({
       <article
         className={
           isOutbound
-            ? `max-w-[90%] sm:max-w-[78%] rounded-2xl rounded-br-md border border-primary/35 bg-primary/[0.14] ${
+            ? `max-w-[90%] sm:max-w-[78%] rounded-[20px] rounded-br-[4px] border border-primary/20 bg-gradient-to-br from-primary/[0.15] to-primary/[0.05] shadow-sm backdrop-blur-sm ${
                 density === "compact" ? "px-3 py-2.5" : "px-4 py-3"
-              } ${isEmphasized ? "inbox-pop-in" : ""} shadow-sm transition-all duration-150`
-            : `max-w-[90%] sm:max-w-[78%] rounded-2xl rounded-bl-md border border-border/80 bg-card/95 ${
+              } ${isEmphasized ? "inbox-pop-in" : ""} transition-all duration-150 relative overflow-hidden group`
+            : `max-w-[90%] sm:max-w-[78%] rounded-[20px] rounded-bl-[4px] border border-border/60 bg-gradient-to-br from-card/95 to-muted/40 shadow-sm backdrop-blur-sm ${
                 density === "compact" ? "px-3 py-2.5" : "px-4 py-3"
-              } ${isEmphasized ? "inbox-pop-in" : ""} shadow-sm transition-all duration-150`
+              } ${isEmphasized ? "inbox-pop-in" : ""} transition-all duration-150 relative overflow-hidden group`
         }
       >
-        {message.type === "SYSTEM" ? <p className="mb-1 text-[11px] uppercase tracking-wide text-primary">System</p> : null}
+        {message.type === "SYSTEM" ? <div className="mb-2 inline-flex rounded-full border border-primary/30 bg-primary/10 px-2 py-0.5 text-[10px] uppercase tracking-wider text-primary">System Notice</div> : null}
 
         {message.templateName ? (
           <p className="mb-1 text-xs text-muted-foreground">

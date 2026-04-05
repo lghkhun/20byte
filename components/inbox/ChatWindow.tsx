@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Loader2, MessageCircleMore, ShoppingBag } from "lucide-react";
+import { Loader2, MessageCircleMore } from "lucide-react";
 
 import { ChatHeader } from "@/components/inbox/chat/ChatHeader";
 import { ChatMessagesSkeleton } from "@/components/inbox/chat/ChatMessagesSkeleton";

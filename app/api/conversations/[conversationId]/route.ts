@@ -31,11 +31,7 @@ function withServerTiming<T>(response: T, startedAt: number, cacheStatus?: "HIT"
 
 export async function GET(
   request: NextRequest,
-  context: {
-    params: {
-      conversationId: string;
-    };
-  }
+  context: { params: Promise<{conversationId: string;}> }
 ) {
   const startedAt = performance.now();
   const auth = requireApiSession(request);
@@ -43,7 +39,7 @@ export async function GET(
     return withServerTiming(auth.response, startedAt);
   }
 
-  const conversationId = context.params.conversationId;
+  const conversationId = (await context.params).conversationId;
 
   try {
     const orgId = await resolvePrimaryOrganizationIdForUser(
@@ -71,11 +67,7 @@ export async function GET(
 
 export async function DELETE(
   request: NextRequest,
-  context: {
-    params: {
-      conversationId: string;
-    };
-  }
+  context: { params: Promise<{conversationId: string;}> }
 ) {
   const startedAt = performance.now();
   const auth = requireApiSession(request);
@@ -83,7 +75,7 @@ export async function DELETE(
     return withServerTiming(auth.response, startedAt);
   }
 
-  const conversationId = context.params.conversationId;
+  const conversationId = (await context.params).conversationId;
 
   try {
     const orgId = await resolvePrimaryOrganizationIdForUser(

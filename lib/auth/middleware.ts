@@ -4,6 +4,7 @@ import { errorResponse } from "@/lib/api/http";
 import { getSessionFromRequest, type SessionPayload } from "@/lib/auth/session";
 import { SESSION_COOKIE_NAME } from "@/lib/auth/session";
 import { logAuthFailure } from "@/lib/logging/auth";
+import { getClientIp, validateSameOriginMutationRequest } from "@/lib/security/request";
 
 type RequireApiSessionSuccess = {
   session: SessionPayload;
@@ -23,7 +24,7 @@ export function requireApiSession(request: NextRequest): RequireApiSessionResult
   if (!session) {
     const path = request.nextUrl.pathname;
     const method = request.method;
-    const ip = request.headers.get("x-forwarded-for") ?? request.headers.get("x-real-ip") ?? undefined;
+    const ip = getClientIp(request);
     const userAgent = request.headers.get("user-agent") ?? undefined;
     if (!rawToken) {
       logAuthFailure({
@@ -45,6 +46,22 @@ export function requireApiSession(request: NextRequest): RequireApiSessionResult
     return {
       session: null,
       response: errorResponse(401, "UNAUTHORIZED", "Authentication is required.")
+    };
+  }
+
+  const originValidation = validateSameOriginMutationRequest(request);
+  if (!originValidation.allowed) {
+    logAuthFailure({
+      reason: "API_CROSS_ORIGIN_BLOCKED",
+      email: session.email,
+      path: request.nextUrl.pathname,
+      method: request.method,
+      ip: getClientIp(request),
+      userAgent: request.headers.get("user-agent") ?? undefined
+    });
+    return {
+      session: null,
+      response: errorResponse(403, "FORBIDDEN_CROSS_ORIGIN", "Cross-origin request is not allowed.")
     };
   }
 

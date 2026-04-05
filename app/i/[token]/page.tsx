@@ -76,11 +76,12 @@ function MilestoneStatusIcon({ status }: { status: string }) {
 export default async function PublicInvoicePage({
   params
 }: {
-  params: {
+  params: Promise<{
     token: string;
-  };
+  }>;
 }) {
-  const invoice = await getPublicInvoiceByToken(params.token);
+  const resolvedParams = await params;
+  const invoice = await getPublicInvoiceByToken(resolvedParams.token);
   if (!invoice) {
     notFound();
   }
@@ -301,7 +302,7 @@ export default async function PublicInvoicePage({
               <CardContent className="space-y-3 p-4">
                 <h2 className="text-base font-semibold text-foreground">Payment Proofs</h2>
                 <PublicInvoiceProofUploader
-                  token={params.token}
+                  token={resolvedParams.token}
                   milestones={invoice.milestones.map((milestone) => ({
                     id: milestone.id,
                     type: milestone.type

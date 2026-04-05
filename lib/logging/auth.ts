@@ -3,7 +3,9 @@ type AuthFailureReason =
   | "LOGIN_INVALID_PASSWORD"
   | "API_MISSING_SESSION"
   | "API_INVALID_SESSION"
-  | "LOGIN_INTERNAL_ERROR";
+  | "LOGIN_INTERNAL_ERROR"
+  | "AUTH_RATE_LIMITED"
+  | "API_CROSS_ORIGIN_BLOCKED";
 
 type AuthFailureLogInput = {
   reason: AuthFailureReason;
@@ -52,4 +54,3 @@ export function logAuthFailure(input: AuthFailureLogInput): void {
 
   console.warn(JSON.stringify(payload));
 }
-

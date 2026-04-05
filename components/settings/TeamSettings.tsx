@@ -68,7 +68,6 @@ export function TeamSettings() {
   const [members, setMembers] = useState<OrgMember[]>([]);
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
-  const [phone, setPhone] = useState("");
   const [role, setRole] = useState<StaffRole>("CS");
   const [isLoading, setIsLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -77,6 +76,7 @@ export function TeamSettings() {
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
   const [lastSetupLink, setLastSetupLink] = useState<string | null>(null);
+  const [lastSetupMailtoUrl, setLastSetupMailtoUrl] = useState<string | null>(null);
 
   const activeBusiness = useMemo(() => orgs[0] ?? null, [orgs]);
   const nonOwnerCount = useMemo(() => members.filter((member) => member.role !== "OWNER").length, [members]);
@@ -84,9 +84,7 @@ export function TeamSettings() {
 
   const canSubmit = Boolean(
     activeBusiness &&
-      name.trim() &&
       email.trim() &&
-      phone.trim() &&
       !isSubmitting &&
       !reachedLimitForNewMember
   );
@@ -100,13 +98,13 @@ export function TeamSettings() {
         onClick={() => {
           setName("");
           setEmail("");
-          setPhone("");
           setRole("CS");
           setLastSetupLink(null);
+          setLastSetupMailtoUrl(null);
           setIsCreateDialogOpen(true);
         }}
       >
-        Tambah Staff
+        Undang Staff
       </Button>
     ),
     [reachedLimitForNewMember]
@@ -196,8 +194,9 @@ export function TeamSettings() {
       setError(null);
       setSuccess(null);
       setLastSetupLink(null);
+      setLastSetupMailtoUrl(null);
 
-      const response = await fetch("/api/orgs/staff", {
+      const response = await fetch("/api/orgs/members", {
         method: "POST",
         headers: {
           "Content-Type": "application/json"
@@ -206,34 +205,37 @@ export function TeamSettings() {
           orgId: activeBusiness.id,
           name: name.trim(),
           email: email.trim(),
-          phone: phone.trim(),
           role
         })
       });
       const payload = (await response.json().catch(() => null)) as
-        | ({ data?: { setup?: { whatsappDelivery?: boolean; setupLink?: string } } } & ApiError)
+        | ({ data?: { invitation?: { setupLink?: string | null; mailtoUrl?: string | null; requiresPasswordSetup?: boolean; emailDelivery?: boolean | null } } } & ApiError)
         | null;
       if (!response.ok) {
-        throw new Error(payload?.error?.message ?? "Failed to create staff.");
+        throw new Error(payload?.error?.message ?? "Failed to invite member.");
       }
 
-      const whatsappDelivery = payload?.data?.setup?.whatsappDelivery;
-      const setupLink = payload?.data?.setup?.setupLink ?? null;
+      const requiresPasswordSetup = Boolean(payload?.data?.invitation?.requiresPasswordSetup);
+      const emailDelivery = payload?.data?.invitation?.emailDelivery;
+      const setupLink = payload?.data?.invitation?.setupLink ?? null;
+      const mailtoUrl = payload?.data?.invitation?.mailtoUrl ?? null;
       setLastSetupLink(setupLink);
+      setLastSetupMailtoUrl(mailtoUrl);
 
       setName("");
       setEmail("");
-      setPhone("");
       setRole("CS");
       setIsCreateDialogOpen(false);
       await loadMembers(activeBusiness.id);
       setSuccess(
-        whatsappDelivery
-          ? "Staff created and setup link sent via WhatsApp."
-          : "Staff created. WhatsApp delivery failed, use setup link fallback."
+        requiresPasswordSetup
+          ? emailDelivery
+            ? "Undangan berhasil dikirim via email."
+            : "Undangan dibuat, tapi email belum terkirim. Gunakan link aktivasi sebagai fallback."
+          : "Anggota berhasil ditambahkan ke business."
       );
     } catch (submitError) {
-      setError(toErrorMessage(submitError, "Failed to create staff."));
+      setError(toErrorMessage(submitError, "Failed to invite member."));
     } finally {
       setIsSubmitting(false);
     }
@@ -261,7 +263,7 @@ export function TeamSettings() {
       });
 
       const payload = (await response.json().catch(() => null)) as
-        | ({ data?: { setupLink?: string; whatsappDelivery?: boolean } } & ApiError)
+        | ({ data?: { setupLink?: string; whatsappDelivery?: boolean | null; emailDelivery?: boolean | null; mailtoUrl?: string | null } } & ApiError)
         | null;
 
       if (!response.ok) {
@@ -269,7 +271,16 @@ export function TeamSettings() {
       }
 
       setLastSetupLink(payload?.data?.setupLink ?? null);
-      setSuccess(payload?.data?.whatsappDelivery ? "Setup link resent via WhatsApp." : "Resent, but WhatsApp delivery failed.");
+      setLastSetupMailtoUrl(payload?.data?.mailtoUrl ?? null);
+      if (payload?.data?.emailDelivery === true && payload?.data?.whatsappDelivery === true) {
+        setSuccess("Link aktivasi terkirim ulang via email dan WhatsApp.");
+      } else if (payload?.data?.emailDelivery === true) {
+        setSuccess("Link aktivasi terkirim ulang via email.");
+      } else if (payload?.data?.whatsappDelivery === true) {
+        setSuccess("Link aktivasi terkirim ulang via WhatsApp.");
+      } else {
+        setSuccess("Link aktivasi baru siap. Kirimkan lewat email ke staff terkait.");
+      }
     } catch (resendError) {
       setError(toErrorMessage(resendError, "Failed to resend setup link."));
     } finally {
@@ -277,17 +288,40 @@ export function TeamSettings() {
     }
   }
 
+  async function handleCopySetupLink() {
+    if (!lastSetupLink) {
+      return;
+    }
+
+    try {
+      await navigator.clipboard.writeText(lastSetupLink);
+      setSuccess("Link aktivasi berhasil disalin.");
+    } catch {
+      setError("Gagal menyalin link aktivasi.");
+    }
+  }
+
   return (
     <section className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <p className="text-sm text-muted-foreground">Owner dapat menambahkan staff CS/Advertiser dan mengirim link setup password via WhatsApp.</p>
+        <p className="text-sm text-muted-foreground">Owner dapat mengundang staff role CS/Advertiser lewat email agar onboarding lebih cepat.</p>
         <p className="text-xs text-muted-foreground">Anggota aktif non-owner: {nonOwnerCount}/{MAX_NON_OWNER_MEMBERS}</p>
       </div>
 
       {lastSetupLink ? (
-        <p className="rounded-xl border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-700 break-all">
-          Fallback setup link: {lastSetupLink}
-        </p>
+        <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-700">
+          <p className="break-all">Link aktivasi: {lastSetupLink}</p>
+          <div className="mt-2 flex flex-wrap gap-2">
+            <Button type="button" size="sm" variant="outline" className="h-8" onClick={() => void handleCopySetupLink()}>
+              Salin Link
+            </Button>
+            {lastSetupMailtoUrl ? (
+              <Button type="button" size="sm" className="h-8" asChild>
+                <a href={lastSetupMailtoUrl}>Buka Email Invite</a>
+              </Button>
+            ) : null}
+          </div>
+        </div>
       ) : null}
 
       <div className="overflow-hidden rounded-2xl border border-border/70 bg-background/60">
@@ -359,8 +393,8 @@ export function TeamSettings() {
       <Dialog open={isCreateDialogOpen} onOpenChange={setIsCreateDialogOpen}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Tambah Staff</DialogTitle>
-            <DialogDescription>Owner membuat akun staff lalu sistem kirim link setup password via WhatsApp.</DialogDescription>
+            <DialogTitle>Undang Staff</DialogTitle>
+            <DialogDescription>Undang via email dan tentukan role CS/Advertiser. Jika akun belum aktif, sistem menyiapkan link aktivasi.</DialogDescription>
           </DialogHeader>
           <form onSubmit={handleCreateStaff} className="space-y-3">
             <Input
@@ -377,14 +411,6 @@ export function TeamSettings() {
               value={email}
               onChange={(event) => setEmail(event.target.value)}
               placeholder="staff@company.com"
-              className="h-10 rounded-xl"
-            />
-            <Input
-              id="staff-phone"
-              type="text"
-              value={phone}
-              onChange={(event) => setPhone(event.target.value)}
-              placeholder="08xxxxxxxxxx"
               className="h-10 rounded-xl"
             />
             <select
@@ -407,7 +433,7 @@ export function TeamSettings() {
               >
                 Batal
               </Button>
-              <Button type="submit" disabled={!canSubmit}>{isSubmitting ? "Saving..." : "Create Staff"}</Button>
+              <Button type="submit" disabled={!canSubmit}>{isSubmitting ? "Mengundang..." : "Kirim Undangan"}</Button>
             </DialogFooter>
           </form>
         </DialogContent>

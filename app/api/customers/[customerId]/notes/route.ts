@@ -37,18 +37,14 @@ function parseNumber(value: string | null, fallback: number): number {
 
 export async function GET(
   request: NextRequest,
-  context: {
-    params: {
-      customerId: string;
-    };
-  }
+  context: { params: Promise<{customerId: string;}> }
 ) {
   const auth = requireApiSession(request);
   if (auth.response) {
     return auth.response;
   }
 
-  const customerId = context.params.customerId;
+  const customerId = (await context.params).customerId;
   const page = parseNumber(request.nextUrl.searchParams.get("page"), 1);
   const limit = parseNumber(request.nextUrl.searchParams.get("limit"), 20);
 
@@ -82,11 +78,7 @@ export async function GET(
 
 export async function POST(
   request: NextRequest,
-  context: {
-    params: {
-      customerId: string;
-    };
-  }
+  context: { params: Promise<{customerId: string;}> }
 ) {
   const auth = requireApiSession(request);
   if (auth.response) {
@@ -108,7 +100,7 @@ export async function POST(
     const note = await createCustomerNote(
       auth.session.userId,
       orgId,
-      context.params.customerId,
+      (await context.params).customerId,
       typeof body.content === "string" ? body.content : ""
     );
     return NextResponse.json(

@@ -1,7 +1,9 @@
 import type { NextRequest } from "next/server";
 
 import { errorResponse, successResponse } from "@/lib/api/http";
+import { enforceAuthRateLimit } from "@/lib/auth/rateLimit";
 import { logAuthFailure } from "@/lib/logging/auth";
+import { getClientIp } from "@/lib/security/request";
 import { setSessionCookie } from "@/lib/auth/session";
 import { loginUser } from "@/server/services/authService";
 import { ServiceError } from "@/server/services/serviceError";
@@ -14,8 +16,32 @@ export async function POST(request: NextRequest) {
     return errorResponse(400, "INVALID_JSON", "Request body must be valid JSON.");
   }
 
+  const normalizedBody = (body ?? {}) as Record<string, unknown>;
+  const identifierRaw =
+    typeof normalizedBody.identifier === "string"
+      ? normalizedBody.identifier
+      : typeof normalizedBody.email === "string"
+        ? normalizedBody.email
+        : "";
+
+  const rateLimitResponse = await enforceAuthRateLimit({
+    request,
+    scope: "login",
+    identity: identifierRaw
+  });
+  if (rateLimitResponse) {
+    logAuthFailure({
+      reason: "AUTH_RATE_LIMITED",
+      path: request.nextUrl.pathname,
+      method: request.method,
+      ip: getClientIp(request),
+      userAgent: request.headers.get("user-agent") ?? undefined
+    });
+    return rateLimitResponse;
+  }
+
   try {
-    const result = await loginUser((body ?? {}) as Record<string, unknown>);
+    const result = await loginUser(normalizedBody);
     const response = successResponse(
       {
         user: {
@@ -37,7 +63,7 @@ export async function POST(request: NextRequest) {
       reason: "LOGIN_INTERNAL_ERROR",
       path: request.nextUrl.pathname,
       method: request.method,
-      ip: request.headers.get("x-forwarded-for") ?? request.headers.get("x-real-ip") ?? undefined,
+      ip: getClientIp(request),
       userAgent: request.headers.get("user-agent") ?? undefined
     });
     return errorResponse(500, "LOGIN_FAILED", "Failed to authenticate user.");

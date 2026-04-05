@@ -1,0 +1,14 @@
+{
+  "suite": "smoke-ui-customers-deep",
+  "status": "failed",
+  "baseUrl": "http://localhost:3000",
+  "startedAt": "2026-04-05T02:31:05.303Z",
+  "endedAt": "2026-04-05T02:31:37.576Z",
+  "durationMs": 32273,
+  "failures": [
+    "page.goto: Timeout 30000ms exceeded.\nCall log:\n\u001b[2m  - navigating to \"http://localhost:3000/customers\", waiting until \"networkidle\"\u001b[22m\n"
+  ],
+  "skippedReason": null,
+  "error": "page.goto: Timeout 30000ms exceeded.\nCall log:\n\u001b[2m  - navigating to \"http://localhost:3000/customers\", waiting until \"networkidle\"\u001b[22m\n",
+  "meta": {}
+}

@@ -19,11 +19,7 @@ function errorResponse(status: number, code: string, message: string) {
 
 export async function GET(
   request: NextRequest,
-  context: {
-    params: {
-      invoiceId: string;
-    };
-  }
+  context: { params: Promise<{invoiceId: string;}> }
 ) {
   const auth = requireApiSession(request);
   if (auth.response) {
@@ -38,7 +34,7 @@ export async function GET(
     const timeline = await getInvoiceTimeline({
       actorUserId: auth.session.userId,
       orgId,
-      invoiceId: context.params.invoiceId
+      invoiceId: (await context.params).invoiceId
     });
 
     return NextResponse.json(

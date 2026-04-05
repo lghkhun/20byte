@@ -4,7 +4,7 @@ import { enqueueMetaEventJob } from "@/server/queues/metaEventQueue";
 import type { Prisma } from "@prisma/client";
 
 import type { InboundStoreResult, ResolvedAttribution, StoreInboundMessageInput } from "@/server/services/message/messageTypes";
-import { normalize, normalizeFileSize, normalizeOptional } from "@/server/services/message/messageUtils";
+import { normalize, normalizeFileSize, normalizeMessageText, normalizeOptional } from "@/server/services/message/messageUtils";
 import { getOrCreateCustomer, getOrCreateOpenConversation } from "@/server/services/message/inboundInfra/customerConversation";
 import { publishInboundConversationUpdatedNonBlocking, publishMessageNewEventNonBlocking } from "@/server/services/message/inboundInfra/events";
 import { resolveInboundAttribution } from "@/server/services/message/inboundInfra/attribution";
@@ -40,7 +40,7 @@ function buildInboundContext(input: StoreInboundMessageInput) {
     customerAvatarUrl: normalizeOptional(input.customerAvatarUrl),
     shortlinkCode: resolvedShortlinkCode,
     trackingId: normalizeOptional(input.trackingId) ?? trackingExtract.trackingId,
-    text: normalizeOptional(invisibleExtract.cleanText),
+    text: normalizeMessageText(invisibleExtract.cleanText),
     mediaId: normalizeOptional(input.mediaId),
     mediaUrl: normalizeOptional(input.mediaUrl),
     mimeType: normalizeOptional(input.mimeType),

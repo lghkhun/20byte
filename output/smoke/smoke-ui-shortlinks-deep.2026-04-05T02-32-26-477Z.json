@@ -1,0 +1,14 @@
+{
+  "suite": "smoke-ui-shortlinks-deep",
+  "status": "failed",
+  "baseUrl": "http://localhost:3000",
+  "startedAt": "2026-04-05T02:32:09.532Z",
+  "endedAt": "2026-04-05T02:32:26.477Z",
+  "durationMs": 16945,
+  "failures": [
+    "locator.waitFor: Timeout 10000ms exceeded.\nCall log:\n\u001b[2m  - waiting for getByRole('dialog', { name: /Tambah Shortlink/i }) to be visible\u001b[22m\n"
+  ],
+  "skippedReason": null,
+  "error": "locator.waitFor: Timeout 10000ms exceeded.\nCall log:\n\u001b[2m  - waiting for getByRole('dialog', { name: /Tambah Shortlink/i }) to be visible\u001b[22m\n",
+  "meta": {}
+}

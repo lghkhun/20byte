@@ -7,7 +7,7 @@ import { ArrowDown, ArrowUp, CalendarDays, ChevronDown, Inbox, Lock, Plus, Searc
 import { BUSINESS_CATEGORY_OPTIONS, FOLLOW_UP_OPTIONS, LEAD_STATUS_OPTIONS, formatLeadSettingLabel } from "@/lib/crm/leadSettingsConfig";
 import { subscribeToOrgMessageEvents } from "@/lib/ably/client";
 import { fetchOrganizationsCached } from "@/lib/client/orgsCache";
-import { notifyError, notifySuccess } from "@/lib/ui/notify";
+import { notifyError, notifyInfo, notifySuccess, notifyWarning } from "@/lib/ui/notify";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -96,6 +96,9 @@ type CustomersResponse = {
     page?: number;
     limit?: number;
     total?: number;
+    facets?: {
+      sources?: string[];
+    };
   };
   error?: {
     message?: string;
@@ -106,6 +109,7 @@ type LeadsCacheEntry = {
   leads: LeadRow[];
   assignees: LeadAssignee[];
   totalLeads: number;
+  sourceFacets: string[];
   cachedAt: number;
 };
 
@@ -124,6 +128,9 @@ type ApiError = {
     message?: string;
   };
 };
+
+type RealtimeConnectionState = "initialized" | "connecting" | "connected" | "disconnected" | "suspended" | "failed";
+type RealtimeSubscriptionStatus = "connecting" | "connected" | "reconnecting" | "fallback";
 
 type BulkAction = "SET_STATUS" | "SET_FOLLOW_UP" | "ASSIGN" | "DELETE";
 type OrgItem = {
@@ -210,7 +217,7 @@ const COLUMN_LABELS: Record<ColumnKey, string> = {
   assignee: "Assignee"
 };
 const INTERACTIVE_COLUMNS: ColumnKey[] = ["whatsapp", "businessCategory", "pipelineStage", "followUp", "statusLead"];
-const CUSTOMERS_DATE_TIME_FORMATTER = new Intl.DateTimeFormat("en-GB", {
+const CUSTOMERS_DATE_TIME_FORMATTER = new Intl.DateTimeFormat("id-ID", {
   day: "2-digit",
   month: "short",
   year: "numeric",
@@ -265,51 +272,64 @@ function formatLabel(value: string | null | undefined): string {
   return formatLeadSettingLabel(value);
 }
 
+function mapRealtimeConnectionState(state: RealtimeConnectionState): RealtimeSubscriptionStatus {
+  if (state === "connected") {
+    return "connected";
+  }
+  if (state === "failed") {
+    return "fallback";
+  }
+  if (state === "disconnected" || state === "suspended") {
+    return "reconnecting";
+  }
+  return "connecting";
+}
+
 function renderToneBadge(value: string, kind: "status" | "followup" | "source" = "status") {
   const normalized = value.toUpperCase();
 
   if (kind === "followup") {
-    if (normalized === "CHAT") return <Badge className="rounded-full bg-amber-400 text-white hover:bg-amber-400">Chat</Badge>;
-    if (normalized === "CALL") return <Badge className="rounded-full bg-violet-500 text-white hover:bg-violet-500">Call</Badge>;
-    if (normalized === "MEETING") return <Badge className="rounded-full bg-orange-500 text-white hover:bg-orange-500">Meeting</Badge>;
-    if (normalized === "PENAWARAN") return <Badge className="rounded-full bg-cyan-500 text-white hover:bg-cyan-500">Penawaran</Badge>;
-    if (normalized === "DEALING") return <Badge className="rounded-full bg-emerald-600 text-white hover:bg-emerald-600">Dealing</Badge>;
-    if (normalized === "BLUEPRINT") return <Badge className="rounded-full bg-pink-500 text-white hover:bg-pink-500">Blueprint</Badge>;
-    return <Badge className="rounded-full bg-blue-500 text-white hover:bg-blue-500">Wait Response</Badge>;
+    if (normalized === "CHAT") return <Badge variant="outline" className="rounded-full border-amber-500/30 bg-amber-500/10 text-amber-600 dark:text-amber-400">Chat</Badge>;
+    if (normalized === "CALL") return <Badge variant="outline" className="rounded-full border-violet-500/30 bg-violet-500/10 text-violet-600 dark:text-violet-400">Call</Badge>;
+    if (normalized === "MEETING") return <Badge variant="outline" className="rounded-full border-orange-500/30 bg-orange-500/10 text-orange-600 dark:text-orange-400">Meeting</Badge>;
+    if (normalized === "PENAWARAN") return <Badge variant="outline" className="rounded-full border-cyan-500/30 bg-cyan-500/10 text-cyan-600 dark:text-cyan-400">Penawaran</Badge>;
+    if (normalized === "DEALING") return <Badge variant="outline" className="rounded-full border-emerald-500/30 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400">Dealing</Badge>;
+    if (normalized === "BLUEPRINT") return <Badge variant="outline" className="rounded-full border-pink-500/30 bg-pink-500/10 text-pink-600 dark:text-pink-400">Blueprint</Badge>;
+    return <Badge variant="outline" className="rounded-full border-blue-500/30 bg-blue-500/10 text-blue-600 dark:text-blue-400">Wait Response</Badge>;
   }
 
   if (kind === "source") {
     return (
-      <Badge variant="outline" className="rounded-full border-border/70 bg-background">
-        <Inbox className="mr-1.5 h-3 w-3" />
+      <Badge variant="outline" className="rounded-full border-border/70 bg-background/50 font-medium shadow-sm backdrop-blur-sm">
+        <Inbox className="mr-1.5 h-3 w-3 text-muted-foreground" />
         {formatLabel(value)}
       </Badge>
     );
   }
 
-  if (normalized === "PROSPECT") return <Badge className="rounded-full bg-red-500 text-white hover:bg-red-500">Prospect</Badge>;
-  if (normalized === "ACTIVE_CLIENT") return <Badge className="rounded-full bg-lime-500 text-white hover:bg-lime-500">Active Client</Badge>;
-  if (normalized === "UNQUALIFIED") return <Badge className="rounded-full bg-slate-600 text-white hover:bg-slate-600">Unqualified</Badge>;
-  if (normalized === "REMARKETING") return <Badge className="rounded-full bg-fuchsia-500 text-white hover:bg-fuchsia-500">Remarketing</Badge>;
-  if (normalized === "OLD_CLIENT") return <Badge className="rounded-full bg-amber-700 text-white hover:bg-amber-700">Old Client</Badge>;
-  if (normalized === "PARTNERSHIP") return <Badge className="rounded-full bg-rose-300 text-white hover:bg-rose-300">Partnership</Badge>;
-  if (normalized === "OTHER") return <Badge className="rounded-full bg-zinc-500 text-white hover:bg-zinc-500">Other</Badge>;
-  return <Badge className="rounded-full bg-blue-400 text-white hover:bg-blue-400">New Lead</Badge>;
+  if (normalized === "PROSPECT") return <Badge variant="outline" className="rounded-full border-rose-500/30 bg-rose-500/10 text-rose-600 dark:text-rose-400">Prospect</Badge>;
+  if (normalized === "ACTIVE_CLIENT") return <Badge variant="outline" className="rounded-full border-lime-500/30 bg-lime-500/10 text-lime-600 dark:text-lime-400">Active Client</Badge>;
+  if (normalized === "UNQUALIFIED") return <Badge variant="outline" className="rounded-full border-slate-500/30 bg-slate-500/10 text-slate-600 dark:text-slate-400">Unqualified</Badge>;
+  if (normalized === "REMARKETING") return <Badge variant="outline" className="rounded-full border-fuchsia-500/30 bg-fuchsia-500/10 text-fuchsia-600 dark:text-fuchsia-400">Remarketing</Badge>;
+  if (normalized === "OLD_CLIENT") return <Badge variant="outline" className="rounded-full border-amber-600/30 bg-amber-600/10 text-amber-700 dark:text-amber-500">Old Client</Badge>;
+  if (normalized === "PARTNERSHIP") return <Badge variant="outline" className="rounded-full border-pink-500/30 bg-pink-500/10 text-pink-600 dark:text-pink-400">Partnership</Badge>;
+  if (normalized === "OTHER") return <Badge variant="outline" className="rounded-full border-zinc-500/30 bg-zinc-500/10 text-zinc-600 dark:text-zinc-400">Other</Badge>;
+  return <Badge variant="outline" className="rounded-full border-primary/30 bg-primary/10 text-primary">New Lead</Badge>;
 }
 
 const PIPELINE_STAGE_COLOR_CLASS: Record<string, string> = {
-  emerald: "bg-emerald-500 text-white hover:bg-emerald-500",
-  amber: "bg-amber-500 text-white hover:bg-amber-500",
-  sky: "bg-sky-500 text-white hover:bg-sky-500",
-  violet: "bg-violet-500 text-white hover:bg-violet-500",
-  rose: "bg-rose-500 text-white hover:bg-rose-500",
-  slate: "bg-slate-600 text-white hover:bg-slate-600"
+  emerald: "border-emerald-500/30 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400",
+  amber: "border-amber-500/30 bg-amber-500/10 text-amber-600 dark:text-amber-400",
+  sky: "border-sky-500/30 bg-sky-500/10 text-sky-600 dark:text-sky-400",
+  violet: "border-violet-500/30 bg-violet-500/10 text-violet-600 dark:text-violet-400",
+  rose: "border-rose-500/30 bg-rose-500/10 text-rose-600 dark:text-rose-400",
+  slate: "border-slate-500/30 bg-slate-500/10 text-slate-600 dark:text-slate-400"
 };
 
 function renderPipelineStageBadge(name: string, color: string) {
-  const tone = PIPELINE_STAGE_COLOR_CLASS[color] ?? "bg-slate-500 text-white hover:bg-slate-500";
+  const tone = PIPELINE_STAGE_COLOR_CLASS[color] ?? "border-slate-500/30 bg-slate-500/10 text-slate-600 dark:text-slate-400";
   return (
-    <Badge className={`rounded-full ${tone}`} title={name}>
+    <Badge variant="outline" className={`rounded-full shadow-sm backdrop-blur-sm ${tone}`} title={name}>
       {name}
     </Badge>
   );
@@ -400,6 +420,13 @@ export function CustomersWorkspace() {
   const leadsRef = useRef<LeadRow[]>([]);
   const leadsRequestIdRef = useRef(0);
   const isMountedRef = useRef(true);
+  const selectedLeadRef = useRef<LeadRow | null>(null);
+  const selectedLeadIdRef = useRef<string | null>(null);
+  const isDrawerOpenRef = useRef(false);
+  const detailRequestIdRef = useRef(0);
+  const detailAbortControllerRef = useRef<AbortController | null>(null);
+  const lastDetailRefreshAtRef = useRef(0);
+  const realtimeStatusRef = useRef<RealtimeSubscriptionStatus>("connecting");
   const leadsInFlightRef = useRef<{
     key: string;
     promise: Promise<void>;
@@ -417,12 +444,14 @@ export function CustomersWorkspace() {
   const [orgs, setOrgs] = useState<OrgItem[]>([]);
   const [hasLoadedOrganizations, setHasLoadedOrganizations] = useState(false);
   const [assignees, setAssignees] = useState<LeadAssignee[]>([]);
+  const [sourceFacetOptions, setSourceFacetOptions] = useState<string[]>([]);
   const [totalLeads, setTotalLeads] = useState(0);
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(30);
 
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshingLeads, setIsRefreshingLeads] = useState(false);
+  const [realtimeStatus, setRealtimeStatus] = useState<RealtimeSubscriptionStatus>("connecting");
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
 
@@ -473,16 +502,96 @@ export function CustomersWorkspace() {
 
   const [frozenFields, setFrozenFields] = useState<FrozenFieldState>(DEFAULT_FROZEN_FIELDS);
   const [isFrozenDialogOpen, setIsFrozenDialogOpen] = useState(false);
+  const activeBusiness = useMemo(() => orgs[0] ?? null, [orgs]);
+
+  const updateRealtimeStatus = useCallback((nextStatus: RealtimeSubscriptionStatus) => {
+    realtimeStatusRef.current = nextStatus;
+    setRealtimeStatus((current) => {
+      if (current !== nextStatus) {
+        if (nextStatus === "connected") {
+          notifySuccess("Realtime tersambung", { description: "Pesan & status lead sinkron secara langsung." });
+        } else if (nextStatus === "reconnecting") {
+          notifyWarning("Koneksi realtime terputus", { description: "Mencoba menyambungkan kembali..." });
+        } else if (nextStatus === "fallback") {
+          notifyInfo("Mode fallback aktif", { description: "Koneksi realtime lambat, menggunakan polling berkala." });
+        }
+      }
+      return nextStatus;
+    });
+  }, []);
+
+  const fetchLeadDetail = useCallback(async (leadId: string, options?: { openDrawer?: boolean }) => {
+    const requestId = ++detailRequestIdRef.current;
+    const abortController = new AbortController();
+    detailAbortControllerRef.current?.abort();
+    detailAbortControllerRef.current = abortController;
+
+    if (options?.openDrawer) {
+      setIsDrawerOpen(true);
+      setSelectedLead(null);
+      setLeadChangeLog([]);
+    }
+
+    setIsLeadLoading(true);
+    setError(null);
+    setSelectedLeadId(leadId);
+
+    try {
+      const orgId = activeBusiness?.id ?? "";
+      const response = await fetch(
+        `/api/customers/${encodeURIComponent(leadId)}${orgId ? `?orgId=${encodeURIComponent(orgId)}` : ""}`,
+        { cache: "no-store", signal: abortController.signal }
+      );
+      const payload = (await response.json().catch(() => null)) as CustomerDetailResponse | null;
+      if (!response.ok || !payload?.data?.customer) {
+        throw new Error(payload?.error?.message ?? "Failed to load lead detail.");
+      }
+      if (!isMountedRef.current || requestId !== detailRequestIdRef.current) {
+        return;
+      }
+      setSelectedLead(payload.data.customer);
+      setLeadChangeLog(payload.data.changelog ?? []);
+    } catch (detailError) {
+      if (detailError instanceof DOMException && detailError.name === "AbortError") {
+        return;
+      }
+      if (!isMountedRef.current || requestId !== detailRequestIdRef.current) {
+        return;
+      }
+      setError(toErrorMessage(detailError, "Failed to load lead detail."));
+      if (options?.openDrawer) {
+        setIsDrawerOpen(false);
+      }
+    } finally {
+      if (detailAbortControllerRef.current === abortController) {
+        detailAbortControllerRef.current = null;
+      }
+      if (!isMountedRef.current || requestId !== detailRequestIdRef.current) {
+        return;
+      }
+      setIsLeadLoading(false);
+    }
+  }, [activeBusiness?.id]);
+
+  const openLeadDrawer = useCallback(async (leadId: string) => {
+    await fetchLeadDetail(leadId, { openDrawer: true });
+  }, [fetchLeadDetail]);
 
   const totalPages = Math.max(1, Math.ceil(totalLeads / pageSize));
 
   const visibleLeads = useMemo(() => leads, [leads]);
-  const activeBusiness = useMemo(() => orgs[0] ?? null, [orgs]);
 
   const selectedLeadIdSet = useMemo(() => new Set(selectedIds), [selectedIds]);
   const allPageSelected = visibleLeads.length > 0 && visibleLeads.every((lead) => selectedLeadIdSet.has(lead.id));
 
   const sources = useMemo(() => {
+    const fromFacet = Array.from(
+      new Set(sourceFacetOptions.map((item) => item.trim()).filter((item) => item.length > 0))
+    ).sort((a, b) => a.localeCompare(b));
+    if (fromFacet.length > 0) {
+      return fromFacet;
+    }
+
     const sourceSet = new Set<string>();
     for (const lead of leads) {
       if (lead.source?.trim()) {
@@ -490,7 +599,36 @@ export function CustomersWorkspace() {
       }
     }
     return Array.from(sourceSet).sort((a, b) => a.localeCompare(b));
-  }, [leads]);
+  }, [leads, sourceFacetOptions]);
+
+  const realtimeStatusMeta = useMemo(() => {
+    if (realtimeStatus === "connected") {
+      return {
+        label: "Realtime tersambung",
+        description: "Update customer diterima langsung.",
+        className: "border-emerald-500/30 bg-emerald-500/10 text-emerald-700"
+      };
+    }
+    if (realtimeStatus === "reconnecting") {
+      return {
+        label: "Menyambung ulang realtime",
+        description: "Sementara memakai fallback polling 20 detik.",
+        className: "border-amber-500/30 bg-amber-500/10 text-amber-700"
+      };
+    }
+    if (realtimeStatus === "fallback") {
+      return {
+        label: "Fallback polling aktif",
+        description: "Koneksi realtime gagal, data tetap disegarkan berkala.",
+        className: "border-rose-500/30 bg-rose-500/10 text-rose-700"
+      };
+    }
+    return {
+      label: "Menghubungkan realtime",
+      description: "Menyiapkan sinkronisasi customer...",
+      className: "border-sky-500/30 bg-sky-500/10 text-sky-700"
+    };
+  }, [realtimeStatus]);
 
   const fetchLeads = useCallback(
     async (options?: { force?: boolean }) => {
@@ -500,8 +638,12 @@ export function CustomersWorkspace() {
       const params = new URLSearchParams({
         page: String(page),
         limit: String(pageSize),
-        light: "1"
+        light: "1",
+        includeFacets: "1"
       });
+      if (options?.force) {
+        params.set("fresh", "1");
+      }
       if (searchQuery.trim()) params.set("q", searchQuery.trim());
       if (statusFilter !== "__all__") params.set("leadStatus", statusFilter);
       if (sourceFilter !== "__all__") params.set("source", sourceFilter);
@@ -525,6 +667,7 @@ export function CustomersWorkspace() {
         setLeads(cached.leads);
         setAssignees(cached.assignees);
         setTotalLeads(cached.totalLeads);
+        setSourceFacetOptions(cached.sourceFacets);
       }
       const isCacheFresh = Boolean(cached && Date.now() - cached.cachedAt < LEADS_QUERY_CACHE_TTL_MS);
       if (isCacheFresh && !options?.force) {
@@ -558,17 +701,20 @@ export function CustomersWorkspace() {
           const nextLeads = payload?.data?.customers ?? [];
           const nextAssignees = payload?.data?.assignees ?? [];
           const nextTotalLeads = payload?.meta?.total ?? 0;
+          const nextSourceFacets = payload?.meta?.facets?.sources ?? [];
 
           leadsQueryCacheRef.current.set(requestKey, {
             leads: nextLeads,
             assignees: nextAssignees,
             totalLeads: nextTotalLeads,
+            sourceFacets: nextSourceFacets,
             cachedAt: Date.now()
           });
 
           setLeads(nextLeads);
           setAssignees(nextAssignees);
           setTotalLeads(nextTotalLeads);
+          setSourceFacetOptions(nextSourceFacets);
         } catch (loadError) {
           if (loadError instanceof DOMException && loadError.name === "AbortError") {
             return;
@@ -613,7 +759,8 @@ export function CustomersWorkspace() {
     const params = new URLSearchParams({
       page: "1",
       limit: "30",
-      light: "1"
+      light: "1",
+      includeFacets: "1"
     });
     const queryKey = params.toString();
     const cacheKey = `${orgId}::${queryKey}`;
@@ -636,6 +783,7 @@ export function CustomersWorkspace() {
         leads: payload?.data?.customers ?? [],
         assignees: payload?.data?.assignees ?? [],
         totalLeads: payload?.meta?.total ?? 0,
+        sourceFacets: payload?.meta?.facets?.sources ?? [],
         cachedAt: Date.now()
       });
     } catch {
@@ -765,6 +913,18 @@ export function CustomersWorkspace() {
   }, [leads]);
 
   useEffect(() => {
+    selectedLeadIdRef.current = selectedLeadId;
+  }, [selectedLeadId]);
+
+  useEffect(() => {
+    selectedLeadRef.current = selectedLead;
+  }, [selectedLead]);
+
+  useEffect(() => {
+    isDrawerOpenRef.current = isDrawerOpen;
+  }, [isDrawerOpen]);
+
+  useEffect(() => {
     if (!hasLoadedOrganizations || !activeBusiness?.id) {
       return;
     }
@@ -773,6 +933,7 @@ export function CustomersWorkspace() {
     let cleanup: (() => void) | null = null;
     let refreshTimer: ReturnType<typeof setTimeout> | null = null;
     let fallbackTimer: ReturnType<typeof setInterval> | null = null;
+    updateRealtimeStatus("connecting");
 
     const scheduleRefresh = () => {
       if (refreshTimer) {
@@ -794,30 +955,73 @@ export function CustomersWorkspace() {
       }, 220);
     };
 
+    const scheduleSelectedLeadRefresh = (customerId: string) => {
+      if (!active || !isDrawerOpenRef.current || selectedLeadIdRef.current !== customerId) {
+        return;
+      }
+      if (Date.now() - lastDetailRefreshAtRef.current < 900) {
+        return;
+      }
+      lastDetailRefreshAtRef.current = Date.now();
+      void fetchLeadDetail(customerId);
+    };
+
+    const scheduleSelectedLeadRefreshByConversation = (conversationId: string) => {
+      if (!active || !isDrawerOpenRef.current) {
+        return;
+      }
+      const selectedLeadId = selectedLeadIdRef.current;
+      const selectedLead = selectedLeadRef.current;
+      if (!selectedLeadId || !selectedLead || selectedLead.latestConversationId !== conversationId) {
+        return;
+      }
+      if (Date.now() - lastDetailRefreshAtRef.current < 900) {
+        return;
+      }
+      lastDetailRefreshAtRef.current = Date.now();
+      void fetchLeadDetail(selectedLeadId);
+    };
+
     const startSubscription = async () => {
       try {
         cleanup = await subscribeToOrgMessageEvents({
           orgId: activeBusiness.id,
+          onConnectionStateChange: (state) => {
+            if (!active) {
+              return;
+            }
+            updateRealtimeStatus(mapRealtimeConnectionState(state));
+          },
           onMessageNew: scheduleRefresh,
-          onConversationUpdated: scheduleRefresh,
-          onAssignmentChanged: scheduleRefresh,
+          onConversationUpdated: (payload) => {
+            scheduleRefresh();
+            scheduleSelectedLeadRefreshByConversation(payload.conversationId);
+          },
+          onAssignmentChanged: (payload) => {
+            scheduleRefresh();
+            scheduleSelectedLeadRefreshByConversation(payload.conversationId);
+          },
           onInvoiceCreated: scheduleRefresh,
           onInvoiceUpdated: scheduleRefresh,
           onInvoicePaid: scheduleRefresh,
           onProofAttached: scheduleRefresh,
-          onCustomerUpdated: scheduleRefresh,
+          onCustomerUpdated: (payload) => {
+            scheduleRefresh();
+            scheduleSelectedLeadRefresh(payload.customerId);
+          },
           onStorageUpdated: scheduleRefresh
         });
       } catch (subscriptionError) {
         const message = subscriptionError instanceof Error ? subscriptionError.message : "Unknown realtime subscribe error";
         console.error(`[realtime] customers subscription failed: ${message}`);
+        updateRealtimeStatus("fallback");
       }
     };
 
     void startSubscription();
 
     fallbackTimer = setInterval(() => {
-      if (!active || leadsInFlightRef.current) {
+      if (!active || leadsInFlightRef.current || realtimeStatusRef.current === "connected") {
         return;
       }
       void fetchLeads({ force: true });
@@ -835,7 +1039,7 @@ export function CustomersWorkspace() {
         cleanup();
       }
     };
-  }, [activeBusiness?.id, fetchLeads, hasLoadedOrganizations]);
+  }, [activeBusiness?.id, fetchLeadDetail, fetchLeads, hasLoadedOrganizations, updateRealtimeStatus]);
 
   useEffect(() => {
     isMountedRef.current = true;
@@ -843,6 +1047,7 @@ export function CustomersWorkspace() {
       isMountedRef.current = false;
       leadsAbortControllerRef.current?.abort();
       pipelineStagesAbortControllerRef.current?.abort();
+      detailAbortControllerRef.current?.abort();
     };
   }, []);
 
@@ -910,27 +1115,6 @@ export function CustomersWorkspace() {
     notifySuccess(success);
   }, [success]);
 
-  const openLeadDrawer = useCallback(async (leadId: string) => {
-    setIsDrawerOpen(true);
-    setIsLeadLoading(true);
-    setError(null);
-    setSelectedLeadId(leadId);
-    try {
-      const response = await fetch(`/api/customers/${encodeURIComponent(leadId)}`, { cache: "no-store" });
-      const payload = (await response.json().catch(() => null)) as CustomerDetailResponse | null;
-      if (!response.ok || !payload?.data?.customer) {
-        throw new Error(payload?.error?.message ?? "Failed to load lead detail.");
-      }
-      setSelectedLead(payload.data.customer);
-      setLeadChangeLog(payload.data.changelog ?? []);
-    } catch (detailError) {
-      setError(toErrorMessage(detailError, "Failed to load lead detail."));
-      setIsDrawerOpen(false);
-    } finally {
-      setIsLeadLoading(false);
-    }
-  }, []);
-
   useEffect(() => {
     const deepLinkLeadId = searchParams.get("leadId")?.trim() ?? "";
     if (!deepLinkLeadId) {
@@ -974,6 +1158,7 @@ export function CustomersWorkspace() {
           "Content-Type": "application/json"
         },
         body: JSON.stringify({
+          orgId: activeBusiness?.id ?? "",
           phoneE164: lead.phoneE164,
           customerDisplayName: lead.displayName ?? undefined
         })
@@ -998,7 +1183,7 @@ export function CustomersWorkspace() {
     } catch (openError) {
       setError(toErrorMessage(openError, "Failed to open inbox conversation."));
     }
-  }, [router]);
+  }, [activeBusiness?.id, router]);
 
   const moveLeadToPipelineStage = useCallback(async (lead: LeadRow, stageId: string) => {
     if (!pipelineId) {
@@ -1018,6 +1203,7 @@ export function CustomersWorkspace() {
             "Content-Type": "application/json"
           },
           body: JSON.stringify({
+            orgId: activeBusiness?.id ?? "",
             phoneE164: lead.phoneE164,
             customerDisplayName: lead.displayName ?? undefined
           })
@@ -1046,6 +1232,7 @@ export function CustomersWorkspace() {
           "Content-Type": "application/json"
         },
         body: JSON.stringify({
+          orgId: activeBusiness?.id ?? "",
           pipelineId,
           stageId
         })
@@ -1062,7 +1249,7 @@ export function CustomersWorkspace() {
     } finally {
       setIsInlineUpdating(false);
     }
-  }, [fetchLeads, pipelineId]);
+  }, [activeBusiness?.id, fetchLeads, pipelineId]);
 
   const quickUpdateLead = useCallback(async (leadId: string, payload: Record<string, unknown>, successMessage?: string) => {
     try {
@@ -1073,7 +1260,10 @@ export function CustomersWorkspace() {
         headers: {
           "Content-Type": "application/json"
         },
-        body: JSON.stringify(payload)
+        body: JSON.stringify({
+          orgId: activeBusiness?.id ?? "",
+          ...payload
+        })
       });
       const result = (await response.json().catch(() => null)) as ApiError | null;
       if (!response.ok) {
@@ -1088,7 +1278,7 @@ export function CustomersWorkspace() {
     } finally {
       setIsInlineUpdating(false);
     }
-  }, [fetchLeads]);
+  }, [activeBusiness?.id, fetchLeads]);
 
   async function handleCreateCustomCategory() {
     const category = newCategoryName.trim();
@@ -1127,6 +1317,7 @@ export function CustomersWorkspace() {
           "Content-Type": "application/json"
         },
         body: JSON.stringify({
+          orgId: activeBusiness?.id ?? "",
           name: addName,
           phoneE164: addPhone,
           source: addSource,
@@ -1183,6 +1374,7 @@ export function CustomersWorkspace() {
       setSuccess(null);
 
       const body: Record<string, unknown> = {
+        orgId: activeBusiness?.id ?? "",
         customerIds: selectedIds,
         action: bulkAction
       };
@@ -1231,6 +1423,7 @@ export function CustomersWorkspace() {
           "Content-Type": "application/json"
         },
         body: JSON.stringify({
+          orgId: activeBusiness?.id ?? "",
           name: selectedLead.displayName,
           phoneE164: selectedLead.phoneE164,
           source: selectedLead.source,
@@ -1259,6 +1452,7 @@ export function CustomersWorkspace() {
               "Content-Type": "application/json"
             },
             body: JSON.stringify({
+              orgId: activeBusiness?.id ?? "",
               phoneE164: selectedLead.phoneE164,
               customerDisplayName: selectedLead.displayName ?? undefined
             })
@@ -1288,6 +1482,7 @@ export function CustomersWorkspace() {
             "Content-Type": "application/json"
           },
           body: JSON.stringify({
+            orgId: activeBusiness?.id ?? "",
             pipelineId,
             stageId: selectedLead.crmStageId
           })
@@ -1641,8 +1836,8 @@ export function CustomersWorkspace() {
       <div className="flex h-full min-h-0 w-full flex-col rounded-2xl border border-border/70 bg-card/95 p-3 shadow-sm md:p-5">
         <div className="flex flex-wrap items-center justify-between gap-3 md:gap-4">
           <div className="flex items-center gap-3 md:gap-4">
-            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-sky-50 text-sky-600 md:h-11 md:w-11 md:rounded-2xl">
-              <Users className="h-5 w-5" />
+            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-gradient-to-tr from-primary/20 to-primary/5 text-primary shadow-inner ring-1 ring-primary/20 md:h-12 md:w-12 md:rounded-[18px]">
+              <Users className="h-5 w-5 md:h-6 md:w-6" />
             </div>
             <div>
               <h1 className="text-xl font-semibold tracking-tight text-foreground md:text-3xl">Customer Management</h1>
@@ -1652,7 +1847,7 @@ export function CustomersWorkspace() {
           <div className="flex w-full flex-wrap items-center justify-end gap-2 md:w-auto">
             <Button
               type="button"
-              className="gap-2 rounded-xl"
+              className="h-10 gap-2 rounded-xl bg-primary px-5 font-medium text-primary-foreground shadow-md shadow-primary/20 hover:bg-primary/95"
               onClick={() => {
                 setError(null);
                 setSuccess(null);
@@ -1665,19 +1860,19 @@ export function CustomersWorkspace() {
           </div>
         </div>
 
-        <div className="mt-3 grid grid-cols-1 gap-2 rounded-xl border border-border/70 bg-background/50 p-2.5 lg:grid-cols-[minmax(300px,1fr)_auto_auto_auto_auto]">
+        <div className="mt-4 grid grid-cols-1 gap-3 rounded-2xl border border-border bg-card p-3 shadow-sm lg:grid-cols-[minmax(280px,1fr)_auto_auto_auto_auto]">
           <div className="flex min-w-0 items-center gap-2">
-            <Button type="button" size="sm" variant="outline" className="h-9 shrink-0 rounded-lg px-3" onClick={openTableLayoutDialog}>
-              <SlidersHorizontal className="mr-1.5 h-4 w-4" />
+            <Button type="button" size="sm" variant="outline" className="h-10 shrink-0 rounded-xl px-4" onClick={openTableLayoutDialog}>
+              <SlidersHorizontal className="mr-2 h-4 w-4" />
               Table Layout
             </Button>
             <div className="relative min-w-0 flex-1">
-              <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+              <Search className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
               <Input
                 placeholder="Search leads..."
                 value={searchInput}
                 onChange={(event) => setSearchInput(event.target.value)}
-                className="h-9 rounded-lg pl-10"
+                className="h-10 rounded-xl bg-background pl-10"
               />
             </div>
           </div>
@@ -1689,7 +1884,7 @@ export function CustomersWorkspace() {
               setPage(1);
             }}
           >
-            <SelectTrigger className="h-9 w-full min-w-[160px] rounded-lg">
+            <SelectTrigger className="h-10 w-full min-w-[160px] rounded-xl bg-background">
               <SelectValue placeholder="Assignee" />
             </SelectTrigger>
             <SelectContent>
@@ -1709,7 +1904,7 @@ export function CustomersWorkspace() {
               setPage(1);
             }}
           >
-            <SelectTrigger className="h-9 w-full min-w-[160px] rounded-lg">
+            <SelectTrigger className="h-10 w-full min-w-[160px] rounded-xl bg-background">
               <SelectValue placeholder="Status" />
             </SelectTrigger>
             <SelectContent>
@@ -1729,7 +1924,7 @@ export function CustomersWorkspace() {
               setPage(1);
             }}
           >
-            <SelectTrigger className="h-9 w-full min-w-[180px] rounded-lg">
+            <SelectTrigger className="h-10 w-full min-w-[180px] rounded-xl bg-background">
               <SelectValue placeholder="Pipeline Stage" />
             </SelectTrigger>
             <SelectContent>
@@ -1750,7 +1945,7 @@ export function CustomersWorkspace() {
               setPage(1);
             }}
           >
-            <SelectTrigger className="h-9 w-full min-w-[170px] rounded-lg">
+            <SelectTrigger className="h-10 w-full min-w-[170px] rounded-xl bg-background">
               <SelectValue placeholder="Customer Source" />
             </SelectTrigger>
             <SelectContent>
@@ -1850,7 +2045,7 @@ export function CustomersWorkspace() {
               <TableHeader>
                 <TableRow>
                   <TableHead
-                    className="relative sticky left-0 top-0 z-40 border-r border-border bg-background after:absolute after:-right-px after:top-0 after:h-full after:w-px after:bg-border after:content-['']"
+                    className="relative sticky left-0 top-0 z-40 border-b border-border bg-muted font-semibold text-foreground/80 after:absolute after:-right-px after:top-0 after:h-full after:w-px after:bg-border after:content-['']"
                     style={{ width: SELECT_COLUMN_WIDTH, minWidth: SELECT_COLUMN_WIDTH, maxWidth: SELECT_COLUMN_WIDTH }}
                   >
                     <Checkbox checked={allPageSelected} onCheckedChange={(checked) => toggleSelectAllRows(Boolean(checked))} aria-label="Select all rows" />
@@ -1863,8 +2058,8 @@ export function CustomersWorkspace() {
                         key={columnKey}
                         className={
                           isFrozen
-                            ? "relative sticky top-0 z-30 border-r border-border bg-background after:absolute after:-right-px after:top-0 after:h-full after:w-px after:bg-border after:content-['']"
-                            : "sticky top-0 z-20 bg-background"
+                            ? "relative sticky top-0 z-30 border-b border-border bg-muted font-semibold text-foreground/80 after:absolute after:-right-px after:top-0 after:h-full after:w-px after:bg-border after:content-['']"
+                            : "sticky top-0 z-20 border-b border-border bg-muted font-semibold text-foreground/80"
                         }
                         style={{
                           ...(isFrozen ? { left } : {}),
@@ -2178,29 +2373,30 @@ export function CustomersWorkspace() {
               <p className="text-sm text-muted-foreground">Loading lead detail...</p>
             ) : (
               <Tabs defaultValue="information" className="w-full">
-                <TabsList className="grid h-10 w-full grid-cols-2 rounded-lg">
-                  <TabsTrigger value="information">Information</TabsTrigger>
-                  <TabsTrigger value="activities">Activities</TabsTrigger>
+                <TabsList className="grid h-11 w-full grid-cols-2 rounded-xl bg-muted/40 p-1">
+                  <TabsTrigger value="information" className="rounded-lg text-[13px] font-medium">Information</TabsTrigger>
+                  <TabsTrigger value="activities" className="rounded-lg text-[13px] font-medium">Activities</TabsTrigger>
                 </TabsList>
 
-                <TabsContent value="information" className="mt-4 space-y-4">
-                  <div className="grid gap-3 md:grid-cols-2">
+                <TabsContent value="information" className="mt-5">
+                  <div className="grid gap-x-4 gap-y-5 md:grid-cols-2">
                     <div className="space-y-1">
-                      <p className="text-xs text-muted-foreground">Name</p>
+                      <p className="pl-1 text-[11px] font-bold uppercase tracking-wider text-muted-foreground/70">Name</p>
                       <Input
                         value={selectedLead.displayName ?? ""}
                         disabled={frozenFields.name}
                         onChange={(event) => updateSelectedLead("displayName", event.target.value)}
+                        className="h-10 rounded-xl bg-muted/20 focus-visible:bg-transparent"
                       />
                     </div>
                     <div className="space-y-1">
-                      <p className="text-xs text-muted-foreground">WhatsApp</p>
-                      <Input value={selectedLead.phoneE164} disabled={frozenFields.phone} onChange={(event) => updateSelectedLead("phoneE164", event.target.value)} />
+                      <p className="pl-1 text-[11px] font-bold uppercase tracking-wider text-muted-foreground/70">WhatsApp</p>
+                      <Input value={selectedLead.phoneE164} disabled={frozenFields.phone} onChange={(event) => updateSelectedLead("phoneE164", event.target.value)} className="h-10 rounded-xl bg-muted/20 focus-visible:bg-transparent" />
                     </div>
                     <div className="space-y-1">
-                      <p className="text-xs text-muted-foreground">Status Lead</p>
+                      <p className="pl-1 text-[11px] font-bold uppercase tracking-wider text-muted-foreground/70">Status Lead</p>
                       <Select value={selectedLead.leadStatus} disabled={frozenFields.leadStatus} onValueChange={(value) => updateSelectedLead("leadStatus", value)}>
-                        <SelectTrigger>
+                        <SelectTrigger className="h-10 rounded-xl bg-muted/20 focus-visible:bg-transparent">
                           <SelectValue />
                         </SelectTrigger>
                         <SelectContent>
@@ -2213,13 +2409,13 @@ export function CustomersWorkspace() {
                       </Select>
                     </div>
                     <div className="space-y-1">
-                      <p className="text-xs text-muted-foreground">Follow-up</p>
+                      <p className="pl-1 text-[11px] font-bold uppercase tracking-wider text-muted-foreground/70">Follow-up</p>
                       <Select
                         value={selectedLead.followUpStatus ?? "WAIT_RESPON"}
                         disabled={frozenFields.followUpStatus}
                         onValueChange={(value) => updateSelectedLead("followUpStatus", value)}
                       >
-                        <SelectTrigger>
+                        <SelectTrigger className="h-10 rounded-xl bg-muted/20 focus-visible:bg-transparent">
                           <SelectValue />
                         </SelectTrigger>
                         <SelectContent>
@@ -2232,11 +2428,12 @@ export function CustomersWorkspace() {
                       </Select>
                     </div>
                     <div className="space-y-1">
-                      <p className="text-xs text-muted-foreground">Follow-up Date</p>
+                      <p className="pl-1 text-[11px] font-bold uppercase tracking-wider text-muted-foreground/70">Follow-up Date</p>
                       <Input
                         type="date"
                         value={selectedLead.followUpAt ? selectedLead.followUpAt.slice(0, 10) : ""}
                         disabled={frozenFields.followUpStatus}
+                        className="h-10 rounded-xl bg-muted/20 focus-visible:bg-transparent"
                         onChange={(event) => {
                           const value = event.target.value;
                           if (!value) {
@@ -2250,7 +2447,7 @@ export function CustomersWorkspace() {
                       />
                     </div>
                     <div className="space-y-1">
-                      <p className="text-xs text-muted-foreground">Follow-up Time</p>
+                      <p className="pl-1 text-[11px] font-bold uppercase tracking-wider text-muted-foreground/70">Follow-up Time</p>
                       <Input
                         type="time"
                         value={
@@ -2259,6 +2456,7 @@ export function CustomersWorkspace() {
                             : "09:00"
                         }
                         disabled={frozenFields.followUpStatus || !selectedLead.followUpAt}
+                        className="h-10 rounded-xl bg-muted/20 focus-visible:bg-transparent"
                         onChange={(event) => {
                           if (!selectedLead.followUpAt) return;
                           const [hourText, minuteText] = event.target.value.split(":");
@@ -2272,11 +2470,12 @@ export function CustomersWorkspace() {
                       />
                     </div>
                     <div className="space-y-1">
-                      <p className="text-xs text-muted-foreground">Business Category</p>
+                      <p className="pl-1 text-[11px] font-bold uppercase tracking-wider text-muted-foreground/70">Business Category</p>
                       <Input
                         list="business-category-options-detail"
                         value={selectedLead.businessCategory ?? ""}
                         disabled={frozenFields.businessCategory}
+                        className="h-10 rounded-xl bg-muted/20 focus-visible:bg-transparent"
                         onChange={(event) => updateSelectedLead("businessCategory", event.target.value || null)}
                       />
                       <datalist id="business-category-options-detail">
@@ -2286,15 +2485,15 @@ export function CustomersWorkspace() {
                       </datalist>
                     </div>
                     <div className="space-y-1">
-                      <p className="text-xs text-muted-foreground">Detail</p>
-                      <Input value={selectedLead.detail ?? ""} disabled={frozenFields.detail} onChange={(event) => updateSelectedLead("detail", event.target.value || null)} />
+                      <p className="pl-1 text-[11px] font-bold uppercase tracking-wider text-muted-foreground/70">Detail</p>
+                      <Input value={selectedLead.detail ?? ""} disabled={frozenFields.detail} className="h-10 rounded-xl bg-muted/20 focus-visible:bg-transparent" onChange={(event) => updateSelectedLead("detail", event.target.value || null)} />
                     </div>
                     <div className="space-y-1">
-                      <p className="text-xs text-muted-foreground">Source</p>
-                      <Input value={selectedLead.source ?? ""} disabled={frozenFields.source} onChange={(event) => updateSelectedLead("source", event.target.value || null)} />
+                      <p className="pl-1 text-[11px] font-bold uppercase tracking-wider text-muted-foreground/70">Source</p>
+                      <Input value={selectedLead.source ?? ""} disabled={frozenFields.source} className="h-10 rounded-xl bg-muted/20 focus-visible:bg-transparent" onChange={(event) => updateSelectedLead("source", event.target.value || null)} />
                     </div>
                     <div className="space-y-1">
-                      <p className="text-xs text-muted-foreground">Pipeline Stage</p>
+                      <p className="pl-1 text-[11px] font-bold uppercase tracking-wider text-muted-foreground/70">Pipeline Stage</p>
                       <Select
                         value={selectedLead.crmStageId ?? "__none__"}
                         onValueChange={(value) => {
@@ -2308,7 +2507,7 @@ export function CustomersWorkspace() {
                           updateSelectedLead("crmStageName", selectedStage?.stageName ?? null);
                         }}
                       >
-                        <SelectTrigger>
+                        <SelectTrigger className="h-10 rounded-xl bg-muted/20 focus-visible:bg-transparent">
                           <SelectValue />
                         </SelectTrigger>
                         <SelectContent>
@@ -2322,16 +2521,17 @@ export function CustomersWorkspace() {
                       </Select>
                     </div>
                     <div className="space-y-1">
-                      <p className="text-xs text-muted-foreground">Project Value (IDR)</p>
+                      <p className="pl-1 text-[11px] font-bold uppercase tracking-wider text-muted-foreground/70">Project Value (IDR)</p>
                       <Input
                         type="number"
                         value={Math.round(selectedLead.projectValueCents / 100)}
                         disabled={frozenFields.projectValueCents}
+                        className="h-10 rounded-xl bg-muted/20 focus-visible:bg-transparent"
                         onChange={(event) => updateSelectedLead("projectValueCents", Math.max(0, Number(event.target.value || "0")) * 100)}
                       />
                     </div>
                     <div className="space-y-1">
-                      <p className="text-xs text-muted-foreground">Assignee</p>
+                      <p className="pl-1 text-[11px] font-bold uppercase tracking-wider text-muted-foreground/70">Assignee</p>
                       <Select
                         value={selectedLead.assignedToMemberId ?? "__none__"}
                         disabled={frozenFields.assignedToMemberId}
@@ -2341,7 +2541,7 @@ export function CustomersWorkspace() {
                           updateSelectedLead("assignedToName", selected?.name ?? null);
                         }}
                       >
-                        <SelectTrigger>
+                        <SelectTrigger className="h-10 rounded-xl bg-muted/20 focus-visible:bg-transparent">
                           <SelectValue />
                         </SelectTrigger>
                         <SelectContent>
@@ -2355,30 +2555,33 @@ export function CustomersWorkspace() {
                       </Select>
                     </div>
                     <div className="space-y-1 md:col-span-2">
-                      <p className="text-xs text-muted-foreground">Notes</p>
-                      <Textarea value={selectedLead.remarks ?? ""} disabled={frozenFields.remarks} onChange={(event) => updateSelectedLead("remarks", event.target.value || null)} />
+                      <p className="pl-1 text-[11px] font-bold uppercase tracking-wider text-muted-foreground/70">Notes</p>
+                      <Textarea value={selectedLead.remarks ?? ""} disabled={frozenFields.remarks} className="min-h-[100px] rounded-xl bg-muted/20 focus-visible:bg-transparent" onChange={(event) => updateSelectedLead("remarks", event.target.value || null)} />
                     </div>
                   </div>
                 </TabsContent>
 
-                <TabsContent value="activities" className="mt-4">
-                  <div className="space-y-3">
-                    {leadChangeLog.length === 0 ? <p className="text-sm text-muted-foreground">No activity yet.</p> : null}
-                    {leadChangeLog.map((entry, index) => (
-                      <div key={entry.id} className="relative rounded-lg border border-border/70 bg-background/70 px-3 py-2.5">
-                        {index < leadChangeLog.length - 1 ? <span className="absolute left-4 top-[calc(100%+2px)] h-4 w-px bg-border" /> : null}
-                        <p className="text-sm font-medium text-foreground">{entry.action}</p>
-                        <p className="mt-0.5 text-xs text-muted-foreground">
-                          {entry.actorName ? (
-                            <span className="inline-flex items-center gap-1">
-                              <UserRound className="h-3 w-3" />
-                              {entry.actorName}
-                            </span>
-                          ) : (
-                            "System"
-                          )}{" "}
-                          • {formatDateTime(entry.createdAt)}
-                        </p>
+                <TabsContent value="activities" className="mt-6 mb-4 pl-1.5">
+                  <div className="relative border-l-2 border-border/60 ml-3 space-y-6 pb-2">
+                    {leadChangeLog.length === 0 ? <p className="text-[13px] text-muted-foreground ml-6">No activity yet.</p> : null}
+                    {leadChangeLog.map((entry) => (
+                      <div key={entry.id} className="relative pl-7">
+                        <span className="absolute -left-[7px] top-1 h-3 w-3 rounded-full border-[2.5px] border-background bg-primary ring-1 ring-primary/30" />
+                        <div className="rounded-2xl border border-border/60 bg-gradient-to-br from-card to-background/50 p-3.5 shadow-sm">
+                          <p className="text-[13px] font-bold tracking-tight text-foreground">{entry.action.replace(/_/g, " ")}</p>
+                          <p className="mt-2 flex items-center gap-2 text-[11px] font-semibold text-muted-foreground/80">
+                            {entry.actorName ? (
+                              <span className="inline-flex items-center gap-1.5 rounded-md bg-muted/50 px-1.5 py-0.5 text-foreground/70">
+                                <UserRound className="h-3 w-3" />
+                                {entry.actorName}
+                              </span>
+                            ) : (
+                              <span className="rounded-md bg-muted/50 px-1.5 py-0.5 text-foreground/70">System</span>
+                            )}
+                            <span className="text-border/80">&bull;</span>
+                            <span className="text-foreground/70 font-medium">{formatDateTime(entry.createdAt)}</span>
+                          </p>
+                        </div>
                       </div>
                     ))}
                   </div>

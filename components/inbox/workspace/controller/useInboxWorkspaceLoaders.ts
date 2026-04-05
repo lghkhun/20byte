@@ -1184,6 +1184,9 @@ export function useInboxWorkspaceLoaders(state: InboxWorkspaceState) {
                   ...row,
                   status: payload.status,
                   assignedToMemberId: payload.assignedToMemberId,
+                  crmPipelineId: payload.crmPipelineId === undefined ? row.crmPipelineId : payload.crmPipelineId,
+                  crmStageId: payload.crmStageId === undefined ? row.crmStageId : payload.crmStageId,
+                  crmStageName: payload.crmStageName === undefined ? row.crmStageName : payload.crmStageName,
                   updatedAt: payload.timestamp
                 };
               });
@@ -1200,6 +1203,9 @@ export function useInboxWorkspaceLoaders(state: InboxWorkspaceState) {
                 ...current,
                 status: payload.status,
                 assignedToMemberId: payload.assignedToMemberId,
+                crmPipelineId: payload.crmPipelineId === undefined ? current.crmPipelineId : payload.crmPipelineId,
+                crmStageId: payload.crmStageId === undefined ? current.crmStageId : payload.crmStageId,
+                crmStageName: payload.crmStageName === undefined ? current.crmStageName : payload.crmStageName,
                 updatedAt: payload.timestamp
               };
             });

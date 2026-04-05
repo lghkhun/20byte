@@ -1,8 +1,9 @@
 import { type NextRequest, NextResponse } from "next/server";
 
+import { publishCustomerUpdatedEvent } from "@/lib/ably/publisher";
 import { requireApiSession } from "@/lib/auth/middleware";
 import { prisma } from "@/lib/db/prisma";
-import { canAccessInbox } from "@/lib/permissions/orgPermissions";
+import { canAccessCustomerDirectory } from "@/lib/permissions/orgPermissions";
 import { resolvePrimaryOrganizationIdForUser } from "@/server/services/organizationService";
 import { ServiceError } from "@/server/services/serviceError";
 
@@ -82,7 +83,7 @@ export async function POST(request: NextRequest) {
         role: true
       }
     });
-    if (!membership || !canAccessInbox(membership.role)) {
+    if (!membership || !canAccessCustomerDirectory(membership.role)) {
       throw new ServiceError(403, "ORG_ACCESS_DENIED", "You do not have access to this business.");
     }
 
@@ -143,6 +144,13 @@ export async function POST(request: NextRequest) {
         });
       }
     });
+
+    for (const customerId of customerIds) {
+      void publishCustomerUpdatedEvent({
+        orgId,
+        customerId
+      });
+    }
 
     return NextResponse.json(
       {

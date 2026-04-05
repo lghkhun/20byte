@@ -47,11 +47,7 @@ function parseMilestoneType(value: unknown): PaymentMilestoneType | undefined {
 
 export async function POST(
   request: NextRequest,
-  context: {
-    params: {
-      invoiceId: string;
-    };
-  }
+  context: { params: Promise<{invoiceId: string;}> }
 ) {
   const auth = requireApiSession(request);
   if (auth.response) {
@@ -73,7 +69,7 @@ export async function POST(
     const proof = await attachPaymentProofFromMessage({
       actorUserId: auth.session.userId,
       orgId,
-      invoiceId: context.params.invoiceId,
+      invoiceId: (await context.params).invoiceId,
       messageId: typeof body.messageId === "string" ? body.messageId : "",
       milestoneType: parseMilestoneType(body.milestoneType)
     });

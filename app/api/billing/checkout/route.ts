@@ -9,6 +9,7 @@ import { ServiceError } from "@/server/services/serviceError";
 type CheckoutRequest = {
   orgId?: unknown;
   paymentMethod?: unknown;
+  planMonths?: unknown;
 };
 
 export async function POST(request: NextRequest) {
@@ -34,7 +35,13 @@ export async function POST(request: NextRequest) {
     const result = await createBillingCheckout({
       actorUserId: auth.session.userId,
       orgId,
-      paymentMethod: typeof body.paymentMethod === "string" ? body.paymentMethod : undefined
+      paymentMethod: typeof body.paymentMethod === "string" ? body.paymentMethod : undefined,
+      planMonths:
+        typeof body.planMonths === "number"
+          ? body.planMonths
+          : typeof body.planMonths === "string" && body.planMonths.trim()
+            ? Number(body.planMonths)
+            : undefined
     });
 
     return successResponse(result, 200);

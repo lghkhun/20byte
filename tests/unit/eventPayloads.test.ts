@@ -38,6 +38,22 @@ test("message/conversation/assignment payloads include base + domain fields", ()
   });
   assert.equal(convPayload.type, "conversation.updated");
   assert.equal(convPayload.entityId, "conv-1");
+  assert.equal(convPayload.crmPipelineId, undefined);
+  assert.equal(convPayload.crmStageId, undefined);
+  assert.equal(convPayload.crmStageName, undefined);
+
+  const convPayloadWithStage = buildConversationUpdatedEventPayload({
+    orgId: "org-1",
+    conversationId: "conv-2",
+    assignedToMemberId: "member-1",
+    status: "OPEN",
+    crmPipelineId: "pipe-1",
+    crmStageId: "stage-1",
+    crmStageName: "Negosiasi"
+  });
+  assert.equal(convPayloadWithStage.crmPipelineId, "pipe-1");
+  assert.equal(convPayloadWithStage.crmStageId, "stage-1");
+  assert.equal(convPayloadWithStage.crmStageName, "Negosiasi");
 
   const assignmentPayload = buildAssignmentChangedEventPayload({
     orgId: "org-1",

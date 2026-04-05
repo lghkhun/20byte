@@ -92,7 +92,7 @@ export type MessageListResult = {
   limit: number;
   hasMore: boolean;
   nextBeforeMessageId: string | null;
-  total: number;
+  total?: number;
 };
 
 export type SearchConversationMessagesInput = {

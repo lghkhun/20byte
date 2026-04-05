@@ -21,14 +21,15 @@
     "smoke:ui:report": "node scripts/smoke-report-summary.mjs",
     "smoke:ui:full:report": "npm run smoke:ui:full && npm run smoke:ui:report",
     "audit:cross-org-write-coverage": "node scripts/audit-cross-org-write-coverage.mjs",
+    "audit:fetch-latency": "node scripts/audit-fetch-latency.mjs",
     "quality:check": "npm run lint && npm run typecheck && npm test && npm run audit:cross-org-write-coverage"
   },
   "dependencies": {
-    "@aws-sdk/client-s3": "^3.1002.0",
+    "@aws-sdk/client-s3": "^3.1024.0",
     "@fontsource/space-grotesk": "^5.2.10",
     "@hookform/resolvers": "^5.2.2",
     "@playwright/test": "^1.58.2",
-    "@prisma/client": "^6.6.0",
+    "@prisma/client": "^6.19.3",
     "@radix-ui/react-accordion": "^1.2.12",
     "@radix-ui/react-alert-dialog": "^1.1.15",
     "@radix-ui/react-aspect-ratio": "^1.1.8",
@@ -69,7 +70,7 @@
     "emoji-picker-react": "^4.18.0",
     "input-otp": "^1.4.2",
     "lucide-react": "^0.469.0",
-    "next": "14.2.26",
+    "next": "15.5.14",
     "next-themes": "^0.4.6",
     "pdfkit": "^0.17.2",
     "qrcode": "^1.5.4",
@@ -91,13 +92,18 @@
     "@types/react-dom": "^18.3.5",
     "autoprefixer": "^10.4.20",
     "eslint": "^8.57.1",
-    "eslint-config-next": "14.2.26",
+    "eslint-config-next": "15.5.14",
     "eslint-config-prettier": "^10.0.1",
     "postcss": "^8.4.49",
     "prettier": "^3.4.2",
-    "prisma": "^6.6.0",
+    "prisma": "^6.19.3",
     "tailwindcss": "^3.4.17",
     "tsx": "^4.20.4",
     "typescript": "^5.7.2"
+  },
+  "overrides": {
+    "defu": "^6.1.6",
+    "lodash": "^4.18.1",
+    "fast-xml-parser": "^5.5.10"
   }
 }

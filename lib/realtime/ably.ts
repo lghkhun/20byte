@@ -90,6 +90,9 @@ export async function publishConversationUpdatedEvent(input: {
   conversationId: string;
   assignedToMemberId: string | null;
   status: "OPEN" | "CLOSED";
+  crmPipelineId?: string | null;
+  crmStageId?: string | null;
+  crmStageName?: string | null;
 }): Promise<void> {
   const payload = buildConversationUpdatedEventPayload(input);
 

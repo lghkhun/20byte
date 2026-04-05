@@ -10,6 +10,9 @@ type OptionalEnvKey =
   | "REDIS_PORT"
   | "ABLY_API_KEY"
   | "SHORTLINK_BASE_URL"
+  | "RESEND_API_KEY"
+  | "RESEND_FROM_EMAIL"
+  | "RESEND_REPLY_TO_EMAIL"
   | "R2_ACCOUNT_ID"
   | "R2_ACCESS_KEY_ID"
   | "R2_SECRET_ACCESS_KEY"
@@ -43,6 +46,9 @@ const OPTIONAL_ENV_KEYS: OptionalEnvKey[] = [
   "REDIS_PORT",
   "ABLY_API_KEY",
   "SHORTLINK_BASE_URL",
+  "RESEND_API_KEY",
+  "RESEND_FROM_EMAIL",
+  "RESEND_REPLY_TO_EMAIL",
   "R2_ACCOUNT_ID",
   "R2_ACCESS_KEY_ID",
   "R2_SECRET_ACCESS_KEY",
@@ -142,4 +148,22 @@ export function getSuperadminEmailAllowlist(): Set<string> {
     .map((entry) => entry.trim().toLowerCase())
     .filter(Boolean);
   return new Set(emails);
+}
+
+export function getResendConfig(): {
+  enabled: boolean;
+  apiKey: string;
+  fromEmail: string;
+  replyToEmail: string | null;
+} {
+  const apiKey = process.env.RESEND_API_KEY?.trim() ?? "";
+  const fromEmail = process.env.RESEND_FROM_EMAIL?.trim() ?? "";
+  const replyToEmailRaw = process.env.RESEND_REPLY_TO_EMAIL?.trim() ?? "";
+
+  return {
+    enabled: Boolean(apiKey && fromEmail),
+    apiKey,
+    fromEmail,
+    replyToEmail: replyToEmailRaw || null
+  };
 }

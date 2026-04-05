@@ -51,7 +51,7 @@ export function useInboxWorkspaceCrmInvoiceActions(
       const createResponse = await fetch("/api/tags", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name, color })
+        body: JSON.stringify({ orgId, name, color })
       });
 
       const createPayload = (await createResponse.json().catch(() => null)) as CreateTagResponse | null;
@@ -65,7 +65,7 @@ export function useInboxWorkspaceCrmInvoiceActions(
         const assignResponse = await fetch(`/api/customers/${encodeURIComponent(selectedConversation.customerId)}/tags`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ tagId: createdTagId })
+          body: JSON.stringify({ orgId, tagId: createdTagId })
         });
 
         if (!assignResponse.ok) {
@@ -89,7 +89,7 @@ export function useInboxWorkspaceCrmInvoiceActions(
       const response = await fetch(`/api/customers/${encodeURIComponent(selectedConversation.customerId)}/tags`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ tagId })
+        body: JSON.stringify({ orgId, tagId })
       });
 
       const payload = (await response.json().catch(() => null)) as CustomerTagsResponse | null;
@@ -115,7 +115,7 @@ export function useInboxWorkspaceCrmInvoiceActions(
         const response = await fetch(`/api/invoices/${encodeURIComponent(invoiceId)}/proofs`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ messageId: selectedProofMessageId, milestoneType })
+          body: JSON.stringify({ orgId, messageId: selectedProofMessageId, milestoneType })
         });
 
         const payload = (await response.json().catch(() => null)) as AttachProofResponse | null;
@@ -160,7 +160,7 @@ export function useInboxWorkspaceCrmInvoiceActions(
         const response = await fetch(`/api/invoices/${encodeURIComponent(invoiceId)}/send`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({})
+          body: JSON.stringify({ orgId })
         });
         const payload = (await response.json().catch(() => null)) as { error?: { message?: string } } | null;
         if (!response.ok) {
@@ -202,7 +202,7 @@ export function useInboxWorkspaceCrmInvoiceActions(
         const response = await fetch(`/api/invoices/${encodeURIComponent(invoiceId)}/mark-paid`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ milestoneType })
+          body: JSON.stringify({ orgId, milestoneType })
         });
         const payload = (await response.json().catch(() => null)) as { error?: { message?: string } } | null;
         if (!response.ok) {

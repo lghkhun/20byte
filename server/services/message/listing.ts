@@ -84,13 +84,6 @@ export async function listConversationMessages(input: ListMessagesInput): Promis
     throw new ServiceError(404, "CONVERSATION_NOT_FOUND", "Conversation does not exist.");
   }
 
-  const total = await prisma.message.count({
-    where: {
-      orgId,
-      conversationId: conversation.id
-    }
-  });
-
   const cursorMessage = beforeMessageId
     ? await prisma.message.findFirst({
         where: {
@@ -163,8 +156,7 @@ export async function listConversationMessages(input: ListMessagesInput): Promis
     messages: window.rows,
     limit,
     hasMore: window.hasMore,
-    nextBeforeMessageId: window.nextBeforeMessageId,
-    total
+    nextBeforeMessageId: window.nextBeforeMessageId
   };
 }
 

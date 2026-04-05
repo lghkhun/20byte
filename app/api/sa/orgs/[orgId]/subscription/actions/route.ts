@@ -11,7 +11,7 @@ type ActionRequest = {
   extendDays?: unknown;
 };
 
-export async function POST(request: NextRequest, context: { params: { orgId: string } }) {
+export async function POST(request: NextRequest, context: { params: Promise<{ orgId: string }> }) {
   const auth = requireApiSession(request);
   if (auth.response) {
     return auth.response;
@@ -33,7 +33,7 @@ export async function POST(request: NextRequest, context: { params: { orgId: str
     await requireSuperadmin(auth.session.userId, auth.session.email);
     const updated = await applySubscriptionActionBySuperadmin({
       actorUserId: auth.session.userId,
-      orgId: context.params.orgId,
+      orgId: (await context.params).orgId,
       action,
       extendDays: typeof body.extendDays === "number" ? body.extendDays : undefined
     });

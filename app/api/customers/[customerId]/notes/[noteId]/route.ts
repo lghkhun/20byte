@@ -11,12 +11,8 @@ function errorResponse(status: number, code: string, message: string) {
 
 export async function PATCH(
   request: NextRequest,
-  context: {
-    params: {
-      customerId: string;
-      noteId: string;
-    };
-  }
+  context: { params: Promise<{customerId: string;
+      noteId: string;}> }
 ) {
   const auth = requireApiSession(request);
   if (auth.response) {
@@ -35,8 +31,8 @@ export async function PATCH(
     const note = await updateCustomerNote(
       auth.session.userId,
       orgId,
-      context.params.customerId,
-      context.params.noteId,
+      (await context.params).customerId,
+      (await context.params).noteId,
       typeof body.content === "string" ? body.content : ""
     );
     return NextResponse.json({ data: { note }, meta: {} }, { status: 200 });
@@ -50,12 +46,8 @@ export async function PATCH(
 
 export async function DELETE(
   request: NextRequest,
-  context: {
-    params: {
-      customerId: string;
-      noteId: string;
-    };
-  }
+  context: { params: Promise<{customerId: string;
+      noteId: string;}> }
 ) {
   const auth = requireApiSession(request);
   if (auth.response) {
@@ -64,7 +56,7 @@ export async function DELETE(
 
   try {
     const orgId = await resolvePrimaryOrganizationIdForUser(auth.session.userId, request.nextUrl.searchParams.get("orgId") ?? "");
-    await deleteCustomerNote(auth.session.userId, orgId, context.params.customerId, context.params.noteId);
+    await deleteCustomerNote(auth.session.userId, orgId, (await context.params).customerId, (await context.params).noteId);
     return NextResponse.json({ data: { deleted: true }, meta: {} }, { status: 200 });
   } catch (error) {
     if (error instanceof ServiceError) {

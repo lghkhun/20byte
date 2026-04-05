@@ -1,5 +1,8 @@
 import { ServiceError } from "@/server/services/serviceError";
 
+// Prisma MySQL default String column maps to varchar(191) unless explicitly annotated.
+export const MESSAGE_TEXT_DB_MAX_LENGTH = 191;
+
 export function normalize(value: string): string {
   return value.trim();
 }
@@ -59,13 +62,29 @@ export function normalizeSendError(value: unknown): string {
   return normalized.length > 500 ? normalized.slice(0, 500) : normalized;
 }
 
+export function normalizeMessageText(value: string | undefined): string | undefined {
+  const normalized = normalizeOptional(value);
+  if (!normalized) {
+    return undefined;
+  }
+
+  return normalized.length > MESSAGE_TEXT_DB_MAX_LENGTH ? normalized.slice(0, MESSAGE_TEXT_DB_MAX_LENGTH) : normalized;
+}
+
 export function normalizeSystemMessageText(value: string): string {
   const normalized = normalize(value);
   if (!normalized) {
     throw new ServiceError(400, "INVALID_MESSAGE_TEXT", "Message text is required.");
   }
 
-  return normalized.includes("[Automated]") ? normalized : `${normalized} [Automated]`;
+  const suffix = " [Automated]";
+  if (normalized.includes("[Automated]")) {
+    return normalized.length > MESSAGE_TEXT_DB_MAX_LENGTH ? normalized.slice(0, MESSAGE_TEXT_DB_MAX_LENGTH) : normalized;
+  }
+
+  const availableBaseLength = Math.max(1, MESSAGE_TEXT_DB_MAX_LENGTH - suffix.length);
+  const base = normalized.length > availableBaseLength ? normalized.slice(0, availableBaseLength) : normalized;
+  return `${base}${suffix}`;
 }
 
 export function parseTemplateComponentsJson(raw: string | null): Array<Record<string, unknown>> {

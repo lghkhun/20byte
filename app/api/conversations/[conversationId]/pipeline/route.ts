@@ -12,11 +12,7 @@ function errorResponse(status: number, code: string, message: string) {
 
 export async function PATCH(
   request: NextRequest,
-  context: {
-    params: {
-      conversationId: string;
-    };
-  }
+  context: { params: Promise<{conversationId: string;}> }
 ) {
   const auth = requireApiSession(request);
   if (auth.response) {
@@ -35,12 +31,12 @@ export async function PATCH(
     await assignConversationPipeline({
       actorUserId: auth.session.userId,
       orgId,
-      conversationId: context.params.conversationId,
+      conversationId: (await context.params).conversationId,
       pipelineId: typeof body.pipelineId === "string" ? body.pipelineId : "",
       stageId: typeof body.stageId === "string" ? body.stageId : ""
     });
 
-    const conversation = await getConversationById(auth.session.userId, orgId, context.params.conversationId);
+    const conversation = await getConversationById(auth.session.userId, orgId, (await context.params).conversationId);
     return NextResponse.json({ data: { conversation }, meta: {} }, { status: 200 });
   } catch (error) {
     if (error instanceof ServiceError) {

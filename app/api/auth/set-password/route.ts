@@ -1,6 +1,7 @@
 import type { NextRequest } from "next/server";
 
 import { errorResponse, successResponse } from "@/lib/api/http";
+import { enforceAuthRateLimit } from "@/lib/auth/rateLimit";
 import { setSessionCookie } from "@/lib/auth/session";
 import { createSessionToken } from "@/lib/auth/session";
 import { setPasswordFromSetupToken } from "@/server/services/accountSetupService";
@@ -21,6 +22,15 @@ export async function POST(request: NextRequest) {
 
   const token = typeof body.token === "string" ? body.token : "";
   const newPassword = typeof body.newPassword === "string" ? body.newPassword : "";
+
+  const rateLimitResponse = await enforceAuthRateLimit({
+    request,
+    scope: "set-password",
+    identity: token.slice(0, 24)
+  });
+  if (rateLimitResponse) {
+    return rateLimitResponse;
+  }
 
   try {
     const result = await setPasswordFromSetupToken({ token, newPassword });

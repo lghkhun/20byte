@@ -1,5 +1,6 @@
 import { ConversationStatus } from "@prisma/client";
 
+import { publishConversationUpdatedEvent } from "@/lib/ably/publisher";
 import { prisma } from "@/lib/db/prisma";
 import { canAccessInbox } from "@/lib/permissions/orgPermissions";
 import { assertOrgBillingAccess } from "@/server/services/billingService";
@@ -39,6 +40,7 @@ export type CrmPipelineKanbanColumn = {
   stageColor: string;
   position: number;
   cardCount: number;
+  hasMore: boolean;
   cards: CrmPipelineKanbanCard[];
 };
 
@@ -56,6 +58,7 @@ export type CrmPipelineKanbanBoard = {
   assignees: CrmPipelineAssigneeOption[];
   unassigned: {
     cardCount: number;
+    hasMore: boolean;
     cards: CrmPipelineKanbanCard[];
   };
 };
@@ -146,6 +149,22 @@ function parseDateInput(value: string | undefined, field: "activityFrom" | "acti
   return date;
 }
 
+function normalizeCardLimit(value: number | undefined): number {
+  if (!value || Number.isNaN(value)) {
+    return 80;
+  }
+
+  const rounded = Math.floor(value);
+  if (rounded < 20) {
+    return 20;
+  }
+  if (rounded > 320) {
+    return 320;
+  }
+
+  return rounded;
+}
+
 function mapKanbanCard(row: {
   id: string;
   status: ConversationStatus;
@@ -190,21 +209,29 @@ export async function ensureDefaultCrmPipeline(orgId: string): Promise<void> {
     return;
   }
 
-  await prisma.crmPipeline.create({
-    data: {
-      orgId,
-      name: "Pipellead default",
-      isDefault: true,
-      stages: {
-        create: [
-          { orgId, name: "Inisiasi Chat", color: "sky", position: 0 },
-          { orgId, name: "Survey Kebutuhan", color: "amber", position: 1 },
-          { orgId, name: "Penawaran & Follow Up", color: "violet", position: 2 },
-          { orgId, name: "Closing & Pembayaran", color: "emerald", position: 3 }
-        ]
+  try {
+    await prisma.crmPipeline.create({
+      data: {
+        orgId,
+        name: "Pipeline Default",
+        isDefault: true,
+        stages: {
+          create: [
+            { orgId, name: "Inisiasi Chat", color: "sky", position: 0 },
+            { orgId, name: "Survey Kebutuhan", color: "amber", position: 1 },
+            { orgId, name: "Penawaran & Follow Up", color: "violet", position: 2 },
+            { orgId, name: "Closing & Pembayaran", color: "emerald", position: 3 }
+          ]
+        }
       }
+    });
+  } catch (error) {
+    if (typeof error === "object" && error && "code" in error && (error as { code?: string }).code === "P2002") {
+      // Another request already created the default pipeline.
+      return;
     }
-  });
+    throw error;
+  }
 }
 
 export async function listCrmPipelines(actorUserId: string, orgIdInput: string): Promise<CrmPipelineItem[]> {
@@ -246,6 +273,7 @@ export async function listCrmPipelineKanbanBoard(input: {
   assigneeUserId?: string;
   activityFrom?: string;
   activityTo?: string;
+  cardLimit?: number;
 }): Promise<CrmPipelineKanbanBoard> {
   const orgId = normalize(input.orgId);
   const pipelineId = normalize(input.pipelineId);
@@ -253,6 +281,7 @@ export async function listCrmPipelineKanbanBoard(input: {
   const assigneeUserId = normalize(input.assigneeUserId);
   const activityFrom = parseDateInput(input.activityFrom, "activityFrom");
   const activityTo = parseDateInput(input.activityTo, "activityTo");
+  const cardLimit = normalizeCardLimit(input.cardLimit);
 
   if (!orgId) {
     throw new ServiceError(400, "MISSING_ORG_ID", "orgId is required.");
@@ -335,62 +364,63 @@ export async function listCrmPipelineKanbanBoard(input: {
     assignedToMemberIdFilter = assigneeMembership.id;
   }
 
-  const assigneeMemberships = await prisma.orgMember.findMany({
-    where: {
-      orgId
-    },
-    include: {
-      user: {
-        select: {
-          id: true,
-          email: true,
-          name: true
-        }
-      }
-    },
-    orderBy: [{ role: "asc" }, { createdAt: "asc" }]
-  });
-
-  const conversations = await prisma.conversation.findMany({
-    where: {
-      orgId,
-      ...(status ? { status } : {}),
-      ...(assignedToMemberIdFilter === undefined ? {} : { assignedToMemberId: assignedToMemberIdFilter }),
-      ...((activityFrom || activityTo)
-        ? {
-            lastMessageAt: {
-              ...(activityFrom ? { gte: activityFrom } : {}),
-              ...(activityTo ? { lte: activityTo } : {})
-            }
+  const [assigneeMemberships, conversations] = await Promise.all([
+    prisma.orgMember.findMany({
+      where: {
+        orgId
+      },
+      include: {
+        user: {
+          select: {
+            id: true,
+            email: true,
+            name: true
           }
-        : {}),
-      OR: [{ crmPipelineId: pipeline.id }, { crmPipelineId: null }]
-    },
-    orderBy: [{ lastMessageAt: "desc" }, { updatedAt: "desc" }],
-    select: {
-      id: true,
-      status: true,
-      assignedToMemberId: true,
-      unreadCount: true,
-      lastMessageAt: true,
-      crmStageId: true,
-      customer: {
-        select: {
-          phoneE164: true,
-          displayName: true
         }
       },
-      messages: {
-        take: 1,
-        orderBy: { createdAt: "desc" },
-        select: {
-          text: true,
-          type: true,
-          fileName: true
+      orderBy: [{ role: "asc" }, { createdAt: "asc" }]
+    }),
+    prisma.conversation.findMany({
+      where: {
+        orgId,
+        ...(status ? { status } : {}),
+        ...(assignedToMemberIdFilter === undefined ? {} : { assignedToMemberId: assignedToMemberIdFilter }),
+        ...((activityFrom || activityTo)
+          ? {
+              lastMessageAt: {
+                ...(activityFrom ? { gte: activityFrom } : {}),
+                ...(activityTo ? { lte: activityTo } : {})
+              }
+            }
+          : {}),
+        OR: [{ crmPipelineId: pipeline.id }, { crmPipelineId: null }]
+      },
+      orderBy: [{ lastMessageAt: "desc" }, { updatedAt: "desc" }],
+      select: {
+        id: true,
+        status: true,
+        assignedToMemberId: true,
+        unreadCount: true,
+        lastMessageAt: true,
+        crmStageId: true,
+        customer: {
+          select: {
+            phoneE164: true,
+            displayName: true
+          }
+        },
+        messages: {
+          take: 1,
+          orderBy: { createdAt: "desc" },
+          select: {
+            text: true,
+            type: true,
+            fileName: true
+          }
         }
       }
-    }
-  });
+    })
+  ]);
 
   const conversationIds = conversations.map((conversation) => conversation.id);
   const [totalInvoiceGroup, unpaidInvoiceGroup] = conversationIds.length
@@ -465,13 +495,15 @@ export async function listCrmPipelineKanbanBoard(input: {
     pipeline,
     columns: pipeline.stages.map((stage) => {
       const cards = cardsByStage.get(stage.id) ?? [];
+      const boundedCards = cards.slice(0, cardLimit);
       return {
         stageId: stage.id,
         stageName: stage.name,
         stageColor: stage.color,
         position: stage.position,
         cardCount: cards.length,
-        cards
+        hasMore: cards.length > boundedCards.length,
+        cards: boundedCards
       };
     }),
     assignees: assigneeMemberships.map((membership) => ({
@@ -483,7 +515,8 @@ export async function listCrmPipelineKanbanBoard(input: {
     })),
     unassigned: {
       cardCount: unassignedCards.length,
-      cards: unassignedCards
+      hasMore: unassignedCards.length > cardLimit,
+      cards: unassignedCards.slice(0, cardLimit)
     }
   };
 }
@@ -548,26 +581,42 @@ export async function createCrmPipelineStage(input: {
 
   await requireCrmAccess(input.actorUserId, orgId);
 
-  const stageCount = await prisma.crmPipelineStage.count({
+  const pipelineInOrg = await prisma.crmPipeline.findFirst({
     where: {
-      orgId,
-      pipelineId
+      id: pipelineId,
+      orgId
+    },
+    select: {
+      id: true
     }
   });
 
-  await prisma.crmPipelineStage.create({
-    data: {
-      orgId,
-      pipelineId,
-      name,
-      color: normalize(input.color) || "emerald",
-      position: stageCount
-    }
+  if (!pipelineInOrg) {
+    throw new ServiceError(404, "CRM_PIPELINE_NOT_FOUND", "CRM pipeline does not exist.");
+  }
+
+  await prisma.$transaction(async (tx) => {
+    const stageCount = await tx.crmPipelineStage.count({
+      where: {
+        orgId,
+        pipelineId: pipelineInOrg.id
+      }
+    });
+
+    await tx.crmPipelineStage.create({
+      data: {
+        orgId,
+        pipelineId: pipelineInOrg.id,
+        name,
+        color: normalize(input.color) || "emerald",
+        position: stageCount
+      }
+    });
   });
 
   const pipeline = await prisma.crmPipeline.findFirst({
     where: {
-      id: pipelineId,
+      id: pipelineInOrg.id,
       orgId
     },
     select: {
@@ -617,7 +666,8 @@ export async function assignConversationPipeline(input: {
       pipelineId
     },
     select: {
-      id: true
+      id: true,
+      name: true
     }
   });
 
@@ -625,9 +675,24 @@ export async function assignConversationPipeline(input: {
     throw new ServiceError(404, "CRM_STAGE_NOT_FOUND", "CRM stage does not exist.");
   }
 
-  const updateResult = await prisma.conversation.updateMany({
+  const conversation = await prisma.conversation.findFirst({
     where: {
       id: conversationId,
+      orgId
+    },
+    select: {
+      id: true,
+      assignedToMemberId: true,
+      status: true
+    }
+  });
+  if (!conversation) {
+    throw new ServiceError(404, "CONVERSATION_NOT_FOUND", "Conversation does not exist.");
+  }
+
+  const updateResult = await prisma.conversation.updateMany({
+    where: {
+      id: conversation.id,
       orgId
     },
     data: {
@@ -639,6 +704,16 @@ export async function assignConversationPipeline(input: {
   if (updateResult.count !== 1) {
     throw new ServiceError(404, "CONVERSATION_NOT_FOUND", "Conversation does not exist.");
   }
+
+  void publishConversationUpdatedEvent({
+    orgId,
+    conversationId: conversation.id,
+    assignedToMemberId: conversation.assignedToMemberId,
+    status: conversation.status,
+    crmPipelineId: pipelineId,
+    crmStageId: stageId,
+    crmStageName: stage.name
+  });
 }
 
 export function rankStageNameForInvoiceTarget(name: string, target: "INVOICE_SENT" | "INVOICE_PAID"): number {
@@ -702,7 +777,9 @@ export async function syncConversationCrmStageFromInvoice(input: {
     select: {
       id: true,
       crmPipelineId: true,
-      crmStageId: true
+      crmStageId: true,
+      assignedToMemberId: true,
+      status: true
     }
   });
   if (!conversation) {
@@ -752,7 +829,7 @@ export async function syncConversationCrmStageFromInvoice(input: {
     return;
   }
 
-  await prisma.conversation.updateMany({
+  const updateResult = await prisma.conversation.updateMany({
     where: {
       id: conversation.id,
       orgId
@@ -762,4 +839,16 @@ export async function syncConversationCrmStageFromInvoice(input: {
       crmStageId: targetStage.id
     }
   });
+
+  if (updateResult.count === 1) {
+    void publishConversationUpdatedEvent({
+      orgId,
+      conversationId: conversation.id,
+      assignedToMemberId: conversation.assignedToMemberId,
+      status: conversation.status,
+      crmPipelineId: pipeline.id,
+      crmStageId: targetStage.id,
+      crmStageName: targetStage.name
+    });
+  }
 }

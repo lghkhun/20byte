@@ -27,11 +27,7 @@ function withServerTiming<T>(response: T, startedAt: number): T {
 
 export async function POST(
   request: NextRequest,
-  context: {
-    params: {
-      conversationId: string;
-    };
-  }
+  context: { params: Promise<{conversationId: string;}> }
 ) {
   const startedAt = performance.now();
   const auth = requireApiSession(request);
@@ -48,7 +44,7 @@ export async function POST(
     const result = await markConversationAsRead({
       actorUserId: auth.session.userId,
       orgId,
-      conversationId: context.params.conversationId
+      conversationId: (await context.params).conversationId
     });
 
     return withServerTiming(

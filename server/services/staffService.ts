@@ -5,6 +5,7 @@ import { normalizeAndValidateEmail } from "@/lib/validation/formValidation";
 import { normalizeWhatsAppDestination } from "@/lib/whatsapp/e164";
 import { sendBaileysTextMessage } from "@/server/services/baileysService";
 import { createAccountSetupToken } from "@/server/services/accountSetupService";
+import { sendTransactionalEmail } from "@/server/services/emailService";
 import { ServiceError } from "@/server/services/serviceError";
 
 const CREATABLE_STAFF_ROLES = new Set<Role>([Role.CS, Role.ADVERTISER]);
@@ -38,6 +39,92 @@ async function requireOwner(actorUserId: string, orgId: string) {
 function buildSetupMessage(name: string | null, setupLink: string): string {
   const displayName = name?.trim() || "tim";
   return `Halo ${displayName}, akun 20byte kamu sudah dibuat. Lanjutkan aktivasi password di link ini: ${setupLink}`;
+}
+
+function formatRoleLabel(role: Role): string {
+  if (role === Role.ADVERTISER) {
+    return "Advertiser";
+  }
+
+  return "Customer Service (CS)";
+}
+
+function buildSetupMailtoUrl(input: {
+  email: string;
+  name: string | null;
+  orgName: string;
+  role: Role;
+  setupLink: string;
+  expiresAt: Date;
+}): string {
+  const subject = `Undangan bergabung di ${input.orgName} via 20byte`;
+  const expiresAtLabel = new Intl.DateTimeFormat("id-ID", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit"
+  }).format(input.expiresAt);
+  const body = [
+    `Halo ${input.name?.trim() || "Tim"},`,
+    "",
+    `Anda diundang untuk bergabung ke bisnis "${input.orgName}" sebagai ${formatRoleLabel(input.role)}.`,
+    "Silakan aktivasi akun melalui link berikut:",
+    input.setupLink,
+    "",
+    `Link berlaku sampai ${expiresAtLabel}.`,
+    "",
+    "Terima kasih."
+  ].join("\n");
+
+  return `mailto:${encodeURIComponent(input.email)}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+}
+
+function buildSetupEmailPayload(input: {
+  orgName: string;
+  role: Role;
+  setupLink: string;
+  expiresAt: Date;
+  name: string | null;
+}): { subject: string; text: string; html: string } {
+  const subject = `Undangan bergabung di ${input.orgName} via 20byte`;
+  const expiresAtLabel = new Intl.DateTimeFormat("id-ID", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit"
+  }).format(input.expiresAt);
+  const greeting = input.name?.trim() || "Tim";
+  const roleLabel = formatRoleLabel(input.role);
+  const text = [
+    `Halo ${greeting},`,
+    "",
+    `Anda diundang untuk bergabung ke bisnis "${input.orgName}" sebagai ${roleLabel}.`,
+    "Silakan aktivasi akun melalui link berikut:",
+    input.setupLink,
+    "",
+    `Link berlaku sampai ${expiresAtLabel}.`,
+    "",
+    "Terima kasih."
+  ].join("\n");
+  const html = `
+    <div style="font-family:Arial,sans-serif;color:#111827;line-height:1.6">
+      <p>Halo ${greeting},</p>
+      <p>Anda diundang untuk bergabung ke bisnis <strong>${input.orgName}</strong> sebagai <strong>${roleLabel}</strong>.</p>
+      <p>Silakan aktivasi akun Anda melalui tombol berikut:</p>
+      <p>
+        <a href="${input.setupLink}" style="display:inline-block;padding:10px 16px;background:#10b981;color:#ffffff;text-decoration:none;border-radius:8px;font-weight:600">
+          Aktivasi Akun
+        </a>
+      </p>
+      <p>Atau buka link ini langsung:</p>
+      <p><a href="${input.setupLink}">${input.setupLink}</a></p>
+      <p style="color:#6b7280">Link berlaku sampai ${expiresAtLabel}.</p>
+    </div>
+  `.trim();
+
+  return { subject, text, html };
 }
 
 async function sendSetupLinkViaWhatsApp(input: {
@@ -135,6 +222,13 @@ export async function createOrganizationStaff(input: {
     orgId,
     createdByUserId: input.actorUserId
   });
+  const organization = await prisma.org.findUnique({
+    where: { id: orgId },
+    select: { name: true }
+  });
+  if (!organization) {
+    throw new ServiceError(404, "ORG_NOT_FOUND", "Organization not found.");
+  }
 
   const whatsappDelivery = await sendSetupLinkViaWhatsApp({
     orgId,
@@ -142,6 +236,25 @@ export async function createOrganizationStaff(input: {
     setupLink: tokenInfo.setupLink,
     name: created.name
   });
+  const emailPayload = buildSetupEmailPayload({
+    orgName: organization.name,
+    role: input.role,
+    setupLink: tokenInfo.setupLink,
+    expiresAt: tokenInfo.expiresAt,
+    name: created.name
+  });
+  let emailDelivery = false;
+  try {
+    await sendTransactionalEmail({
+      to: created.email,
+      subject: emailPayload.subject,
+      text: emailPayload.text,
+      html: emailPayload.html
+    });
+    emailDelivery = true;
+  } catch {
+    emailDelivery = false;
+  }
 
   return {
     staff: {
@@ -154,7 +267,16 @@ export async function createOrganizationStaff(input: {
     setup: {
       setupLink: tokenInfo.setupLink,
       expiresAt: tokenInfo.expiresAt,
-      whatsappDelivery
+      whatsappDelivery,
+      emailDelivery,
+      mailtoUrl: buildSetupMailtoUrl({
+        email: created.email,
+        name: created.name,
+        orgName: organization.name,
+        role: input.role,
+        setupLink: tokenInfo.setupLink,
+        expiresAt: tokenInfo.expiresAt
+      })
     }
   };
 }
@@ -187,6 +309,11 @@ export async function resendOrganizationStaffSetupLink(input: {
           phoneE164: true,
           name: true
         }
+      },
+      org: {
+        select: {
+          name: true
+        }
       }
     }
   });
@@ -199,27 +326,54 @@ export async function resendOrganizationStaffSetupLink(input: {
     throw new ServiceError(400, "INVALID_STAFF_ROLE", "Only CS or ADVERTISER setup can be resent.");
   }
 
-  if (!membership.user.phoneE164) {
-    throw new ServiceError(400, "STAFF_PHONE_MISSING", "Staff phone is not configured.");
-  }
-
   const tokenInfo = await createAccountSetupToken({
     userId,
     orgId,
     createdByUserId: input.actorUserId
   });
 
-  const whatsappDelivery = await sendSetupLinkViaWhatsApp({
-    orgId,
-    phoneE164: membership.user.phoneE164,
+  let whatsappDelivery: boolean | null = null;
+  if (membership.user.phoneE164) {
+    whatsappDelivery = await sendSetupLinkViaWhatsApp({
+      orgId,
+      phoneE164: membership.user.phoneE164,
+      setupLink: tokenInfo.setupLink,
+      name: membership.user.name
+    });
+  }
+  const emailPayload = buildSetupEmailPayload({
+    orgName: membership.org.name,
+    role: membership.role,
     setupLink: tokenInfo.setupLink,
+    expiresAt: tokenInfo.expiresAt,
     name: membership.user.name
   });
+  let emailDelivery = false;
+  try {
+    await sendTransactionalEmail({
+      to: membership.user.email,
+      subject: emailPayload.subject,
+      text: emailPayload.text,
+      html: emailPayload.html
+    });
+    emailDelivery = true;
+  } catch {
+    emailDelivery = false;
+  }
 
   return {
     userId,
     setupLink: tokenInfo.setupLink,
     expiresAt: tokenInfo.expiresAt,
-    whatsappDelivery
+    whatsappDelivery,
+    emailDelivery,
+    mailtoUrl: buildSetupMailtoUrl({
+      email: membership.user.email,
+      name: membership.user.name,
+      orgName: membership.org.name,
+      role: membership.role,
+      setupLink: tokenInfo.setupLink,
+      expiresAt: tokenInfo.expiresAt
+    })
   };
 }

@@ -1,8 +1,8 @@
 import type { OutboundStoreResult, SendOutboundMessageInput } from "@/server/services/message/messageTypes";
 import { readBaileysMediaFile } from "@/server/services/baileysService";
 import {
+  normalizeMessageText,
   normalize,
-  normalizeOptional,
   normalizeSendError,
   normalizeSystemMessageText,
   normalizeTemplateComponents,
@@ -62,7 +62,7 @@ export async function sendOutboundMessage(input: SendOutboundMessageInput): Prom
   }
 
   if (input.type === "TEXT") {
-    const text = normalize(input.text ?? "");
+    const text = normalizeMessageText(input.text);
     if (!text) {
       throw new ServiceError(400, "INVALID_MESSAGE_TEXT", "Message text is required.");
     }
@@ -138,10 +138,10 @@ export async function sendOutboundMessage(input: SendOutboundMessageInput): Prom
       orgId,
       conversationId: conversation.id,
       type: input.type,
-      text: normalizeOptional(input.text),
+      text: normalizeMessageText(input.text),
       mediaId: input.mediaId,
       mediaUrl: input.mediaUrl,
-      mimeType: normalizeOptional(input.mimeType),
+      mimeType: normalize(input.mimeType ?? "") || undefined,
       fileName: input.fileName,
       fileSize: input.fileSize,
       sendStatus: "PENDING",
@@ -223,7 +223,7 @@ export async function sendOutboundMessage(input: SendOutboundMessageInput): Prom
     orgId,
     conversationId: conversation.id,
     type: "TEMPLATE",
-    text: normalizeOptional(input.text),
+    text: normalizeMessageText(input.text),
     templateName,
     templateCategory: input.templateCategory,
     templateLanguageCode,

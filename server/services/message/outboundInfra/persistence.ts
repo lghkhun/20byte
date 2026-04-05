@@ -198,6 +198,9 @@ export async function updateOutboundDeliveryStatusByWaMessageId(params: {
   readAt: Date | null;
   conversationStatus: "OPEN" | "CLOSED";
   assignedToMemberId: string | null;
+  crmPipelineId: string | null;
+  crmStageId: string | null;
+  crmStageName: string | null;
 } | null> {
   const existing = await prisma.message.findFirst({
     where: {
@@ -218,7 +221,14 @@ export async function updateOutboundDeliveryStatusByWaMessageId(params: {
       conversation: {
         select: {
           status: true,
-          assignedToMemberId: true
+          assignedToMemberId: true,
+          crmPipelineId: true,
+          crmStageId: true,
+          crmStage: {
+            select: {
+              name: true
+            }
+          }
         }
       }
     }
@@ -305,6 +315,9 @@ export async function updateOutboundDeliveryStatusByWaMessageId(params: {
     deliveredAt: nextDeliveredAt,
     readAt: nextReadAt,
     conversationStatus: existing.conversation.status,
-    assignedToMemberId: existing.conversation.assignedToMemberId
+    assignedToMemberId: existing.conversation.assignedToMemberId,
+    crmPipelineId: existing.conversation.crmPipelineId,
+    crmStageId: existing.conversation.crmStageId,
+    crmStageName: existing.conversation.crmStage?.name ?? null
   };
 }

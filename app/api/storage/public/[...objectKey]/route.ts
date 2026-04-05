@@ -11,13 +11,9 @@ function resolveObjectKey(params: { objectKey?: string[] }): string {
 
 export async function GET(
   _request: NextRequest,
-  context: {
-    params: {
-      objectKey?: string[];
-    };
-  }
+  context: { params: Promise<{objectKey?: string[];}> }
 ) {
-  const objectKey = resolveObjectKey(context.params);
+  const objectKey = resolveObjectKey(await context.params);
   if (!objectKey) {
     return NextResponse.json(
       {

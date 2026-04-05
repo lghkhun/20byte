@@ -1,6 +1,7 @@
 import type { Prisma } from "@prisma/client";
 import { type NextRequest, NextResponse } from "next/server";
 
+import { publishCustomerUpdatedEvent } from "@/lib/ably/publisher";
 import { requireApiSession } from "@/lib/auth/middleware";
 import { prisma } from "@/lib/db/prisma";
 import { canAccessCustomerDirectory } from "@/lib/permissions/orgPermissions";
@@ -56,8 +57,16 @@ function withServerTiming<T>(response: T, startedAt: number, cacheStatus?: "HIT"
 
 async function getCachedCustomersPayload(
   cacheKey: string,
-  loader: () => Promise<CustomersResponsePayload>
+  loader: () => Promise<CustomersResponsePayload>,
+  options?: {
+    bypassCache?: boolean;
+  }
 ): Promise<{ payload: CustomersResponsePayload; fromCache: boolean }> {
+  if (options?.bypassCache) {
+    const payload = await loader();
+    return { payload, fromCache: false };
+  }
+
   const now = Date.now();
   const cached = customersCache.get(cacheKey);
   if (cached && cached.expiresAt > now) {
@@ -123,6 +132,21 @@ function normalizeOptionalString(value: unknown): string | null {
 
   const trimmed = value.trim();
   return trimmed.length > 0 ? trimmed : null;
+}
+
+function clearCustomersRouteCacheForOrg(orgId: string) {
+  const orgToken = `:${orgId}:`;
+  for (const key of customersCache.keys()) {
+    if (key.includes(orgToken)) {
+      customersCache.delete(key);
+    }
+  }
+
+  for (const key of customersInflight.keys()) {
+    if (key.includes(orgToken)) {
+      customersInflight.delete(key);
+    }
+  }
 }
 
 function normalizeOptionalInteger(value: unknown): number | null {
@@ -274,6 +298,8 @@ export async function GET(request: NextRequest) {
     const lightweight = parseBooleanFlag(request.nextUrl.searchParams.get("light"));
     const picker = parseBooleanFlag(request.nextUrl.searchParams.get("picker"));
     const includeTags = parseBooleanFlag(request.nextUrl.searchParams.get("includeTags"));
+    const includeFacets = parseBooleanFlag(request.nextUrl.searchParams.get("includeFacets"));
+    const fresh = parseBooleanFlag(request.nextUrl.searchParams.get("fresh"));
     const maxLimit = lightweight ? 300 : 100;
     const limit = Math.min(maxLimit, parsePositiveInt(request.nextUrl.searchParams.get("limit"), 30));
     const query = request.nextUrl.searchParams.get("q")?.trim() ?? "";
@@ -286,8 +312,9 @@ export async function GET(request: NextRequest) {
     const crmStageUnassigned = parseBooleanFlag(request.nextUrl.searchParams.get("crmStageUnassigned"));
 
     const andConditions: Prisma.CustomerWhereInput[] = [{ orgId }];
+    const sourceFacetConditions: Prisma.CustomerWhereInput[] = [{ orgId }];
     if (query) {
-      andConditions.push({
+      const queryCondition: Prisma.CustomerWhereInput = {
         OR: [
           { displayName: { contains: query } },
           { phoneE164: { contains: query } },
@@ -309,39 +336,51 @@ export async function GET(request: NextRequest) {
             }
           }
         ]
-      });
+      };
+      andConditions.push(queryCondition);
+      sourceFacetConditions.push(queryCondition);
     }
     if (tagId) {
-      andConditions.push({
+      const condition: Prisma.CustomerWhereInput = {
         tagLinks: {
           some: {
             tagId
           }
         }
-      });
+      };
+      andConditions.push(condition);
+      sourceFacetConditions.push(condition);
     }
     if (leadStatus) {
-      andConditions.push({ leadStatus });
+      const condition: Prisma.CustomerWhereInput = { leadStatus };
+      andConditions.push(condition);
+      sourceFacetConditions.push(condition);
     }
     if (source) {
       andConditions.push({ source });
     }
     if (hotness) {
-      andConditions.push({ hotness });
+      const condition: Prisma.CustomerWhereInput = { hotness };
+      andConditions.push(condition);
+      sourceFacetConditions.push(condition);
     }
     if (assignedToMemberId) {
-      andConditions.push({ assignedToMemberId });
+      const condition: Prisma.CustomerWhereInput = { assignedToMemberId };
+      andConditions.push(condition);
+      sourceFacetConditions.push(condition);
     }
     if (crmStageId) {
-      andConditions.push({
+      const condition: Prisma.CustomerWhereInput = {
         conversations: {
           some: {
             crmStageId
           }
         }
-      });
+      };
+      andConditions.push(condition);
+      sourceFacetConditions.push(condition);
     } else if (crmStageUnassigned) {
-      andConditions.push({
+      const condition: Prisma.CustomerWhereInput = {
         OR: [
           {
             conversations: {
@@ -356,11 +395,16 @@ export async function GET(request: NextRequest) {
             }
           }
         ]
-      });
+      };
+      andConditions.push(condition);
+      sourceFacetConditions.push(condition);
     }
 
     const where: Prisma.CustomerWhereInput = {
       AND: andConditions
+    };
+    const sourceFacetWhere: Prisma.CustomerWhereInput = {
+      AND: sourceFacetConditions
     };
     const cacheKey = `${auth.session.userId}:${orgId}:${request.nextUrl.searchParams.toString()}`;
     const { payload, fromCache } = await getCachedCustomersPayload(cacheKey, async () => {
@@ -412,7 +456,12 @@ export async function GET(request: NextRequest) {
           meta: {
             page,
             limit: pickerLimit,
-            hasMore
+            hasMore,
+            facets: includeFacets
+              ? {
+                  sources: []
+                }
+              : undefined
           }
         };
       }
@@ -452,11 +501,17 @@ export async function GET(request: NextRequest) {
             }
           })
         : Promise.resolve([] as Array<{ id: string; name: string; color: string; _count: { customerLinks: number } }>);
-      const [members, tags] = await Promise.all([membersPromise, tagsPromise]);
-      const assigneeMap = new Map(members.map((member) => [member.id, member.user.name?.trim() || member.user.email]));
-
+      const sourcesPromise = includeFacets
+        ? prisma.customer.findMany({
+            where: sourceFacetWhere,
+            select: {
+              source: true
+            },
+            distinct: ["source"]
+          })
+        : Promise.resolve([] as Array<{ source: string | null }>);
       if (lightweight) {
-        const [total, customers] = await prisma.$transaction([
+        const customerRowsPromise = prisma.$transaction([
           prisma.customer.count({ where }),
           prisma.customer.findMany({
             where,
@@ -519,6 +574,17 @@ export async function GET(request: NextRequest) {
             }
           })
         ]);
+        const [members, tags, sourceRows, [total, customers]] = await Promise.all([
+          membersPromise,
+          tagsPromise,
+          sourcesPromise,
+          customerRowsPromise
+        ]);
+        const assigneeMap = new Map(members.map((member) => [member.id, member.user.name?.trim() || member.user.email]));
+        const sourceFacets = sourceRows
+          .map((row) => row.source?.trim() ?? "")
+          .filter((item) => item.length > 0)
+          .sort((a, b) => a.localeCompare(b));
 
         return {
           data: {
@@ -539,12 +605,17 @@ export async function GET(request: NextRequest) {
           meta: {
             page,
             limit,
-            total
+            total,
+            facets: includeFacets
+              ? {
+                  sources: sourceFacets
+                }
+              : undefined
           }
         };
       }
 
-      const [total, customers] = await prisma.$transaction([
+      const customerRowsPromise = prisma.$transaction([
         prisma.customer.count({ where }),
         prisma.customer.findMany({
           where,
@@ -612,6 +683,17 @@ export async function GET(request: NextRequest) {
           }
         })
       ]);
+      const [members, tags, sourceRows, [total, customers]] = await Promise.all([
+        membersPromise,
+        tagsPromise,
+        sourcesPromise,
+        customerRowsPromise
+      ]);
+      const assigneeMap = new Map(members.map((member) => [member.id, member.user.name?.trim() || member.user.email]));
+      const sourceFacets = sourceRows
+        .map((row) => row.source?.trim() ?? "")
+        .filter((item) => item.length > 0)
+        .sort((a, b) => a.localeCompare(b));
 
       return {
         data: {
@@ -632,9 +714,16 @@ export async function GET(request: NextRequest) {
         meta: {
           page,
           limit,
-          total
+          total,
+          facets: includeFacets
+            ? {
+                sources: sourceFacets
+              }
+            : undefined
         }
       };
+    }, {
+      bypassCache: fresh
     });
 
     return withServerTiming(NextResponse.json(payload), startedAt, fromCache ? "HIT" : "MISS");
@@ -797,17 +886,11 @@ export async function POST(request: NextRequest) {
       return upserted;
     });
 
-    const cachePrefix = `${auth.session.userId}:${orgId}:`;
-    for (const key of customersCache.keys()) {
-      if (key.startsWith(cachePrefix)) {
-        customersCache.delete(key);
-      }
-    }
-    for (const key of customersInflight.keys()) {
-      if (key.startsWith(cachePrefix)) {
-        customersInflight.delete(key);
-      }
-    }
+    clearCustomersRouteCacheForOrg(orgId);
+    void publishCustomerUpdatedEvent({
+      orgId,
+      customerId: customer.id
+    });
 
     return NextResponse.json(
       {

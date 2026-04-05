@@ -49,7 +49,14 @@ test("inbox outbound status from Baileys updates DB and emits conversation updat
     select: {
       id: true,
       status: true,
-      assignedToMemberId: true
+      assignedToMemberId: true,
+      crmPipelineId: true,
+      crmStageId: true,
+      crmStage: {
+        select: {
+          name: true
+        }
+      }
     }
   });
 
@@ -88,6 +95,9 @@ test("inbox outbound status from Baileys updates DB and emits conversation updat
       conversationId: string;
       assignedToMemberId: string | null;
       status: "OPEN" | "CLOSED";
+      crmPipelineId?: string | null;
+      crmStageId?: string | null;
+      crmStageName?: string | null;
     }> = [];
 
     const processed = await processBaileysOutboundStatusUpdate(
@@ -145,6 +155,9 @@ test("inbox outbound status from Baileys updates DB and emits conversation updat
     assert.equal(publishedConversationUpdates[0]?.conversationId, conversation.id);
     assert.equal(publishedConversationUpdates[0]?.assignedToMemberId ?? null, conversation.assignedToMemberId ?? null);
     assert.equal(publishedConversationUpdates[0]?.status, conversation.status);
+    assert.equal(publishedConversationUpdates[0]?.crmPipelineId ?? null, conversation.crmPipelineId ?? null);
+    assert.equal(publishedConversationUpdates[0]?.crmStageId ?? null, conversation.crmStageId ?? null);
+    assert.equal(publishedConversationUpdates[0]?.crmStageName ?? null, conversation.crmStage?.name ?? null);
 
     const processedDowngrade = await processBaileysOutboundStatusUpdate(
       SEED_ORG_ID,
@@ -197,6 +210,9 @@ test("inbox outbound status from Baileys updates DB and emits conversation updat
     assert.equal(publishedConversationUpdates[1]?.conversationId, conversation.id);
     assert.equal(publishedConversationUpdates[1]?.assignedToMemberId ?? null, conversation.assignedToMemberId ?? null);
     assert.equal(publishedConversationUpdates[1]?.status, conversation.status);
+    assert.equal(publishedConversationUpdates[1]?.crmPipelineId ?? null, conversation.crmPipelineId ?? null);
+    assert.equal(publishedConversationUpdates[1]?.crmStageId ?? null, conversation.crmStageId ?? null);
+    assert.equal(publishedConversationUpdates[1]?.crmStageName ?? null, conversation.crmStage?.name ?? null);
   } finally {
     if (createdMessageId) {
       await prisma.message.deleteMany({

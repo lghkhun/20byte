@@ -81,6 +81,7 @@ function PublicLayout({ pathname, children }: { pathname: string; children: Reac
 const publicRoutes = new Set([
   "/",
   "/login",
+  "/forgot-password",
   "/register",
   "/set-password",
   "/privacy",

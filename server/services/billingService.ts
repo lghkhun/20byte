@@ -12,6 +12,26 @@ const DEFAULT_BASE_AMOUNT_CENTS = 99_000;
 const DEFAULT_GATEWAY_FEE_BPS = 200;
 const DEFAULT_CURRENCY = "IDR";
 const WEBHOOK_ACTOR_USER_ID = "system:pakasir-webhook";
+const BILLING_PLAN_SCHEMES = [
+  { months: 1, label: "Bulanan", discountBps: 0 },
+  { months: 3, label: "3 Bulan", discountBps: 1_000 },
+  { months: 12, label: "1 Tahun", discountBps: 2_000 }
+] as const;
+const DEFAULT_BILLING_PLAN_MONTHS = 1 as const;
+
+type BillingPlanMonths = (typeof BILLING_PLAN_SCHEMES)[number]["months"];
+
+export type BillingPlanPricing = {
+  months: BillingPlanMonths;
+  label: string;
+  discountBps: number;
+  rawBaseAmountCents: number;
+  discountCents: number;
+  netBaseAmountCents: number;
+  gatewayFeeCents: number;
+  totalAmountCents: number;
+  renewalDays: number;
+};
 
 async function writeWebhookAuditLog(input: {
   action:
@@ -52,6 +72,12 @@ type PakasirCreateResponse = {
   };
 };
 
+type PakasirPaymentPayload = {
+  amount?: unknown;
+  fee?: unknown;
+  total_payment?: unknown;
+};
+
 type PakasirDetailResponse = {
   transaction?: {
     amount?: number;
@@ -65,6 +91,141 @@ type PakasirDetailResponse = {
 
 function normalize(value: string): string {
   return value.trim();
+}
+
+function toPositiveWholeNumber(value: unknown): number | null {
+  const numeric = typeof value === "number" ? value : Number(value);
+  if (!Number.isFinite(numeric) || numeric < 0) {
+    return null;
+  }
+
+  return Math.round(numeric);
+}
+
+function resolveBillingPlanMonths(value: unknown): BillingPlanMonths {
+  const parsed = toPositiveWholeNumber(value);
+  const matched = BILLING_PLAN_SCHEMES.find((plan) => plan.months === parsed);
+  return matched?.months ?? DEFAULT_BILLING_PLAN_MONTHS;
+}
+
+function getBillingPlanScheme(planMonths: BillingPlanMonths) {
+  return BILLING_PLAN_SCHEMES.find((plan) => plan.months === planMonths) ?? BILLING_PLAN_SCHEMES[0];
+}
+
+export function calculateBillingPlanPricing(input: {
+  baseAmountCents: number;
+  gatewayFeeBps: number;
+  planMonths: BillingPlanMonths;
+}): BillingPlanPricing {
+  const plan = getBillingPlanScheme(input.planMonths);
+  const normalizedBaseAmountCents = Math.max(0, Math.round(input.baseAmountCents));
+  const rawBaseAmountCents = normalizedBaseAmountCents * plan.months;
+  const discountCents = Math.floor((rawBaseAmountCents * plan.discountBps) / 10_000);
+  const netBaseAmountCents = Math.max(0, rawBaseAmountCents - discountCents);
+  const gatewayFeeCents = calculateGatewayFeeCents(netBaseAmountCents, input.gatewayFeeBps);
+  const totalAmountCents = netBaseAmountCents + gatewayFeeCents;
+
+  return {
+    months: plan.months,
+    label: plan.label,
+    discountBps: plan.discountBps,
+    rawBaseAmountCents,
+    discountCents,
+    netBaseAmountCents,
+    gatewayFeeCents,
+    totalAmountCents,
+    renewalDays: RENEWAL_DAYS * plan.months
+  };
+}
+
+function parseGatewayRawAsRecord(gatewayRawJson: string | null): Record<string, unknown> | null {
+  if (!gatewayRawJson) {
+    return null;
+  }
+
+  try {
+    const parsed = JSON.parse(gatewayRawJson) as unknown;
+    return parsed && typeof parsed === "object" ? (parsed as Record<string, unknown>) : null;
+  } catch {
+    return null;
+  }
+}
+
+function extractNestedObjectField(
+  node: unknown,
+  field: "payment" | "checkoutMeta",
+  depth = 0
+): Record<string, unknown> | null {
+  if (!node || typeof node !== "object" || depth > 5) {
+    return null;
+  }
+
+  const record = node as Record<string, unknown>;
+  const directField = record[field];
+  if (directField && typeof directField === "object") {
+    return directField as Record<string, unknown>;
+  }
+
+  return extractNestedObjectField(record.create, field, depth + 1);
+}
+
+export function resolvePakasirPaymentSummary(input: {
+  payment: PakasirPaymentPayload | null | undefined;
+  fallbackRequestedAmountCents: number;
+}): {
+  requestedAmountCents: number;
+  providerFeeCents: number | null;
+  payableAmountCents: number;
+} {
+  const requestedAmountCents = toPositiveWholeNumber(input.payment?.amount) ?? Math.max(0, Math.round(input.fallbackRequestedAmountCents));
+  const directProviderFeeCents = toPositiveWholeNumber(input.payment?.fee);
+  const gatewayTotalPaymentCents = toPositiveWholeNumber(input.payment?.total_payment);
+  const inferredProviderFeeCents =
+    gatewayTotalPaymentCents !== null && gatewayTotalPaymentCents > requestedAmountCents
+      ? gatewayTotalPaymentCents - requestedAmountCents
+      : null;
+  const providerFeeCents = directProviderFeeCents ?? inferredProviderFeeCents;
+  const payableAmountCents = requestedAmountCents;
+
+  return {
+    requestedAmountCents,
+    providerFeeCents,
+    payableAmountCents
+  };
+}
+
+function parsePakasirPaymentFromGatewayRaw(gatewayRawJson: string | null): PakasirPaymentPayload | null {
+  const parsed = parseGatewayRawAsRecord(gatewayRawJson);
+  if (!parsed) {
+    return null;
+  }
+
+  const payment = extractNestedObjectField(parsed, "payment");
+  if (!payment) {
+    return null;
+  }
+
+  return payment as PakasirPaymentPayload;
+}
+
+function resolveRenewalDaysFromCharge(gatewayRawJson: string | null): number {
+  const parsed = parseGatewayRawAsRecord(gatewayRawJson);
+  if (!parsed) {
+    return RENEWAL_DAYS;
+  }
+
+  const checkoutMeta = extractNestedObjectField(parsed, "checkoutMeta");
+  if (!checkoutMeta) {
+    return RENEWAL_DAYS;
+  }
+
+  const planMonths = resolveBillingPlanMonths(checkoutMeta.planMonths);
+  const explicitRenewalDays = toPositiveWholeNumber(checkoutMeta.renewalDays);
+  if (explicitRenewalDays !== null && explicitRenewalDays > 0) {
+    return explicitRenewalDays;
+  }
+
+  return RENEWAL_DAYS * planMonths;
 }
 
 export function calculateGatewayFeeCents(baseAmountCents: number, feeBps = DEFAULT_GATEWAY_FEE_BPS): number {
@@ -189,41 +350,64 @@ export function computeSubscriptionReminderState(input: {
   now?: Date;
 }): SubscriptionReminderState {
   const now = input.now ?? new Date();
+  const isOwner = input.membershipRole === Role.OWNER;
+
+  if (input.status !== SubscriptionStatus.TRIALING) {
+    return {
+      shouldShowBanner: false,
+      shouldBroadcastWhatsapp: false,
+      dueAt: null,
+      daysRemaining: null,
+      message: ""
+    };
+  }
+
   const dueAt = resolveSubscriptionDueAt({
     status: input.status,
     trialEndAt: input.trialEndAt,
     currentPeriodEndAt: input.currentPeriodEndAt
   });
-  const isPastDue = input.status === SubscriptionStatus.PAST_DUE || input.status === SubscriptionStatus.CANCELED;
-  const isOwner = input.membershipRole === Role.OWNER;
 
-  let daysRemaining: number | null = null;
-  let shouldWarnUpcoming = false;
-  if (dueAt) {
-    const remainingMs = dueAt.getTime() - now.getTime();
-    const remainingDaysFloat = remainingMs / (24 * 60 * 60 * 1000);
-    if (remainingDaysFloat >= 0) {
-      daysRemaining = Math.ceil(remainingDaysFloat);
-      shouldWarnUpcoming = daysRemaining <= 3;
-    }
+  if (!dueAt) {
+    return {
+      shouldShowBanner: false,
+      shouldBroadcastWhatsapp: false,
+      dueAt: null,
+      daysRemaining: null,
+      message: ""
+    };
   }
 
-  const shouldShowBanner = isPastDue || shouldWarnUpcoming;
-  const shouldBroadcastWhatsapp = isPastDue || shouldWarnUpcoming;
-  const dueDateLabel = dueAt
-    ? dueAt.toLocaleString("id-ID", { day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" })
-    : "-";
-  const message = isPastDue
-    ? isOwner
-      ? "Langganan bisnis sudah jatuh tempo. Segera lakukan pembayaran agar akses tim kembali normal."
-      : "Langganan bisnis sudah jatuh tempo. Hubungi owner untuk segera membayar tagihan agar akses tim kembali normal."
-    : isOwner
-      ? `Langganan bisnis akan berakhir pada ${dueDateLabel}. Segera lakukan pembayaran agar operasional tim tidak terhenti.`
-      : `Langganan bisnis akan berakhir pada ${dueDateLabel}. Mohon hubungi owner untuk melakukan pembayaran tagihan.`;
+  const remainingMs = dueAt.getTime() - now.getTime();
+  const remainingDaysFloat = remainingMs / (24 * 60 * 60 * 1000);
+  const daysRemaining = remainingDaysFloat >= 0 ? Math.ceil(remainingDaysFloat) : null;
+  const isWithinTrialReminderWindow = daysRemaining !== null && daysRemaining <= 3;
+
+  if (!isWithinTrialReminderWindow) {
+    return {
+      shouldShowBanner: false,
+      shouldBroadcastWhatsapp: false,
+      dueAt,
+      daysRemaining,
+      message: ""
+    };
+  }
+
+  const dueDateLabel = dueAt.toLocaleString("id-ID", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit"
+  });
+  const urgencyLabel = daysRemaining === 0 ? "hari ini" : `${daysRemaining} hari lagi`;
+  const message = isOwner
+    ? `Suka platform kami? Trial berakhir ${dueDateLabel} (${urgencyLabel}). Berlangganan sekarang agar operasional tim tetap lancar tanpa jeda.`
+    : `Trial bisnis berakhir ${dueDateLabel} (${urgencyLabel}). Mohon hubungi owner untuk melanjutkan langganan.`;
 
   return {
-    shouldShowBanner,
-    shouldBroadcastWhatsapp,
+    shouldShowBanner: true,
+    shouldBroadcastWhatsapp: isOwner,
     dueAt,
     daysRemaining,
     message
@@ -275,17 +459,27 @@ export async function getOrgSubscriptionView(actorUserId: string, orgIdInput: st
     trialEndAt: subscription.trialEndAt,
     currentPeriodEndAt: subscription.currentPeriodEndAt
   });
+  const plans = BILLING_PLAN_SCHEMES.map((plan) =>
+    calculateBillingPlanPricing({
+      baseAmountCents: subscription.baseAmountCents,
+      gatewayFeeBps: subscription.gatewayFeeBps,
+      planMonths: plan.months
+    })
+  );
+  const defaultPlan = plans.find((plan) => plan.months === DEFAULT_BILLING_PLAN_MONTHS) ?? plans[0];
 
   return {
     subscription,
     state,
     reminder,
     pricing: {
-      baseAmountCents: subscription.baseAmountCents,
-      gatewayFeeCents: calculateGatewayFeeCents(subscription.baseAmountCents, subscription.gatewayFeeBps),
-      totalAmountCents: calculateTotalChargeCents(subscription.baseAmountCents, subscription.gatewayFeeBps),
-      renewalDays: RENEWAL_DAYS,
-      currency: subscription.currency
+      baseAmountCents: defaultPlan.netBaseAmountCents,
+      gatewayFeeCents: defaultPlan.gatewayFeeCents,
+      totalAmountCents: defaultPlan.totalAmountCents,
+      renewalDays: defaultPlan.renewalDays,
+      currency: subscription.currency,
+      defaultPlanMonths: DEFAULT_BILLING_PLAN_MONTHS,
+      plans
     }
   };
 }
@@ -322,10 +516,24 @@ export async function listOrgBillingCharges(actorUserId: string, orgIdInput: str
   }
 
   await requireOrgOwner(actorUserId, orgId);
-  return prisma.billingCharge.findMany({
+  const charges = await prisma.billingCharge.findMany({
     where: { orgId },
     orderBy: { createdAt: "desc" },
     take: 50
+  });
+
+  return charges.map((charge) => {
+    const summary = resolvePakasirPaymentSummary({
+      payment: parsePakasirPaymentFromGatewayRaw(charge.gatewayRawJson),
+      fallbackRequestedAmountCents: charge.totalAmountCents
+    });
+
+    return {
+      ...charge,
+      requestedAmountCents: summary.requestedAmountCents,
+      providerFeeCents: summary.providerFeeCents,
+      payableAmountCents: summary.payableAmountCents
+    };
   });
 }
 
@@ -360,6 +568,7 @@ export async function createBillingCheckout(input: {
   actorUserId: string;
   orgId: string;
   paymentMethod?: string;
+  planMonths?: unknown;
 }) {
   const orgId = normalize(input.orgId);
   if (!orgId) {
@@ -370,15 +579,25 @@ export async function createBillingCheckout(input: {
   const subscription = await getOrgSubscriptionOrThrow(orgId);
   const config = getPakasirConfig();
   const paymentMethod = normalize(input.paymentMethod ?? config.defaultMethod) || config.defaultMethod;
-  const baseAmountCents = subscription.baseAmountCents;
-  const gatewayFeeCents = calculateGatewayFeeCents(baseAmountCents, subscription.gatewayFeeBps);
-  const totalAmountCents = baseAmountCents + gatewayFeeCents;
+  const planMonths = resolveBillingPlanMonths(input.planMonths);
+  const selectedPlan = calculateBillingPlanPricing({
+    baseAmountCents: subscription.baseAmountCents,
+    gatewayFeeBps: subscription.gatewayFeeBps,
+    planMonths
+  });
+  const baseAmountCents = selectedPlan.netBaseAmountCents;
+  const gatewayFeeCents = selectedPlan.gatewayFeeCents;
+  const totalAmountCents = selectedPlan.totalAmountCents;
   const orderId = `SUB-${orgId}-${Date.now()}`;
 
   const gatewayPayload = await createPakasirTransaction({
     orderId,
     amount: totalAmountCents,
     method: paymentMethod
+  });
+  const paymentSummary = resolvePakasirPaymentSummary({
+    payment: gatewayPayload.payment ?? null,
+    fallbackRequestedAmountCents: totalAmountCents
   });
 
   const charge = await prisma.billingCharge.create({
@@ -392,7 +611,19 @@ export async function createBillingCheckout(input: {
       paymentMethod,
       gatewayProvider: "pakasir",
       gatewayProjectSlug: config.slug,
-      gatewayRawJson: JSON.stringify(gatewayPayload),
+      gatewayRawJson: JSON.stringify({
+        create: gatewayPayload,
+        checkoutMeta: {
+          planMonths: selectedPlan.months,
+          renewalDays: selectedPlan.renewalDays,
+          discountBps: selectedPlan.discountBps,
+          rawBaseAmountCents: selectedPlan.rawBaseAmountCents,
+          discountCents: selectedPlan.discountCents,
+          netBaseAmountCents: selectedPlan.netBaseAmountCents,
+          gatewayFeeCents: selectedPlan.gatewayFeeCents,
+          totalAmountCents: selectedPlan.totalAmountCents
+        }
+      }),
       paymentNumber: gatewayPayload.payment?.payment_number ?? null,
       expiredAt: gatewayPayload.payment?.expired_at ? new Date(gatewayPayload.payment.expired_at) : null,
       createdByUserId: input.actorUserId
@@ -401,7 +632,9 @@ export async function createBillingCheckout(input: {
 
   return {
     charge,
-    payment: gatewayPayload.payment ?? null
+    payment: gatewayPayload.payment ?? null,
+    paymentSummary,
+    selectedPlan
   };
 }
 
@@ -428,9 +661,10 @@ async function fetchPakasirTransactionDetail(input: {
   return payload;
 }
 
-async function activateSubscriptionFromPaidCharge(orgId: string, paidAt: Date) {
+async function activateSubscriptionFromPaidCharge(orgId: string, paidAt: Date, renewalDays = RENEWAL_DAYS) {
   const periodStart = paidAt;
-  const periodEnd = addDays(periodStart, RENEWAL_DAYS);
+  const normalizedRenewalDays = Math.max(1, Math.floor(renewalDays));
+  const periodEnd = addDays(periodStart, normalizedRenewalDays);
 
   await prisma.orgSubscription.update({
     where: { orgId },
@@ -528,6 +762,9 @@ export async function processPakasirWebhook(input: {
   }
 
   const paidAt = transaction?.completed_at ? new Date(transaction.completed_at) : new Date();
+  const existingGatewayRaw = parseGatewayRawAsRecord(charge.gatewayRawJson);
+  const createPayload = existingGatewayRaw?.create ?? existingGatewayRaw ?? null;
+  const checkoutMeta = extractNestedObjectField(existingGatewayRaw, "checkoutMeta");
 
   const updatedCharge = await prisma.billingCharge.update({
     where: { id: charge.id },
@@ -535,13 +772,15 @@ export async function processPakasirWebhook(input: {
       status: BillingChargeStatus.PAID,
       paidAt,
       gatewayRawJson: JSON.stringify({
-        create: charge.gatewayRawJson ? JSON.parse(charge.gatewayRawJson) : null,
+        create: createPayload,
+        checkoutMeta,
         detail
       })
     }
   });
 
-  await activateSubscriptionFromPaidCharge(charge.orgId, paidAt);
+  const renewalDays = resolveRenewalDaysFromCharge(charge.gatewayRawJson);
+  await activateSubscriptionFromPaidCharge(charge.orgId, paidAt, renewalDays);
 
   await writeWebhookAuditLog({
     action: "pakasir.webhook.completed",
