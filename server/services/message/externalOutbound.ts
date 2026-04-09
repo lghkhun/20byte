@@ -11,6 +11,9 @@ type StoreExternalOutboundInput = {
   customerPhoneE164: string;
   waChatJid?: string;
   waMessageId: string;
+  senderWaJid?: string;
+  senderPhoneE164?: string;
+  senderDisplayName?: string;
   replyToWaMessageId?: string;
   replyPreviewText?: string;
   customerDisplayName?: string;
@@ -46,11 +49,18 @@ function emptyResult(duplicate = false, messageId: string | null = null): Extern
 }
 
 function normalizeContext(input: StoreExternalOutboundInput) {
+  const senderWaJid = normalizeOptional(input.senderWaJid);
+  const senderPhoneE164 = normalizeOptional(input.senderPhoneE164);
+  const senderDisplayName = normalizeOptional(input.senderDisplayName);
+
   return {
     orgId: normalize(input.orgId),
     customerPhoneE164: normalize(input.customerPhoneE164),
     waChatJid: normalizeOptional(input.waChatJid),
     waMessageId: normalize(input.waMessageId),
+    senderWaJid: senderWaJid ? senderWaJid.slice(0, 191) : undefined,
+    senderPhoneE164: senderPhoneE164 ? senderPhoneE164.slice(0, 191) : undefined,
+    senderDisplayName: senderDisplayName ? senderDisplayName.slice(0, 191) : undefined,
     replyToWaMessageId: normalizeOptional(input.replyToWaMessageId),
     replyPreviewText: normalizeMessageText(input.replyPreviewText),
     customerDisplayName: normalizeOptional(input.customerDisplayName),
@@ -119,6 +129,8 @@ export async function storeExternalOutboundMessage(input: StoreExternalOutboundI
       context.customerAvatarUrl ?? undefined
     );
     const conversation = await getOrCreateOpenConversation(tx, context.orgId, customer.id, undefined, context.waChatJid);
+    const isGroupChat = Boolean(context.waChatJid?.endsWith("@g.us"));
+    const senderLabel = context.senderDisplayName?.trim() || context.senderPhoneE164?.trim() || null;
     const replyToWaMessageId = context.replyToWaMessageId?.trim() || null;
     const replyToMessage = replyToWaMessageId
       ? await tx.message.findFirst({
@@ -130,7 +142,9 @@ export async function storeExternalOutboundMessage(input: StoreExternalOutboundI
           select: {
             id: true,
             text: true,
-            type: true
+            type: true,
+            senderDisplayName: true,
+            senderPhoneE164: true
           }
         })
       : null;
@@ -150,6 +164,9 @@ export async function storeExternalOutboundMessage(input: StoreExternalOutboundI
                   ? "Template"
                   : "Pesan"
         : null);
+    const replyPreviewSenderName = replyToMessage
+      ? replyToMessage.senderDisplayName?.trim() || replyToMessage.senderPhoneE164?.trim() || null
+      : null;
 
     const pendingCandidate = await tx.message.findFirst({
       where: buildPendingMatchWhere(context, conversation.id),
@@ -202,6 +219,10 @@ export async function storeExternalOutboundMessage(input: StoreExternalOutboundI
         replyToMessageId: replyToMessage?.id ?? null,
         replyToWaMessageId,
         replyPreviewText: replyPreviewText ? replyPreviewText.slice(0, 180) : null,
+        replyPreviewSenderName: replyPreviewSenderName ? replyPreviewSenderName.slice(0, 191) : null,
+        senderWaJid: context.senderWaJid ?? null,
+        senderPhoneE164: context.senderPhoneE164 ?? null,
+        senderDisplayName: context.senderDisplayName ?? null,
         text: context.text,
         mediaId: context.mediaId,
         mediaUrl: context.mediaUrl,
@@ -223,13 +244,47 @@ export async function storeExternalOutboundMessage(input: StoreExternalOutboundI
       }
     });
 
+    const existingConversation = await tx.conversation.findFirst({
+      where: {
+        id: conversation.id,
+        orgId: context.orgId
+      },
+      select: {
+        groupParticipantsJson: true
+      }
+    });
+
+    let mergedGroupParticipantsJson: string | null | undefined;
+    if (isGroupChat && senderLabel) {
+      let existingParticipants: string[] = [];
+      const raw = existingConversation?.groupParticipantsJson ?? null;
+      if (raw) {
+        try {
+          const parsed = JSON.parse(raw) as unknown;
+          if (Array.isArray(parsed)) {
+            existingParticipants = parsed.filter((item): item is string => typeof item === "string" && item.trim().length > 0);
+          }
+        } catch {
+          existingParticipants = [];
+        }
+      }
+      if (!existingParticipants.includes(senderLabel)) {
+        existingParticipants.push(senderLabel);
+      }
+      mergedGroupParticipantsJson = JSON.stringify(existingParticipants.slice(0, 120));
+    }
+
     const updateResult = await tx.conversation.updateMany({
       where: {
         id: conversation.id,
         orgId: context.orgId
       },
       data: {
-        lastMessageAt: inserted.createdAt
+        lastMessageAt: inserted.createdAt,
+        lastMessageSenderName: isGroupChat ? senderLabel : context.customerDisplayName ?? senderLabel,
+        ...(isGroupChat
+          ? { groupParticipantsJson: mergedGroupParticipantsJson ?? existingConversation?.groupParticipantsJson ?? null }
+          : {})
       }
     });
     if (updateResult.count !== 1) {

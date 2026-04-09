@@ -167,6 +167,7 @@ model OrgMember {
 
   org       Org      @relation(fields: [orgId], references: [id])
   user      User     @relation(fields: [userId], references: [id])
+  assignedConversations Conversation[] @relation("AssignedConversations")
 
   @@unique([orgId, userId])
   @@index([orgId, role])
@@ -325,6 +326,8 @@ model Conversation {
   status             ConversationStatus @default(OPEN)
 
   assignedToMemberId String? // OrgMember.id
+  assignedToMember   OrgMember?         @relation("AssignedConversations", fields: [assignedToMemberId], references: [id])
+  lastMessageSenderName String?
   lastMessageAt      DateTime?
   unreadCount        Int                @default(0)
 
@@ -335,6 +338,7 @@ model Conversation {
   shortlinkId        String?
   trackingId         String?
   waChatJid          String?
+  groupParticipantsJson String?      @db.LongText
   crmPipelineId      String?
   crmStageId         String?
 
@@ -403,7 +407,7 @@ model Message {
 
   direction        MessageDirection
   type             MessageType
-  text             String?
+  text             String?            @db.LongText
 
   // Media metadata
   mediaId          String?            // WhatsApp media ID (for retrieval)
@@ -434,6 +438,12 @@ model Message {
   replyToMessageId   String?
   replyToWaMessageId String?
   replyPreviewText   String?
+  replyPreviewSenderName String?
+
+  // Sender metadata (important for group chats)
+  senderWaJid        String?
+  senderPhoneE164    String?
+  senderDisplayName  String?
 
   createdAt        DateTime           @default(now())
 

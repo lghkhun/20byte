@@ -13,6 +13,9 @@ type SendMessageRequest = {
   replyToMessageId?: unknown;
   type?: unknown;
   text?: unknown;
+  mediaId?: unknown;
+  mediaUrl?: unknown;
+  fileSize?: unknown;
   mimeType?: unknown;
   fileName?: unknown;
   templateName?: unknown;
@@ -83,6 +86,30 @@ function parseTemplateComponents(value: unknown): Array<Record<string, unknown>>
   }
 
   return value.filter((item) => item && typeof item === "object") as Array<Record<string, unknown>>;
+}
+
+function parseOptionalNonEmptyString(value: unknown): string | undefined {
+  if (typeof value !== "string") {
+    return undefined;
+  }
+
+  const trimmed = value.trim();
+  return trimmed.length > 0 ? trimmed : undefined;
+}
+
+function parseOptionalFileSize(value: unknown): number | undefined {
+  if (typeof value === "number" && Number.isFinite(value) && value >= 0) {
+    return Math.round(value);
+  }
+
+  if (typeof value === "string") {
+    const parsed = Number(value);
+    if (Number.isFinite(parsed) && parsed >= 0) {
+      return Math.round(parsed);
+    }
+  }
+
+  return undefined;
 }
 
 function inferAttachmentType(mimeType: string): "IMAGE" | "VIDEO" | "AUDIO" | "DOCUMENT" {
@@ -208,6 +235,21 @@ export async function POST(request: NextRequest) {
         fileName: attachment.fileName,
         fileSize: attachment.fileSize
       };
+    } else {
+      const mediaId = parseOptionalNonEmptyString(body.mediaId);
+      const mediaUrl = parseOptionalNonEmptyString(body.mediaUrl);
+      const mimeType = parseOptionalNonEmptyString(body.mimeType);
+      const fileName = parseOptionalNonEmptyString(body.fileName);
+      const fileSize = parseOptionalFileSize(body.fileSize);
+      if (mediaId && mediaUrl && fileName) {
+        mediaMeta = {
+          mediaId,
+          mediaUrl,
+          mimeType: mimeType ?? "application/octet-stream",
+          fileName,
+          fileSize: fileSize ?? 0
+        };
+      }
     }
 
     const message = await sendOutboundMessage({

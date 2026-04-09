@@ -4,12 +4,18 @@ export type MessageItem = {
   replyToMessageId: string | null;
   replyToWaMessageId: string | null;
   replyPreviewText: string | null;
+  replyPreviewSenderName: string | null;
+  senderWaJid: string | null;
+  senderPhoneE164: string | null;
+  senderDisplayName: string | null;
   direction: "INBOUND" | "OUTBOUND";
   type: "TEXT" | "IMAGE" | "VIDEO" | "AUDIO" | "DOCUMENT" | "TEMPLATE" | "SYSTEM";
   text: string | null;
+  mediaId: string | null;
   mediaUrl: string | null;
   mimeType: string | null;
   fileName: string | null;
+  fileSize: number | null;
   templateName: string | null;
   templateCategory: "MARKETING" | "UTILITY" | "AUTHENTICATION" | "SERVICE" | null;
   templateLanguageCode: string | null;

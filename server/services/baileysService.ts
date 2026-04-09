@@ -915,6 +915,15 @@ async function processInboundMessage(orgId: string, message: WAMessage, socket: 
     return;
   }
 
+  const participantJid = normalize(
+    (message.key as { participant?: string | null } | undefined)?.participant ?? undefined
+  );
+  const senderWaJid = isGroupChat ? participantJid ?? remoteJid : remoteJid;
+  const senderPhoneE164 = isGroupChat
+    ? (participantJid ? await resolveCustomerPhoneE164ForInboundJid(orgId, participantJid, socket) : undefined)
+    : customerPhoneE164;
+  const senderDisplayName = normalize(message.pushName ?? undefined) ?? senderPhoneE164;
+
   let mediaPath: string | undefined;
   let mediaUrl: string | undefined;
   if (kind.type !== "TEXT") {
@@ -940,6 +949,9 @@ async function processInboundMessage(orgId: string, message: WAMessage, socket: 
       waChatJid: remoteJid,
       customerDisplayName: normalize((await resolveGroupDisplayName(remoteJid, socket)) ?? message.pushName ?? undefined),
       customerAvatarUrl,
+      senderWaJid: senderWaJid ?? undefined,
+      senderPhoneE164: senderPhoneE164 ?? undefined,
+      senderDisplayName: senderDisplayName ?? undefined,
       waMessageId,
       replyToWaMessageId: quotedContext.replyToWaMessageId,
       replyPreviewText: quotedContext.replyPreviewText,
@@ -966,6 +978,9 @@ async function processInboundMessage(orgId: string, message: WAMessage, socket: 
     waChatJid: remoteJid,
     customerDisplayName: normalize((await resolveGroupDisplayName(remoteJid, socket)) ?? message.pushName ?? undefined),
     customerAvatarUrl,
+    senderWaJid: senderWaJid ?? undefined,
+    senderPhoneE164: senderPhoneE164 ?? undefined,
+    senderDisplayName: senderDisplayName ?? undefined,
     waMessageId,
     replyToWaMessageId: quotedContext.replyToWaMessageId,
     replyPreviewText: quotedContext.replyPreviewText,

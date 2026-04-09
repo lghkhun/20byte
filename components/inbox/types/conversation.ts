@@ -24,6 +24,11 @@ export type ConversationItem = {
   sourceMedium: string | null;
   status: "OPEN" | "CLOSED";
   assignedToMemberId: string | null;
+  assignedToMemberName: string | null;
+  lastMessageSenderName: string | null;
+  groupParticipants: string[];
+  shortlinkId: string | null;
+  waChatJid: string | null;
   lastMessageAt: string | null;
   unreadCount: number;
   updatedAt: string;

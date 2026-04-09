@@ -6,6 +6,9 @@ export type StoreInboundMessageInput = {
   waChatJid?: string;
   customerDisplayName?: string;
   customerAvatarUrl?: string;
+  senderWaJid?: string;
+  senderPhoneE164?: string;
+  senderDisplayName?: string;
   shortlinkCode?: string;
   trackingId?: string;
   waMessageId: string;
@@ -75,12 +78,18 @@ export type MessageListItem = {
   replyToMessageId: string | null;
   replyToWaMessageId: string | null;
   replyPreviewText: string | null;
+  replyPreviewSenderName: string | null;
+  senderWaJid: string | null;
+  senderPhoneE164: string | null;
+  senderDisplayName: string | null;
   direction: MessageDirection;
   type: MessageType;
   text: string | null;
+  mediaId: string | null;
   mediaUrl: string | null;
   mimeType: string | null;
   fileName: string | null;
+  fileSize: number | null;
   templateName: string | null;
   templateCategory: string | null;
   templateLanguageCode: string | null;

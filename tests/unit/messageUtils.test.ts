@@ -2,7 +2,6 @@ import test from "node:test";
 import assert from "node:assert/strict";
 
 import {
-  MESSAGE_TEXT_DB_MAX_LENGTH,
   normalize,
   normalizeFileSize,
   normalizeMessageText,
@@ -59,23 +58,23 @@ test("normalizeSendError trims and limits to 500 chars", () => {
   assert.equal(normalizeSendError(null), "Outbound send failed.");
 });
 
-test("normalizeMessageText trims and clamps to DB-safe max length", () => {
+test("normalizeMessageText trims without truncating", () => {
   assert.equal(normalizeMessageText(undefined), undefined);
   assert.equal(normalizeMessageText("   "), undefined);
   assert.equal(normalizeMessageText("  hi "), "hi");
 
-  const tooLong = "x".repeat(MESSAGE_TEXT_DB_MAX_LENGTH + 40);
+  const tooLong = "x".repeat(5000);
   const normalized = normalizeMessageText(tooLong);
-  assert.equal(normalized?.length, MESSAGE_TEXT_DB_MAX_LENGTH);
+  assert.equal(normalized?.length, tooLong.length);
 });
 
 test("normalizeSystemMessageText appends [Automated] and rejects empty", () => {
   assert.equal(normalizeSystemMessageText("Hello"), "Hello [Automated]");
   assert.equal(normalizeSystemMessageText("Hello [Automated]"), "Hello [Automated]");
 
-  const long = "x".repeat(MESSAGE_TEXT_DB_MAX_LENGTH + 40);
+  const long = "x".repeat(5000);
   const normalizedLong = normalizeSystemMessageText(long);
-  assert.equal(normalizedLong.length, MESSAGE_TEXT_DB_MAX_LENGTH);
+  assert.equal(normalizedLong.length, long.length + " [Automated]".length);
   assert.match(normalizedLong, /\[Automated\]$/);
 
   assert.throws(

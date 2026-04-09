@@ -1,5 +1,5 @@
 import Image from "next/image";
-import { Ellipsis, Search, SendToBack, ShieldCheck } from "lucide-react";
+import { Ellipsis, Search, SendToBack, ShieldCheck, UsersRound } from "lucide-react";
 import { useEffect, useState } from "react";
 
 import type { ConversationItem } from "@/components/inbox/types";
@@ -47,6 +47,8 @@ export function ChatHeader({
   const isLatestMessageProofReady =
     conversation?.lastMessageDirection === "INBOUND" &&
     (conversation.lastMessageType === "IMAGE" || conversation.lastMessageType === "DOCUMENT");
+  const isGroupConversation = Boolean(conversation?.waChatJid?.endsWith("@g.us"));
+  const groupParticipantsLabel = (conversation?.groupParticipants ?? []).join(", ");
 
   useEffect(() => {
     setAvatarError(false);
@@ -91,7 +93,12 @@ export function ChatHeader({
         )}
         <div className="min-w-0">
           <h2 className="truncate text-lg font-semibold text-foreground sm:text-xl">
-            {conversation ? displayName : "Belum ada chat dipilih"}
+            {conversation ? (
+              <span className="inline-flex items-center gap-1.5">
+                {isGroupConversation ? <UsersRound className="h-4 w-4 text-indigo-500" /> : null}
+                {displayName}
+              </span>
+            ) : "Belum ada chat dipilih"}
           </h2>
           {conversation ? (
             <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
@@ -104,6 +111,11 @@ export function ChatHeader({
                 {conversation.status === "OPEN" ? "Open" : "Closed"}
               </span>
               <span className="truncate">{conversation.customerPhoneE164}</span>
+              {isGroupConversation && groupParticipantsLabel ? (
+                <span className="max-w-full break-words leading-relaxed text-muted-foreground/90">
+                  {groupParticipantsLabel}
+                </span>
+              ) : null}
               {isCustomerTyping ? (
                 <span className="inline-flex items-center gap-1 rounded-full border border-emerald-500/30 bg-emerald-500/10 px-2 py-0.5 text-emerald-600 dark:text-emerald-400">
                   <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-emerald-500" />

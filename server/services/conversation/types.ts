@@ -101,6 +101,11 @@ export type ConversationListItem = {
   sourceMedium: string | null;
   status: ConversationStatus;
   assignedToMemberId: string | null;
+  assignedToMemberName?: string | null;
+  lastMessageSenderName?: string | null;
+  groupParticipants?: string[];
+  shortlinkId?: string | null;
+  waChatJid?: string | null;
   lastMessageAt: Date | null;
   unreadCount: number;
   updatedAt: Date;

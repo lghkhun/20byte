@@ -5,6 +5,7 @@ import EmojiPicker, { EmojiStyle, Theme } from "emoji-picker-react";
 import { Paperclip, Smile } from "lucide-react";
 
 import { AttachmentPendingBar } from "@/components/inbox/input/AttachmentPendingBar";
+import { ImageAttachmentEditorModal } from "@/components/inbox/input/ImageAttachmentEditorModal";
 import { isAllowedAttachmentType } from "@/components/inbox/input/utils";
 import { Button } from "@/components/ui/button";
 import { useTheme } from "next-themes";
@@ -13,7 +14,7 @@ type MessageInputProps = {
   density?: "compact" | "comfy";
   disabled: boolean;
   textValue: string;
-  replyTarget?: { id: string; text: string } | null;
+  replyTarget?: { id: string; text: string; author?: string | null } | null;
   onClearReplyTarget?: () => void;
   onTextValueChange: (nextValue: string) => void;
   onSendText: (text: string, options?: { replyToMessageId?: string | null; replyPreviewText?: string | null }) => Promise<void>;
@@ -22,7 +23,7 @@ type MessageInputProps = {
     fileName: string;
     mimeType: string;
     size: number;
-  }, options?: { replyToMessageId?: string | null }) => Promise<void>;
+  }, options?: { replyToMessageId?: string | null; text?: string | null }) => Promise<void>;
 };
 
 export function MessageInput({
@@ -47,6 +48,27 @@ export function MessageInput({
   const [attachmentError, setAttachmentError] = useState<string | null>(null);
   const [isSendingAttachment, setIsSendingAttachment] = useState(false);
   const [isEmojiOpen, setIsEmojiOpen] = useState(false);
+  const [isImageEditorOpen, setIsImageEditorOpen] = useState(false);
+  const [attachmentText, setAttachmentText] = useState("");
+
+  function applyPendingFile(file: File) {
+    if (!isAllowedAttachmentType(file.type)) {
+      setAttachmentError("Tipe lampiran belum didukung.");
+      return;
+    }
+
+    setAttachmentError(null);
+    setPendingAttachment({
+      file,
+      fileName: file.name,
+      mimeType: file.type || "application/octet-stream",
+      size: file.size
+    });
+
+    if (file.type.startsWith("image/")) {
+      setIsImageEditorOpen(true);
+    }
+  }
 
   async function submitText() {
     const payload = textValue.trim();
@@ -85,9 +107,11 @@ export function MessageInput({
     setIsSendingAttachment(true);
     try {
       await onSendAttachment(pendingAttachment, {
-        replyToMessageId: replyTarget?.id ?? null
+        replyToMessageId: replyTarget?.id ?? null,
+        text: attachmentText.trim() || null
       });
       setPendingAttachment(null);
+      setAttachmentText("");
       onClearReplyTarget?.();
       requestAnimationFrame(() => {
         inputRef.current?.focus();
@@ -122,7 +146,7 @@ export function MessageInput({
       {replyTarget ? (
         <div className="flex items-start justify-between gap-2 rounded-xl border border-primary/25 bg-primary/10 px-3 py-2">
           <div className="min-w-0">
-            <p className="text-[11px] font-medium uppercase tracking-wide text-primary">Balas pesan</p>
+            <p className="text-[11px] font-medium text-primary">{replyTarget.author?.trim() || "Penulis pesan"}</p>
             <p className="line-clamp-2 break-words text-xs text-foreground/90">{replyTarget.text}</p>
           </div>
           <Button type="button" variant="ghost" size="sm" className="h-7 px-2 text-xs" onClick={onClearReplyTarget}>
@@ -140,6 +164,19 @@ export function MessageInput({
           value={textValue}
           onChange={(event) => onTextValueChange(event.target.value)}
           onKeyDown={handleKeyDown}
+          onPaste={(event) => {
+            const items = Array.from(event.clipboardData?.items ?? []);
+            const imageItem = items.find((item) => item.kind === "file" && item.type.startsWith("image/"));
+            if (!imageItem) {
+              return;
+            }
+            const file = imageItem.getAsFile();
+            if (!file) {
+              return;
+            }
+            event.preventDefault();
+            applyPendingFile(file);
+          }}
           placeholder="Ketik pesan..."
           disabled={disabled}
           rows={1}
@@ -171,19 +208,7 @@ export function MessageInput({
                 if (!file) {
                   return;
                 }
-
-                if (!isAllowedAttachmentType(file.type)) {
-                  setAttachmentError("Tipe lampiran belum didukung.");
-                  return;
-                }
-
-                setAttachmentError(null);
-                setPendingAttachment({
-                  file,
-                  fileName: file.name,
-                  mimeType: file.type || "application/octet-stream",
-                  size: file.size
-                });
+                applyPendingFile(file);
               }}
             />
           </label>
@@ -217,11 +242,40 @@ export function MessageInput({
           }}
           onRemove={() => {
             setPendingAttachment(null);
+            setAttachmentText("");
           }}
+        />
+      ) : null}
+      {pendingAttachment ? (
+        <textarea
+          value={attachmentText}
+          onChange={(event) => setAttachmentText(event.target.value)}
+          rows={2}
+          placeholder="Tambah pesan/caption untuk media..."
+          className="w-full resize-none rounded-xl border border-border bg-background/70 px-3 py-2 text-sm text-foreground outline-none placeholder:text-muted-foreground/70 focus:border-primary"
         />
       ) : null}
 
       {attachmentError ? <p className="text-xs text-destructive">{attachmentError}</p> : null}
+
+      <ImageAttachmentEditorModal
+        open={isImageEditorOpen}
+        file={pendingAttachment && pendingAttachment.mimeType.startsWith("image/") ? pendingAttachment.file : null}
+        captionText={attachmentText}
+        onCaptionTextChange={setAttachmentText}
+        onCancel={() => {
+          setIsImageEditorOpen(false);
+        }}
+        onApply={(editedFile) => {
+          setPendingAttachment({
+            file: editedFile,
+            fileName: editedFile.name,
+            mimeType: editedFile.type || "application/octet-stream",
+            size: editedFile.size
+          });
+          setIsImageEditorOpen(false);
+        }}
+      />
     </form>
   );
 }

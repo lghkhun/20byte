@@ -11,6 +11,9 @@ type InboundContext = {
   waMessageId: string;
   customerDisplayName?: string;
   customerAvatarUrl?: string;
+  senderWaJid?: string;
+  senderPhoneE164?: string;
+  senderDisplayName?: string;
   trackingId?: string;
   replyToWaMessageId?: string;
   replyPreviewText?: string;
@@ -75,6 +78,47 @@ export async function storeInboundMessageInTransaction(params: {
   }>;
 }): Promise<CreatedInboundMessage> {
   const { context } = params;
+  const isGroupChat = Boolean(context.waChatJid?.endsWith("@g.us"));
+
+  const senderDisplayName = (context.senderDisplayName?.trim() || null)?.slice(0, 191) ?? null;
+  const senderPhoneE164 = (context.senderPhoneE164?.trim() || null)?.slice(0, 191) ?? null;
+  const senderWaJid = (context.senderWaJid?.trim() || null)?.slice(0, 191) ?? null;
+  const senderLabel = senderDisplayName || senderPhoneE164 || null;
+
+  function toParticipantLabel(value: string | null): string | null {
+    const normalized = value?.trim() ?? "";
+    if (!normalized) {
+      return null;
+    }
+    return normalized.length > 191 ? normalized.slice(0, 191) : normalized;
+  }
+
+  function mergeGroupParticipantsJson(currentRaw: string | null, candidate: string | null): string | null {
+    const normalizedCandidate = toParticipantLabel(candidate);
+    if (!normalizedCandidate) {
+      return currentRaw;
+    }
+
+    let existing: string[] = [];
+    if (currentRaw) {
+      try {
+        const parsed = JSON.parse(currentRaw) as unknown;
+        if (Array.isArray(parsed)) {
+          existing = parsed
+            .map((item) => (typeof item === "string" ? toParticipantLabel(item) : null))
+            .filter((item): item is string => Boolean(item));
+        }
+      } catch {
+        existing = [];
+      }
+    }
+
+    if (!existing.includes(normalizedCandidate)) {
+      existing.push(normalizedCandidate);
+    }
+
+    return JSON.stringify(existing.slice(0, 120));
+  }
 
   return prisma.$transaction(async (tx) => {
     const attribution = await params.resolveAttribution(tx);
@@ -91,7 +135,9 @@ export async function storeInboundMessageInTransaction(params: {
           select: {
             id: true,
             text: true,
-            type: true
+            type: true,
+            senderDisplayName: true,
+            senderPhoneE164: true
           }
         })
       : null;
@@ -112,6 +158,9 @@ export async function storeInboundMessageInTransaction(params: {
                   ? "Template"
                   : "Pesan"
         : null);
+    const replyPreviewSenderName = replyToMessage
+      ? replyToMessage.senderDisplayName?.trim() || replyToMessage.senderPhoneE164?.trim() || null
+      : null;
 
     const created = await tx.message.create({
       data: {
@@ -121,6 +170,10 @@ export async function storeInboundMessageInTransaction(params: {
         replyToMessageId: replyToMessage?.id ?? null,
         replyToWaMessageId,
         replyPreviewText: replyPreviewText ? replyPreviewText.slice(0, 180) : null,
+        replyPreviewSenderName: replyPreviewSenderName ? replyPreviewSenderName.slice(0, 191) : null,
+        senderWaJid,
+        senderPhoneE164,
+        senderDisplayName,
         direction: MessageDirection.INBOUND,
         type: context.type,
         text: context.text,
@@ -138,6 +191,19 @@ export async function storeInboundMessageInTransaction(params: {
       }
     });
 
+    const existingConversation = await tx.conversation.findFirst({
+      where: {
+        id: conversation.id,
+        orgId: context.orgId
+      },
+      select: {
+        groupParticipantsJson: true
+      }
+    });
+    const mergedGroupParticipantsJson = isGroupChat
+      ? mergeGroupParticipantsJson(existingConversation?.groupParticipantsJson ?? null, senderLabel)
+      : undefined;
+
     const updateResult = await tx.conversation.updateMany({
       where: {
         id: conversation.id,
@@ -145,6 +211,10 @@ export async function storeInboundMessageInTransaction(params: {
       },
       data: {
         lastMessageAt: created.createdAt,
+        lastMessageSenderName: isGroupChat ? senderLabel : context.customerDisplayName ?? senderLabel,
+        ...(isGroupChat
+          ? { groupParticipantsJson: mergedGroupParticipantsJson ?? existingConversation?.groupParticipantsJson ?? null }
+          : {}),
         unreadCount: {
           increment: 1
         }

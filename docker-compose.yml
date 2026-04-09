@@ -29,7 +29,6 @@ x-app-env: &app-env
 services:
   mysql:
     image: ${MYSQL_IMAGE:-mysql:8}
-    container_name: 20byte_mysql
     restart: unless-stopped
     command: --default-authentication-plugin=mysql_native_password
     environment:
@@ -54,7 +53,6 @@ services:
 
   redis:
     image: ${REDIS_IMAGE:-redis:7-alpine}
-    container_name: 20byte_redis
     restart: unless-stopped
     command: ["redis-server", "--appendonly", "yes"]
     volumes:
@@ -71,7 +69,6 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-    container_name: 20byte_migrate
     restart: "no"
     environment:
       <<: *app-env
@@ -89,7 +86,6 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-    container_name: 20byte_web
     restart: unless-stopped
     init: true
     environment:
@@ -122,7 +118,6 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-    container_name: 20byte_worker
     restart: unless-stopped
     init: true
     command: ["npm", "run", "worker:start"]

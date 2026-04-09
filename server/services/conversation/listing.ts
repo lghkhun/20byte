@@ -7,9 +7,9 @@ import type { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/db/prisma";
 import { normalizePossibleE164 } from "@/lib/whatsapp/e164";
 import { requireInboxMembership } from "@/server/services/conversation/access";
-import { sanitizeConversationAvatarUrl, toConversationListItem } from "@/server/services/conversation/mappers";
+import { toConversationListItem } from "@/server/services/conversation/mappers";
 import type { ConversationListItem, ConversationListResult, ListConversationsInput } from "@/server/services/conversation/types";
-import { normalizeLimit, normalizePage, normalizeValue, resolveLastMessagePreview } from "@/server/services/conversation/utils";
+import { normalizeLimit, normalizePage, normalizeValue } from "@/server/services/conversation/utils";
 import { ServiceError } from "@/server/services/serviceError";
 
 const BAILEYS_AUTH_DIR = path.join(process.cwd(), ".runtime", "baileys-auth");
@@ -121,7 +121,22 @@ export async function listConversations(input: ListConversationsInput): Promise<
     prisma.conversation.findMany({
       where,
       distinct: ["customerId"],
-      include: {
+      select: {
+        id: true,
+        orgId: true,
+        customerId: true,
+        crmPipelineId: true,
+        crmStageId: true,
+        sourceCampaign: true,
+        sourcePlatform: true,
+        sourceMedium: true,
+        status: true,
+        assignedToMemberId: true,
+        lastMessageAt: true,
+        unreadCount: true,
+        updatedAt: true,
+        shortlinkId: true,
+        waChatJid: true,
         crmPipeline: {
           select: {
             name: true
@@ -152,6 +167,15 @@ export async function listConversations(input: ListConversationsInput): Promise<
             type: true,
             direction: true,
             fileName: true
+          }
+        },
+        assignedToMember: {
+          select: {
+            user: {
+              select: {
+                name: true
+              }
+            }
           }
         }
       },
@@ -222,7 +246,22 @@ export async function getConversationById(
       id: normalizedConversationId,
       orgId: normalizedOrgId
     },
-    include: {
+    select: {
+      id: true,
+      orgId: true,
+      customerId: true,
+      crmPipelineId: true,
+      crmStageId: true,
+      sourceCampaign: true,
+      sourcePlatform: true,
+      sourceMedium: true,
+      status: true,
+      assignedToMemberId: true,
+      lastMessageAt: true,
+      unreadCount: true,
+      updatedAt: true,
+      shortlinkId: true,
+      waChatJid: true,
       crmPipeline: {
         select: {
           name: true
@@ -254,6 +293,15 @@ export async function getConversationById(
           direction: true,
           fileName: true
         }
+      },
+      assignedToMember: {
+        select: {
+          user: {
+            select: {
+              name: true
+            }
+          }
+        }
       }
     }
   });
@@ -262,38 +310,19 @@ export async function getConversationById(
     throw new ServiceError(404, "CONVERSATION_NOT_FOUND", "Conversation does not exist.");
   }
 
-  const latestMessage = conversation.messages[0] ?? null;
+  const baseItem = toConversationListItem(conversation);
+  const canonicalPhone = await resolveCanonicalConversationPhoneE164(
+    normalizedOrgId,
+    baseItem.customerPhoneE164,
+    new Map<string, string>()
+  );
+
+  if (canonicalPhone === baseItem.customerPhoneE164) {
+    return baseItem;
+  }
+
   return {
-    id: conversation.id,
-    orgId: conversation.orgId,
-    customerId: conversation.customerId,
-    customerPhoneE164: conversation.customer.phoneE164,
-    customerDisplayName: conversation.customer.displayName,
-    customerAvatarUrl: sanitizeConversationAvatarUrl(conversation.customer.waProfilePicUrl),
-    customerLeadStatus: conversation.customer.leadStatus,
-    crmPipelineId: conversation.crmPipelineId,
-    crmPipelineName: conversation.crmPipeline?.name ?? null,
-    crmStageId: conversation.crmStageId,
-    crmStageName: conversation.crmStage?.name ?? null,
-    lastMessagePreview: latestMessage
-      ? resolveLastMessagePreview({
-          text: latestMessage.text,
-          type: latestMessage.type,
-          fileName: latestMessage.fileName
-        })
-      : null,
-    lastMessageType: latestMessage?.type ?? null,
-    lastMessageDirection: latestMessage?.direction ?? null,
-    source: conversation.customer.source,
-    sourceCampaign: conversation.sourceCampaign,
-    sourceAdset: conversation.sourcePlatform,
-    sourceAd: conversation.sourceMedium,
-    sourcePlatform: conversation.sourcePlatform,
-    sourceMedium: conversation.sourceMedium,
-    status: conversation.status,
-    assignedToMemberId: conversation.assignedToMemberId,
-    lastMessageAt: conversation.lastMessageAt,
-    unreadCount: conversation.unreadCount,
-    updatedAt: conversation.updatedAt
+    ...baseItem,
+    customerPhoneE164: canonicalPhone
   };
 }

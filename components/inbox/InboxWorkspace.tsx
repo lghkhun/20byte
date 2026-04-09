@@ -18,6 +18,7 @@ import { Button } from "@/components/ui/button";
 import { EmptyStatePanel, ErrorStatePanel } from "@/components/ui/state-panels";
 import { PanelRightClose, PanelRightOpen } from "lucide-react";
 import { notifySuccess, notifyWarning, notifyInfo } from "@/lib/ui/notify";
+import type { MessageItem } from "@/components/inbox/types";
 
 export function InboxWorkspace() {
   const router = useRouter();
@@ -204,6 +205,190 @@ export function InboxWorkspace() {
     ? "grid h-full min-h-0 gap-2 lg:gap-3 lg:grid-cols-[var(--inbox-list-panel-width,340px)_minmax(0,1fr)_minmax(260px,var(--crm-panel-width))]"
     : "grid h-full min-h-0 gap-2 lg:gap-3 lg:grid-cols-[var(--inbox-list-panel-width,340px)_minmax(0,1fr)]";
 
+  async function ensureConversationForPhone(phoneE164: string, customerDisplayName?: string): Promise<string> {
+    const response = await fetch("/api/conversations", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        orgId: orgId ?? undefined,
+        phoneE164,
+        customerDisplayName
+      })
+    });
+
+    const payload = (await response.json().catch(() => null)) as
+      | {
+          data?: { conversation?: { id?: string } };
+          error?: { message?: string };
+        }
+      | null;
+    if (!response.ok) {
+      throw new Error(payload?.error?.message ?? "Gagal membuat/memuat percakapan.");
+    }
+
+    const conversationId = payload?.data?.conversation?.id?.trim() ?? "";
+    if (!conversationId) {
+      throw new Error("Conversation id tidak ditemukan.");
+    }
+    return conversationId;
+  }
+
+  async function handleReplyPrivatelyFromMessage(message: MessageItem): Promise<void> {
+    const targetPhone = message.senderPhoneE164?.trim() ?? "";
+    if (!targetPhone) {
+      notifyWarning("Nomor pengirim tidak tersedia untuk balas pribadi.");
+      return;
+    }
+
+    try {
+      const conversationId = await ensureConversationForPhone(targetPhone, message.senderDisplayName ?? undefined);
+      selectConversation(conversationId);
+      notifySuccess("Chat pribadi dibuka.");
+    } catch (error) {
+      notifyWarning(error instanceof Error ? error.message : "Gagal membuka chat pribadi.");
+    }
+  }
+
+  async function handleForwardMessageToTarget(input: {
+    message: MessageItem;
+    targetPhoneE164: string;
+    targetDisplayName?: string;
+    suppressToast?: boolean;
+  }): Promise<void> {
+    const targetPhone = input.targetPhoneE164.trim();
+    if (!targetPhone) {
+      throw new Error("Nomor tujuan wajib diisi.");
+    }
+
+    const conversationId = await ensureConversationForPhone(targetPhone, input.targetDisplayName);
+    const isForwardableMediaType =
+      input.message.type === "IMAGE" ||
+      input.message.type === "VIDEO" ||
+      input.message.type === "AUDIO" ||
+      input.message.type === "DOCUMENT";
+    const trimmedText = input.message.text?.trim() ?? "";
+    const mediaCaption = trimmedText ? `FWD: ${trimmedText}` : undefined;
+
+    if (
+      isForwardableMediaType &&
+      input.message.mediaId &&
+      input.message.mediaUrl &&
+      input.message.fileName
+    ) {
+      const response = await fetch("/api/inbox/send", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          conversationId,
+          type: input.message.type,
+          text: mediaCaption,
+          mediaId: input.message.mediaId,
+          mediaUrl: input.message.mediaUrl,
+          mimeType: input.message.mimeType,
+          fileName: input.message.fileName,
+          fileSize: input.message.fileSize
+        })
+      });
+      const payload = (await response.json().catch(() => null)) as { error?: { message?: string } } | null;
+      if (!response.ok) {
+        throw new Error(payload?.error?.message ?? "Gagal meneruskan media.");
+      }
+
+      if (!input.suppressToast) {
+        notifySuccess("Media berhasil diteruskan.");
+      }
+      void loadConversations({ background: true });
+      return;
+    }
+
+    const fallbackText =
+      input.message.type === "IMAGE"
+        ? "[Forwarded image]"
+        : input.message.type === "VIDEO"
+          ? "[Forwarded video]"
+          : input.message.type === "AUDIO"
+            ? "[Forwarded audio]"
+            : input.message.type === "DOCUMENT"
+              ? `[Forwarded document] ${input.message.fileName ?? ""}`.trim()
+              : `[Forwarded ${input.message.type.toLowerCase()}]`;
+    const originalText = input.message.text?.trim() || input.message.replyPreviewText?.trim() || fallbackText;
+    const forwardText =
+      input.message.mediaUrl && !input.message.text
+        ? `${originalText}\n${input.message.mediaUrl}`
+        : originalText;
+
+    const response = await fetch("/api/inbox/send", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        conversationId,
+        type: "TEXT",
+        text: `FWD: ${forwardText}`
+      })
+    });
+    const payload = (await response.json().catch(() => null)) as { error?: { message?: string } } | null;
+    if (!response.ok) {
+      throw new Error(payload?.error?.message ?? "Gagal meneruskan pesan.");
+    }
+
+    if (!input.suppressToast) {
+      notifySuccess("Pesan berhasil diteruskan.");
+    }
+    void loadConversations({ background: true });
+  }
+
+  async function handleCreateNoteFromMessage(message: MessageItem): Promise<void> {
+    const customerId = selectedConversation?.customerId?.trim() ?? "";
+    if (!customerId) {
+      notifyWarning("Customer belum tersedia untuk menyimpan catatan.");
+      return;
+    }
+
+    const senderLabel = message.senderDisplayName?.trim() || message.senderPhoneE164?.trim() || "Unknown";
+    const textBody = message.text?.trim() || message.replyPreviewText?.trim() || `[${message.type}]`;
+    const noteContent = `[Chat ${new Date(message.createdAt).toLocaleString("id-ID")}]\n${senderLabel}: ${textBody}`;
+
+    try {
+      const getResponse = await fetch(`/api/customers/${encodeURIComponent(customerId)}?orgId=${encodeURIComponent(orgId ?? "")}`);
+      const getPayload = (await getResponse.json().catch(() => null)) as
+        | {
+            data?: {
+              customer?: {
+                remarks?: string | null;
+              };
+            };
+            error?: { message?: string };
+          }
+        | null;
+      if (!getResponse.ok) {
+        throw new Error(getPayload?.error?.message ?? "Gagal memuat catatan customer.");
+      }
+
+      const previousRemarks = getPayload?.data?.customer?.remarks?.trim() ?? "";
+      const mergedRemarks = previousRemarks ? `${previousRemarks}\n\n${noteContent}` : noteContent;
+
+      const putResponse = await fetch(`/api/customers/${encodeURIComponent(customerId)}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          orgId: orgId ?? undefined,
+          remarks: mergedRemarks
+        })
+      });
+      const putPayload = (await putResponse.json().catch(() => null)) as { error?: { message?: string } } | null;
+      if (!putResponse.ok) {
+        throw new Error(putPayload?.error?.message ?? "Gagal menyimpan catatan.");
+      }
+      notifySuccess("Catatan berhasil ditambahkan ke CRM.");
+      setIsDesktopCrmOpen(true);
+      if (selectedConversationId) {
+        void loadConversation(selectedConversationId, { background: true });
+      }
+    } catch (error) {
+      notifyWarning(error instanceof Error ? error.message : "Gagal menyimpan catatan.");
+    }
+  }
+
   return (
     <section className="flex h-full min-h-0 flex-1 overflow-hidden">
       {!orgId && hasLoadedOrganizations && !error ? (
@@ -314,6 +499,9 @@ export function InboxWorkspace() {
                   setProofFeedback(null);
                   setIsProofShortcutModalOpen(true);
                 }}
+                onReplyPrivatelyFromMessage={handleReplyPrivatelyFromMessage}
+                onForwardMessageToTarget={handleForwardMessageToTarget}
+                onCreateNoteFromMessage={handleCreateNoteFromMessage}
                 onUnselectConversation={() => {
                   clearSelectedConversation();
                 }}

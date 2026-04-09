@@ -13,6 +13,10 @@ export async function storeOutboundRecord(params: {
   replyToMessageId?: string | null;
   replyToWaMessageId?: string | null;
   replyPreviewText?: string | null;
+  replyPreviewSenderName?: string | null;
+  senderWaJid?: string | null;
+  senderPhoneE164?: string | null;
+  senderDisplayName?: string | null;
   text?: string;
   mediaId?: string | null;
   mediaUrl?: string | null;
@@ -39,6 +43,10 @@ export async function storeOutboundRecord(params: {
         replyToMessageId: params.replyToMessageId ?? null,
         replyToWaMessageId: params.replyToWaMessageId ?? null,
         replyPreviewText: params.replyPreviewText ?? null,
+        replyPreviewSenderName: params.replyPreviewSenderName ?? null,
+        senderWaJid: params.senderWaJid ?? null,
+        senderPhoneE164: params.senderPhoneE164 ?? null,
+        senderDisplayName: params.senderDisplayName ?? null,
         direction: MessageDirection.OUTBOUND,
         type: params.type,
         text: params.text,
@@ -77,7 +85,8 @@ export async function storeOutboundRecord(params: {
         orgId: params.orgId
       },
       data: {
-        lastMessageAt: created.createdAt
+        lastMessageAt: created.createdAt,
+        ...(params.senderDisplayName ? { lastMessageSenderName: params.senderDisplayName } : {})
       }
     });
 

@@ -3,12 +3,12 @@ FROM node:20-alpine AS base
 WORKDIR /app
 
 COPY package.json package-lock.json ./
-RUN npm ci
+COPY prisma ./prisma
+RUN npm ci && npx prisma generate
 
 FROM base AS builder
 
 COPY . .
-RUN npx prisma generate
 RUN npm run build
 
 FROM node:20-alpine AS runner
@@ -16,6 +16,8 @@ FROM node:20-alpine AS runner
 WORKDIR /app
 ENV NODE_ENV=production
 ENV PORT=3000
+
+RUN apk add --no-cache iproute2
 
 COPY --from=base /app/node_modules ./node_modules
 COPY --from=builder /app/package.json ./package.json

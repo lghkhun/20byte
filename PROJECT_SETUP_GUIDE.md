@@ -164,11 +164,7 @@ Redis
 
 This ensures consistent development environments.
 
-Create file:
-
-```
-docker-compose.yml
-```
+Base `docker-compose.yml` di repository dipakai untuk mode container normal tanpa bind mount source code host.
 
 Example configuration:
 
@@ -203,9 +199,9 @@ volumes:
 
 ---
 
-# 7. Start Development Infrastructure
+# 7. Start Containers Safely
 
-Start MySQL and Redis.
+Start stack default.
 
 ```
 docker compose up -d
@@ -214,6 +210,7 @@ docker compose up -d
 Note:
 - Default MySQL host port is `3307` to avoid conflict with local MySQL service on `3306`.
 - If `3306` is free and you prefer it, set `MYSQL_PORT=3306`.
+- Perintah default ini tidak lagi memakai bind mount project directory, jadi aman untuk path Windows/WSL yang belum di-share ke Docker Desktop.
 
 This command runs containers in the background.
 
@@ -223,12 +220,47 @@ Verify containers:
 docker ps
 ```
 
-You should see:
+You should see at least:
 
 ```
-20byte_mysql
-20byte_redis
+mysql
+redis
 ```
+
+Jika juga menjalankan app via container, service `web` dan `worker` akan ikut muncul pada output `docker compose ps`.
+
+Untuk mode development dengan bind mount + hot reload, gunakan file compose tambahan:
+
+```bash
+docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d
+```
+
+Supaya lebih mudah diingat, gunakan helper command berikut dari root project:
+
+```bash
+npm run docker:up
+npm run docker:down
+npm run docker:restart
+npm run docker:rebuild
+npm run docker:logs
+npm run docker:ps
+```
+
+Arti singkat:
+- `npm run docker:up` = start mode development Docker
+- `npm run docker:down` = stop container development
+- `npm run docker:restart` = stop lalu start lagi
+- `npm run docker:rebuild` = rebuild image lalu start ulang
+- `npm run docker:logs` = lihat log web secara live
+- `npm run docker:ps` = lihat status container
+
+Catatan:
+- Mode ini memakai `.:/app`.
+- `web` dan `worker` akan menjalankan `npx prisma generate` otomatis sebelum start.
+- Jika project berada di path seperti `/mnt/diskD/...`, pastikan drive/path tersebut sudah di-share di Docker Desktop.
+- Jika belum, Docker Desktop akan menampilkan error seperti `mounts denied: The path ... is not shared from the host`.
+- Jika Anda tetap bekerja dari path `/mnt/...` dan belum ingin mengubah file sharing Docker Desktop, gunakan `docker compose up -d --build` untuk development berbasis rebuild image. App tetap bisa dibuka dari browser lokal, tetapi perubahan kode tidak akan hot reload.
+- Jika Anda ingin hot reload via container, pindahkan repo ke filesystem Linux WSL seperti `/home/<user>/...` atau aktifkan file sharing untuk drive terkait di Docker Desktop.
 
 If image pull fails with DNS/proxy error (example: `lookup registry-1.docker.io ... server misbehaving`):
 

@@ -1,0 +1,2 @@
+ALTER TABLE `Message`
+  MODIFY `text` LONGTEXT NULL;

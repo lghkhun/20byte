@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Loader2, MessageCircleMore } from "lucide-react";
+import { Check, Loader2, MessageCircleMore, Search, X } from "lucide-react";
 
 import { ChatHeader } from "@/components/inbox/chat/ChatHeader";
 import { ChatMessagesSkeleton } from "@/components/inbox/chat/ChatMessagesSkeleton";
@@ -31,7 +31,7 @@ type ChatWindowProps = {
     fileName: string;
     mimeType: string;
     size: number;
-  }, options?: { replyToMessageId?: string | null }) => Promise<void>;
+  }, options?: { replyToMessageId?: string | null; text?: string | null }) => Promise<void>;
   isCrmPanelOpen: boolean;
   onToggleCrmPanel: () => void;
   onToggleConversationStatus: () => Promise<void>;
@@ -39,7 +39,24 @@ type ChatWindowProps = {
   onRetryOutboundMessage: (messageId: string) => Promise<void>;
   onLoadOlderMessages: () => Promise<void>;
   onSelectProofMessage: (messageId: string) => void;
+  onReplyPrivatelyFromMessage: (message: MessageItem) => Promise<void>;
+  onForwardMessageToTarget: (input: {
+    message: MessageItem;
+    targetPhoneE164: string;
+    targetDisplayName?: string;
+    suppressToast?: boolean;
+  }) => Promise<void>;
+  onCreateNoteFromMessage: (message: MessageItem) => Promise<void>;
   onUnselectConversation: () => void;
+};
+
+type ListConversationsPayload = {
+  data?: {
+    conversations?: ConversationItem[];
+  };
+  error?: {
+    message?: string;
+  };
 };
 
 export function ChatWindow({
@@ -62,6 +79,9 @@ export function ChatWindow({
   onRetryOutboundMessage,
   onLoadOlderMessages,
   onSelectProofMessage,
+  onReplyPrivatelyFromMessage,
+  onForwardMessageToTarget,
+  onCreateNoteFromMessage,
   onUnselectConversation
 }: ChatWindowProps) {
   const displayName = conversation?.customerDisplayName?.trim() || conversation?.customerPhoneE164 || "Belum ada chat dipilih";
@@ -81,6 +101,16 @@ export function ChatWindow({
   const [searchMatches, setSearchMatches] = useState<Array<{ id: string; text: string; createdAt: string }>>([]);
   const [isTransferOpen, setIsTransferOpen] = useState(false);
   const [isResolveOpen, setIsResolveOpen] = useState(false);
+  const [isForwardOpen, setIsForwardOpen] = useState(false);
+  const [forwardMessage, setForwardMessage] = useState<MessageItem | null>(null);
+  const [forwardSearch, setForwardSearch] = useState("");
+  const [forwardTargetPhone, setForwardTargetPhone] = useState("");
+  const [forwardTargetName, setForwardTargetName] = useState("");
+  const [forwardCandidates, setForwardCandidates] = useState<ConversationItem[]>([]);
+  const [selectedForwardConversationIds, setSelectedForwardConversationIds] = useState<string[]>([]);
+  const [isLoadingForwardTargets, setIsLoadingForwardTargets] = useState(false);
+  const [forwardError, setForwardError] = useState<string | null>(null);
+  const [isForwarding, setIsForwarding] = useState(false);
   const [transferMembers, setTransferMembers] = useState<Array<{ userId: string; name: string | null; email: string; role: string }>>([]);
   const [selectedAssignee, setSelectedAssignee] = useState("");
   const [isSubmittingTransfer, setIsSubmittingTransfer] = useState(false);
@@ -89,11 +119,39 @@ export function ChatWindow({
   const [isResolving, setIsResolving] = useState(false);
   const [resolveError, setResolveError] = useState<string | null>(null);
   const [draftByConversation, setDraftByConversation] = useState<Record<string, string>>({});
-  const [replyTarget, setReplyTarget] = useState<{ id: string; text: string } | null>(null);
+  const [replyTarget, setReplyTarget] = useState<{ id: string; text: string; author?: string | null } | null>(null);
   const lastMessageId = messages.length > 0 ? messages[messages.length - 1]?.id ?? null : null;
   const trimmedSearchQuery = searchQuery.trim();
   const normalizedSearchQuery = trimmedSearchQuery.toLowerCase();
   const activeDraft = conversation ? draftByConversation[conversation.id] ?? "" : "";
+  const isGroupChat = Boolean(conversation?.waChatJid?.endsWith("@g.us"));
+  const fallbackGroupParticipants = useMemo(() => {
+    if (!isGroupChat) {
+      return [] as string[];
+    }
+
+    const unique = new Set<string>();
+    for (const message of messages) {
+      const label = message.senderDisplayName?.trim() || message.senderPhoneE164?.trim() || "";
+      if (label) {
+        unique.add(label);
+      }
+    }
+    return [...unique].slice(0, 120);
+  }, [isGroupChat, messages]);
+  const headerConversation = useMemo(() => {
+    if (!conversation) {
+      return null;
+    }
+    if (!isGroupChat) {
+      return conversation;
+    }
+    return {
+      ...conversation,
+      groupParticipants:
+        conversation.groupParticipants.length > 0 ? conversation.groupParticipants : fallbackGroupParticipants
+    };
+  }, [conversation, fallbackGroupParticipants, isGroupChat]);
   const matchedCount = searchMatches.length;
   const unreadStartIndex = useMemo(() => {
     const unreadCount = conversation?.unreadCount ?? 0;
@@ -110,6 +168,16 @@ export function ChatWindow({
     setSearchError(null);
     setIsSearchingMessages(false);
     setReplyTarget(null);
+    setIsForwardOpen(false);
+    setForwardMessage(null);
+    setForwardSearch("");
+    setForwardTargetPhone("");
+    setForwardTargetName("");
+    setForwardCandidates([]);
+    setSelectedForwardConversationIds([]);
+    setIsLoadingForwardTargets(false);
+    setForwardError(null);
+    setIsForwarding(false);
   }, [conversation?.id]);
 
   useEffect(() => {
@@ -339,6 +407,111 @@ export function ChatWindow({
     }
   }
 
+  async function handleSubmitForwardMessage() {
+    if (!forwardMessage || isForwarding) {
+      return;
+    }
+
+    const selectedTargets = forwardCandidates
+      .filter((item) => selectedForwardConversationIds.includes(item.id))
+      .map((item) => ({
+        phone: item.customerPhoneE164.trim(),
+        name: item.customerDisplayName?.trim() || item.customerPhoneE164.trim()
+      }))
+      .filter((item) => Boolean(item.phone));
+    const customPhone = forwardTargetPhone.trim();
+    const customTarget =
+      customPhone.length > 0
+        ? [
+            {
+              phone: customPhone,
+              name: forwardTargetName.trim() || undefined
+            }
+          ]
+        : [];
+    const dedupedTargets = [...selectedTargets, ...customTarget].filter(
+      (target, index, list) => list.findIndex((row) => row.phone === target.phone) === index
+    );
+
+    if (dedupedTargets.length === 0) {
+      setForwardError("Pilih tujuan chat atau isi nomor tujuan.");
+      return;
+    }
+
+    setIsForwarding(true);
+    setForwardError(null);
+    try {
+      for (let i = 0; i < dedupedTargets.length; i += 1) {
+        const target = dedupedTargets[i]!;
+        await onForwardMessageToTarget({
+          message: forwardMessage,
+          targetPhoneE164: target.phone,
+          targetDisplayName: target.name,
+          suppressToast: i < dedupedTargets.length - 1
+        });
+      }
+      setIsForwardOpen(false);
+      setForwardMessage(null);
+      setForwardSearch("");
+      setForwardTargetPhone("");
+      setForwardTargetName("");
+      setForwardCandidates([]);
+      setSelectedForwardConversationIds([]);
+    } catch {
+      setForwardError("Gagal meneruskan pesan.");
+    } finally {
+      setIsForwarding(false);
+    }
+  }
+
+  useEffect(() => {
+    if (!isForwardOpen || !conversation) {
+      return;
+    }
+
+    const controller = new AbortController();
+    const timer = window.setTimeout(async () => {
+      setIsLoadingForwardTargets(true);
+      try {
+        const params = new URLSearchParams({
+          filter: "ALL",
+          status: "OPEN",
+          page: "1",
+          limit: "80",
+          orgId: conversation.orgId
+        });
+        const trimmedQuery = forwardSearch.trim();
+        if (trimmedQuery) {
+          params.set("query", trimmedQuery);
+        }
+        const response = await fetch(`/api/conversations?${params.toString()}`, {
+          signal: controller.signal
+        });
+        const payload = (await response.json().catch(() => null)) as ListConversationsPayload | null;
+        if (!response.ok) {
+          setForwardError(payload?.error?.message ?? "Gagal memuat daftar percakapan.");
+          setForwardCandidates([]);
+          return;
+        }
+        const rows = payload?.data?.conversations ?? [];
+        setForwardCandidates(rows.filter((row) => row.id !== conversation.id));
+      } catch (error) {
+        if (error instanceof DOMException && error.name === "AbortError") {
+          return;
+        }
+        setForwardError("Terjadi masalah jaringan saat memuat tujuan forward.");
+        setForwardCandidates([]);
+      } finally {
+        setIsLoadingForwardTargets(false);
+      }
+    }, 180);
+
+    return () => {
+      clearTimeout(timer);
+      controller.abort();
+    };
+  }, [conversation, forwardSearch, isForwardOpen]);
+
   function setDraftValue(nextValue: string) {
     if (!conversation) {
       return;
@@ -371,7 +544,7 @@ export function ChatWindow({
     <section data-panel="chat-window" className="inbox-scroll relative flex h-full min-h-0 max-h-full flex-col overflow-y-auto overscroll-contain rounded-[24px] border border-border/70 bg-card/95 shadow-md shadow-black/5 backdrop-blur-sm">
       {isConversationSelected ? (
         <ChatHeader
-          conversation={conversation}
+          conversation={headerConversation}
           displayName={displayName}
           isCustomerTyping={isCustomerTyping}
           isOpen={isOpen}
@@ -519,8 +692,10 @@ export function ChatWindow({
                   <MessageBubble
                     density={density}
                     isEmphasized={message.id === animatedMessageId}
+                    isGroupChat={isGroupChat}
                     message={message}
                     onReplyMessage={(targetMessage) => {
+                      const senderLabel = targetMessage.senderDisplayName?.trim() || targetMessage.senderPhoneE164?.trim() || null;
                       const preview = (targetMessage.text?.trim() ||
                         targetMessage.replyPreviewText?.trim() ||
                         (targetMessage.type === "IMAGE"
@@ -536,8 +711,28 @@ export function ChatWindow({
                                   : "Pesan")) as string;
                       setReplyTarget({
                         id: targetMessage.id,
-                        text: preview
+                        text: preview,
+                        author:
+                          senderLabel ||
+                          (targetMessage.direction === "OUTBOUND"
+                            ? "Anda"
+                            : conversation?.customerDisplayName?.trim() || conversation?.customerPhoneE164 || "Penulis pesan")
                       });
+                    }}
+                    onReplyPrivatelyMessage={(targetMessage) => {
+                      void onReplyPrivatelyFromMessage(targetMessage);
+                    }}
+                    onForwardMessage={(targetMessage) => {
+                      setForwardMessage(targetMessage);
+                      setForwardSearch("");
+                      setForwardTargetPhone("");
+                      setForwardTargetName("");
+                      setSelectedForwardConversationIds([]);
+                      setForwardError(null);
+                      setIsForwardOpen(true);
+                    }}
+                    onCreateNoteFromMessage={(targetMessage) => {
+                      void onCreateNoteFromMessage(targetMessage);
                     }}
                     onSelectProofMessage={onSelectProofMessage}
                     onRetryOutboundMessage={(messageId) => {
@@ -708,6 +903,114 @@ export function ChatWindow({
                 </Button>
                 <Button type="button" className="bg-primary text-primary-foreground" onClick={() => void handleResolveConversation()} disabled={isResolving}>
                   {isResolving ? "Menutup..." : "Tutup Percakapan"}
+                </Button>
+              </div>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {isForwardOpen ? (
+        <div className="absolute inset-0 z-20 flex items-center justify-center bg-black/55 px-0 py-0 backdrop-blur-sm sm:px-4 sm:py-6">
+          <div className="flex h-full w-full max-w-lg flex-col overflow-hidden rounded-none border border-border/80 bg-background text-foreground shadow-2xl sm:h-[86vh] sm:max-h-[820px] sm:rounded-[26px]">
+            <div className="border-b border-border/80 px-4 pb-3 pt-4">
+              <div className="mb-3 flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setIsForwardOpen(false)}
+                  className="inline-flex h-8 w-8 items-center justify-center rounded-full text-muted-foreground hover:bg-accent/80 hover:text-foreground"
+                  aria-label="Tutup"
+                >
+                  <X className="h-4 w-4" />
+                </button>
+                <h3 className="text-lg font-medium text-foreground">Teruskan pesan ke</h3>
+              </div>
+              <div className="relative">
+                <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                <Input
+                  value={forwardSearch}
+                  onChange={(event) => setForwardSearch(event.target.value)}
+                  placeholder="Cari nama atau nomor"
+                  className="h-11 rounded-full border-border bg-background pl-10 focus-visible:ring-emerald-500"
+                />
+              </div>
+            </div>
+
+            {forwardMessage ? (
+              <div className="border-b border-border/80 px-4 py-2.5">
+                <p className="line-clamp-2 text-xs text-muted-foreground">
+                  {forwardMessage.text?.trim() || forwardMessage.replyPreviewText?.trim() || `[${forwardMessage.type}]`}
+                </p>
+              </div>
+            ) : null}
+
+            <div className="inbox-scroll min-h-0 flex-1 overflow-y-auto px-2 py-2">
+              {isLoadingForwardTargets ? (
+                <div className="flex items-center gap-2 px-3 py-3 text-sm text-muted-foreground">
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  Memuat daftar chat...
+                </div>
+              ) : null}
+              {!isLoadingForwardTargets && forwardCandidates.length === 0 ? (
+                <p className="px-3 py-3 text-sm text-muted-foreground">Tidak ada chat yang cocok.</p>
+              ) : null}
+              {forwardCandidates.map((item) => {
+                const isSelected = selectedForwardConversationIds.includes(item.id);
+                const title = item.customerDisplayName?.trim() || item.customerPhoneE164;
+                const subtitle = item.customerDisplayName?.trim() ? item.customerPhoneE164 : item.lastMessagePreview || "-";
+                return (
+                  <button
+                    key={item.id}
+                    type="button"
+                    onClick={() => {
+                      setSelectedForwardConversationIds((current) =>
+                        current.includes(item.id) ? current.filter((id) => id !== item.id) : [...current, item.id]
+                      );
+                      setForwardError(null);
+                    }}
+                    className={`flex w-full items-center gap-3 rounded-2xl px-3 py-2.5 text-left transition ${
+                      isSelected ? "bg-accent/75" : "hover:bg-accent/45"
+                    }`}
+                  >
+                    <span
+                      className={`flex h-5 w-5 shrink-0 items-center justify-center rounded border ${
+                        isSelected ? "border-emerald-500 bg-emerald-500/20 text-emerald-500" : "border-border text-transparent"
+                      }`}
+                    >
+                      <Check className="h-3.5 w-3.5" />
+                    </span>
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate text-[15px] font-medium text-foreground">{title}</p>
+                      <p className="truncate text-sm text-muted-foreground">{subtitle}</p>
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+
+            <div className="space-y-2 border-t border-border/80 px-4 py-3">
+              <p className="text-[11px] uppercase tracking-[0.2em] text-muted-foreground">Atau nomor baru</p>
+              <Input
+                value={forwardTargetPhone}
+                onChange={(event) => {
+                  setForwardTargetPhone(event.target.value);
+                }}
+                placeholder="Nomor tujuan (+62...)"
+                className="h-10 rounded-xl border-border bg-background"
+              />
+              <Input
+                value={forwardTargetName}
+                onChange={(event) => setForwardTargetName(event.target.value)}
+                placeholder="Nama kontak (opsional)"
+                className="h-10 rounded-xl border-border bg-background"
+              />
+              {forwardError ? <p className="text-sm text-destructive">{forwardError}</p> : null}
+              <div className="flex justify-end gap-2 pt-1">
+                <Button type="button" variant="ghost" onClick={() => setIsForwardOpen(false)}>
+                  Batal
+                </Button>
+                <Button type="button" className="bg-emerald-600 text-white hover:bg-emerald-500" onClick={() => void handleSubmitForwardMessage()} disabled={isForwarding}>
+                  {isForwarding ? "Meneruskan..." : "Teruskan"}
                 </Button>
               </div>
             </div>

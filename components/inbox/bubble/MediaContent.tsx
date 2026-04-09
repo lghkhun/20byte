@@ -1,9 +1,10 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import Image from "next/image";
 import { createPortal } from "react-dom";
-import { Download, FileText, PlayCircle, X } from "lucide-react";
+import { Download, ExternalLink, FileText, X } from "lucide-react";
 
 import type { MessageItem } from "@/components/inbox/types";
+import { normalizeRuntimeUrl } from "@/components/inbox/bubble/utils";
 import { Button } from "@/components/ui/button";
 import { useLocalImageCache } from "@/lib/client/localImageCache";
 import { useModalAccessibility } from "@/lib/a11y/useModalAccessibility";
@@ -185,7 +186,8 @@ function ImagePreview({ message }: { message: MessageItem }) {
 }
 
 function VideoPreview({ message }: { message: MessageItem }) {
-  const cachedMediaUrl = useLocalImageCache(message.mediaUrl, {
+  const normalizedSource = message.mediaUrl ? normalizeRuntimeUrl(message.mediaUrl) : null;
+  const cachedMediaUrl = useLocalImageCache(normalizedSource, {
     cacheKey: message.id ? `chat-media:${message.id}` : undefined,
     ttlMs: 12 * 60 * 60 * 1000,
     maxBytes: 4 * 1024 * 1024
@@ -193,7 +195,7 @@ function VideoPreview({ message }: { message: MessageItem }) {
   const [failed, setFailed] = useState(false);
   const [isOpen, setIsOpen] = useState(false);
   const [orientation, setOrientation] = useState<MediaOrientation>("unknown");
-  const mediaUrl = cachedMediaUrl ?? message.mediaUrl ?? null;
+  const mediaUrl = cachedMediaUrl ?? normalizedSource ?? null;
 
   if (!mediaUrl || failed) {
     return (
@@ -205,24 +207,21 @@ function VideoPreview({ message }: { message: MessageItem }) {
 
   return (
     <>
-      <button type="button" className="group relative mb-2 block overflow-hidden rounded-xl border border-border bg-background/60 text-left" onClick={() => setIsOpen(true)}>
-        <div className={`${bubbleMediaClass(orientation)} flex items-center justify-center bg-gradient-to-br from-muted/50 via-background/70 to-muted/30`}>
-          <video
-            preload="metadata"
-            className="pointer-events-none max-h-[460px] w-auto max-w-full object-contain opacity-80"
-            onLoadedMetadata={(event) => {
-              setOrientation(resolveOrientation(event.currentTarget.videoWidth, event.currentTarget.videoHeight));
-            }}
-            onError={() => setFailed(true)}
-          >
-            <source src={mediaUrl} type={message.mimeType ?? undefined} />
-          </video>
-          <div className="absolute inset-0 flex items-center justify-center">
-            <PlayCircle className="h-14 w-14 text-white/90 drop-shadow-lg transition group-hover:scale-105" />
-          </div>
-          <div className="absolute right-2 top-2 rounded-md bg-black/60 px-1.5 py-0.5 text-[11px] font-medium text-white">VIDEO</div>
-        </div>
-      </button>
+      <div className="mb-2">
+        <video
+          controls
+          preload="metadata"
+          className={`rounded-xl border border-border bg-black/80 ${bubbleMediaClass(orientation)}`}
+          onLoadedMetadata={(event) => {
+            setOrientation(resolveOrientation(event.currentTarget.videoWidth, event.currentTarget.videoHeight));
+          }}
+          onDoubleClick={() => setIsOpen(true)}
+          onError={() => setFailed(true)}
+        >
+          <source src={mediaUrl} type={message.mimeType ?? undefined} />
+          Browser tidak mendukung pemutaran video.
+        </video>
+      </div>
       <FullscreenMediaModal
         open={isOpen}
         onClose={() => setIsOpen(false)}
@@ -236,8 +235,9 @@ function VideoPreview({ message }: { message: MessageItem }) {
 }
 
 function AudioPreview({ message }: { message: MessageItem }) {
+  const mediaUrl = message.mediaUrl ? normalizeRuntimeUrl(message.mediaUrl) : null;
   const [failed, setFailed] = useState(false);
-  if (!message.mediaUrl || failed) {
+  if (!mediaUrl || failed) {
     return (
       <div className="mb-2 rounded-lg border border-border bg-background/40 px-3 py-2 text-xs text-muted-foreground">
         Audio unavailable
@@ -246,23 +246,66 @@ function AudioPreview({ message }: { message: MessageItem }) {
   }
 
   return (
-    <audio
-      controls
-      preload="metadata"
-      className="mb-2 w-full rounded-lg border border-border bg-background/50"
-      onError={() => setFailed(true)}
-    >
-      <source src={message.mediaUrl} type={message.mimeType ?? undefined} />
-      Browser tidak mendukung audio.
-    </audio>
+    <div className="mb-2 rounded-xl border border-border/80 bg-background/70 px-3 py-2">
+      <p className="mb-1 truncate text-xs font-medium text-foreground/80">{message.fileName ?? "Audio"}</p>
+      <audio
+        controls
+        preload="metadata"
+        className="w-full rounded-lg border border-border bg-background/50"
+        onError={() => setFailed(true)}
+      >
+        <source src={mediaUrl} type={message.mimeType ?? undefined} />
+        Browser tidak mendukung audio.
+      </audio>
+    </div>
   );
 }
 
 function DocumentDownload({ message }: { message: MessageItem }) {
-  if (!message.mediaUrl) {
+  const mediaUrl = message.mediaUrl ? normalizeRuntimeUrl(message.mediaUrl) : null;
+  if (!mediaUrl) {
     return (
       <div className="mb-2 rounded-lg border border-border bg-background/40 px-3 py-2 text-xs text-muted-foreground">
         Document unavailable
+      </div>
+    );
+  }
+
+  const normalizedMime = message.mimeType?.toLowerCase() ?? "";
+  const normalizedFileName = message.fileName?.toLowerCase() ?? "";
+  const isPdf = normalizedMime.includes("pdf") || normalizedFileName.endsWith(".pdf");
+
+  if (isPdf) {
+    const pdfEmbedUrl = `${mediaUrl}#view=FitH`;
+    return (
+      <div className="mb-2 overflow-hidden rounded-xl border border-border/80 bg-background/70">
+        <div className="flex items-center gap-3 border-b border-border/70 px-3 py-2.5">
+          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-border bg-card/80">
+            <FileText className="h-4 w-4 text-muted-foreground" />
+          </div>
+          <div className="min-w-0 flex-1">
+            <p className="truncate text-sm font-medium text-foreground">{message.fileName ?? "Document PDF"}</p>
+            <p className="truncate text-xs text-muted-foreground">{message.mimeType ?? "application/pdf"}</p>
+          </div>
+          <div className="flex items-center gap-1.5">
+            <Button asChild variant="ghost" size="icon" className="h-8 w-8 rounded-lg">
+              <a href={mediaUrl} target="_blank" rel="noreferrer" aria-label="Buka PDF">
+                <ExternalLink className="h-4 w-4" />
+              </a>
+            </Button>
+            <Button asChild variant="ghost" size="icon" className="h-8 w-8 rounded-lg">
+              <a href={mediaUrl} target="_blank" rel="noreferrer" download={message.fileName ?? undefined} aria-label="Unduh PDF">
+                <Download className="h-4 w-4" />
+              </a>
+            </Button>
+          </div>
+        </div>
+        <iframe
+          title={message.fileName ?? "PDF preview"}
+          src={pdfEmbedUrl}
+          className="h-64 w-full bg-white"
+          loading="lazy"
+        />
       </div>
     );
   }
@@ -278,8 +321,13 @@ function DocumentDownload({ message }: { message: MessageItem }) {
       </div>
       <div className="flex items-center gap-2">
         <Button asChild variant="secondary" size="sm" className="h-8 rounded-lg border border-border/70 px-3 text-xs">
-          <a href={message.mediaUrl} target="_blank" rel="noreferrer" download={message.fileName ?? undefined}>
+          <a href={mediaUrl} target="_blank" rel="noreferrer" download={message.fileName ?? undefined}>
             Unduh
+          </a>
+        </Button>
+        <Button asChild variant="ghost" size="sm" className="h-8 rounded-lg px-2.5 text-xs">
+          <a href={mediaUrl} target="_blank" rel="noreferrer">
+            Buka
           </a>
         </Button>
       </div>

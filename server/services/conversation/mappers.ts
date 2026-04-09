@@ -3,6 +3,23 @@ import type { ConversationStatus } from "@prisma/client";
 import type { ConversationSummary, ConversationListItem } from "@/server/services/conversation/types";
 import { resolveLastMessagePreview } from "@/server/services/conversation/utils";
 
+function parseGroupParticipantsJson(value: string | null | undefined): string[] {
+  const raw = value?.trim() ?? "";
+  if (!raw) {
+    return [];
+  }
+
+  try {
+    const parsed = JSON.parse(raw) as unknown;
+    if (!Array.isArray(parsed)) {
+      return [];
+    }
+    return parsed.filter((item): item is string => typeof item === "string" && item.trim().length > 0);
+  } catch {
+    return [];
+  }
+}
+
 export function sanitizeConversationAvatarUrl(value: string | null | undefined): string | null {
   const normalized = value?.trim() ?? "";
   if (!normalized) {
@@ -105,6 +122,15 @@ export function toConversationListItem(row: {
   crmStage?: {
     name: string;
   } | null;
+  assignedToMember?: {
+    user: {
+      name: string | null;
+    };
+  } | null;
+  lastMessageSenderName?: string | null;
+  groupParticipantsJson?: string | null;
+  shortlinkId?: string | null;
+  waChatJid?: string | null;
   messages?: Array<{
     text: string | null;
     type: string;
@@ -143,6 +169,11 @@ export function toConversationListItem(row: {
     sourceMedium: row.sourceMedium,
     status: row.status,
     assignedToMemberId: row.assignedToMemberId,
+    assignedToMemberName: row.assignedToMember?.user?.name ?? null,
+    lastMessageSenderName: row.lastMessageSenderName ?? null,
+    groupParticipants: parseGroupParticipantsJson(row.groupParticipantsJson),
+    shortlinkId: row.shortlinkId ?? null,
+    waChatJid: row.waChatJid ?? null,
     lastMessageAt: row.lastMessageAt,
     unreadCount: row.unreadCount,
     updatedAt: row.updatedAt

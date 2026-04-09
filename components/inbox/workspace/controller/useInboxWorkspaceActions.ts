@@ -74,12 +74,18 @@ export function useInboxWorkspaceActions(state: InboxWorkspaceState, loaders: In
         replyToMessageId: input.replyToMessageId ?? null,
         replyToWaMessageId: input.replyToWaMessageId ?? null,
         replyPreviewText: input.replyPreviewText ?? null,
+        replyPreviewSenderName: null,
+        senderWaJid: null,
+        senderPhoneE164: null,
+        senderDisplayName: null,
         direction: "OUTBOUND",
         type: input.type,
         text: input.text,
+        mediaId: null,
         mediaUrl: null,
         mimeType: null,
         fileName: null,
+        fileSize: null,
         templateName: input.templateName ?? null,
         templateCategory: input.templateCategory ?? null,
         templateLanguageCode: input.templateLanguageCode ?? null,
@@ -364,7 +370,7 @@ export function useInboxWorkspaceActions(state: InboxWorkspaceState, loaders: In
   const sendAttachmentMessage = useCallback(
     async (
       attachment: { file: File; fileName: string; mimeType: string; size: number },
-      options?: { replyToMessageId?: string | null }
+      options?: { replyToMessageId?: string | null; text?: string | null }
     ) => {
       if (!orgId || !selectedConversationId) {
         return;
@@ -378,6 +384,9 @@ export function useInboxWorkspaceActions(state: InboxWorkspaceState, loaders: In
       body.set("type", attachment.mimeType.startsWith("image/") ? "IMAGE" : attachment.mimeType.startsWith("video/") ? "VIDEO" : attachment.mimeType.startsWith("audio/") ? "AUDIO" : "DOCUMENT");
       if (options?.replyToMessageId) {
         body.set("replyToMessageId", options.replyToMessageId);
+      }
+      if (options?.text?.trim()) {
+        body.set("text", options.text.trim());
       }
       body.set("file", attachment.file, attachment.fileName);
 

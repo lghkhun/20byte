@@ -1,8 +1,5 @@
 import { ServiceError } from "@/server/services/serviceError";
 
-// Prisma MySQL default String column maps to varchar(191) unless explicitly annotated.
-export const MESSAGE_TEXT_DB_MAX_LENGTH = 191;
-
 export function normalize(value: string): string {
   return value.trim();
 }
@@ -68,7 +65,7 @@ export function normalizeMessageText(value: string | undefined): string | undefi
     return undefined;
   }
 
-  return normalized.length > MESSAGE_TEXT_DB_MAX_LENGTH ? normalized.slice(0, MESSAGE_TEXT_DB_MAX_LENGTH) : normalized;
+  return normalized;
 }
 
 export function normalizeSystemMessageText(value: string): string {
@@ -79,12 +76,10 @@ export function normalizeSystemMessageText(value: string): string {
 
   const suffix = " [Automated]";
   if (normalized.includes("[Automated]")) {
-    return normalized.length > MESSAGE_TEXT_DB_MAX_LENGTH ? normalized.slice(0, MESSAGE_TEXT_DB_MAX_LENGTH) : normalized;
+    return normalized;
   }
 
-  const availableBaseLength = Math.max(1, MESSAGE_TEXT_DB_MAX_LENGTH - suffix.length);
-  const base = normalized.length > availableBaseLength ? normalized.slice(0, availableBaseLength) : normalized;
-  return `${base}${suffix}`;
+  return `${normalized}${suffix}`;
 }
 
 export function parseTemplateComponentsJson(raw: string | null): Array<Record<string, unknown>> {

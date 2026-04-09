@@ -62,6 +62,17 @@ export async function sendOutboundMessage(input: SendOutboundMessageInput): Prom
 
   await requireInboxMembership(input.actorUserId, orgId);
   const conversation = await getConversationWithCustomer(orgId, conversationId);
+  const senderUser = await prisma.user.findUnique({
+    where: {
+      id: input.actorUserId
+    },
+    select: {
+      name: true,
+      phoneE164: true
+    }
+  });
+  const outboundSenderDisplayName = (senderUser?.name?.trim() || null)?.slice(0, 191) ?? null;
+  const outboundSenderPhoneE164 = (senderUser?.phoneE164?.trim() || null)?.slice(0, 191) ?? null;
   const destinationJid = normalize(conversation.waChatJid ?? "") || undefined;
   const replyToMessageId = normalize(input.replyToMessageId ?? "");
   const replyTarget = replyToMessageId
@@ -75,7 +86,9 @@ export async function sendOutboundMessage(input: SendOutboundMessageInput): Prom
           id: true,
           waMessageId: true,
           type: true,
-          text: true
+          text: true,
+          senderDisplayName: true,
+          senderPhoneE164: true
         }
       })
     : null;
@@ -91,6 +104,9 @@ export async function sendOutboundMessage(input: SendOutboundMessageInput): Prom
         text: replyTarget.text
       })
     : null;
+  const replyPreviewSenderName = replyTarget
+    ? replyTarget.senderDisplayName?.trim() || replyTarget.senderPhoneE164?.trim() || null
+    : null;
 
   if (input.type === "SYSTEM") {
     const text = normalizeSystemMessageText(input.text ?? "");
@@ -101,6 +117,9 @@ export async function sendOutboundMessage(input: SendOutboundMessageInput): Prom
       replyToMessageId: replyTarget?.id ?? null,
       replyToWaMessageId,
       replyPreviewText,
+      replyPreviewSenderName,
+      senderPhoneE164: outboundSenderPhoneE164,
+      senderDisplayName: outboundSenderDisplayName,
       text
     });
 
@@ -133,6 +152,9 @@ export async function sendOutboundMessage(input: SendOutboundMessageInput): Prom
       replyToMessageId: replyTarget?.id ?? null,
       replyToWaMessageId,
       replyPreviewText,
+      replyPreviewSenderName,
+      senderPhoneE164: outboundSenderPhoneE164,
+      senderDisplayName: outboundSenderDisplayName,
       text,
       sendStatus: "PENDING",
       retryable: false
@@ -221,6 +243,9 @@ export async function sendOutboundMessage(input: SendOutboundMessageInput): Prom
       replyToMessageId: replyTarget?.id ?? null,
       replyToWaMessageId,
       replyPreviewText,
+      replyPreviewSenderName,
+      senderPhoneE164: outboundSenderPhoneE164,
+      senderDisplayName: outboundSenderDisplayName,
       text: normalizeMessageText(input.text),
       mediaId,
       mediaUrl: input.mediaUrl,
@@ -323,6 +348,9 @@ export async function sendOutboundMessage(input: SendOutboundMessageInput): Prom
     replyToMessageId: replyTarget?.id ?? null,
     replyToWaMessageId,
     replyPreviewText,
+    replyPreviewSenderName,
+    senderPhoneE164: outboundSenderPhoneE164,
+    senderDisplayName: outboundSenderDisplayName,
     text: normalizeMessageText(input.text),
     templateName,
     templateCategory: input.templateCategory,

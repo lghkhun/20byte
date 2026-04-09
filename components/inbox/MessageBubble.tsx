@@ -1,6 +1,7 @@
 "use client";
 
-import { ChevronDown, Copy, CornerUpLeft, Info, Receipt } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
+import { ChevronDown, Copy, CornerUpLeft, Forward, Info, NotebookPen, Receipt, UserRound } from "lucide-react";
 
 import { MediaContent } from "@/components/inbox/bubble/MediaContent";
 import { formatTime, normalizeRuntimeUrl, renderMediaLabel } from "@/components/inbox/bubble/utils";
@@ -13,23 +14,82 @@ import {
   DropdownMenuTrigger
 } from "@/components/ui/dropdown-menu";
 
+type LinkPreviewItem = {
+  url: string;
+  title: string | null;
+  description: string | null;
+  image: string | null;
+  siteName: string | null;
+};
+
+type LinkPreviewResponse = {
+  data?: {
+    preview?: LinkPreviewItem;
+  };
+};
+
+const URL_REGEX_GLOBAL = /(https?:\/\/[^\s]+)/gi;
+const URL_REGEX_SINGLE = /(https?:\/\/[^\s]+)/i;
+const LINK_PREVIEW_CACHE_TTL_MS = 30 * 60 * 1000;
+const linkPreviewCache = new Map<string, { expiresAt: number; preview: LinkPreviewItem | null }>();
+
+function normalizeDetectedUrl(raw: string): { url: string; trailing: string } {
+  const trimmed = raw.trim();
+  const match = trimmed.match(/^(.*?)([),.!?:;"']*)$/);
+  if (!match) {
+    return {
+      url: trimmed,
+      trailing: ""
+    };
+  }
+
+  return {
+    url: match[1] ?? trimmed,
+    trailing: match[2] ?? ""
+  };
+}
+
+function extractFirstUrl(text: string | null): string | null {
+  if (!text) {
+    return null;
+  }
+
+  const match = text.match(URL_REGEX_SINGLE);
+  if (!match || !match[1]) {
+    return null;
+  }
+
+  const normalized = normalizeDetectedUrl(match[1]).url;
+  return /^https?:\/\//i.test(normalized) ? normalized : null;
+}
+
+function safeHostname(value: string): string {
+  try {
+    return new URL(value).hostname;
+  } catch {
+    return value;
+  }
+}
+
 function renderTextWithLinks(text: string) {
-  const urlRegex = /(https?:\/\/[^\s]+)/gi;
-  const parts = text.split(urlRegex);
+  const parts = text.split(URL_REGEX_GLOBAL);
 
   return parts.map((part, index) => {
     if (/^https?:\/\//i.test(part)) {
-      const normalizedUrl = normalizeRuntimeUrl(part);
+      const normalizedPart = normalizeDetectedUrl(part);
+      const normalizedUrl = normalizeRuntimeUrl(normalizedPart.url);
       return (
-        <a
-          key={`${part}-${index}`}
-          href={normalizedUrl}
-          target="_blank"
-          rel="noreferrer"
-          className="break-all text-primary underline underline-offset-2"
-        >
-          {normalizedUrl}
-        </a>
+        <span key={`${part}-${index}`}>
+          <a
+            href={normalizedUrl}
+            target="_blank"
+            rel="noreferrer"
+            className="break-all text-primary underline underline-offset-2"
+          >
+            {normalizedUrl}
+          </a>
+          {normalizedPart.trailing}
+        </span>
       );
     }
 
@@ -40,8 +100,12 @@ function renderTextWithLinks(text: string) {
 type MessageBubbleProps = {
   density?: "compact" | "comfy";
   isEmphasized?: boolean;
+  isGroupChat?: boolean;
   message: MessageItem;
   onReplyMessage?: (message: MessageItem) => void;
+  onReplyPrivatelyMessage?: (message: MessageItem) => void;
+  onForwardMessage?: (message: MessageItem) => void;
+  onCreateNoteFromMessage?: (message: MessageItem) => void;
   onSelectProofMessage?: (messageId: string) => void;
   onRetryOutboundMessage?: (messageId: string) => void;
 };
@@ -95,16 +159,73 @@ function resolveDeliveryIndicator(
 export function MessageBubble({
   density = "comfy",
   isEmphasized = false,
+  isGroupChat = false,
   message,
   onReplyMessage,
+  onReplyPrivatelyMessage,
+  onForwardMessage,
+  onCreateNoteFromMessage,
   onSelectProofMessage,
   onRetryOutboundMessage
 }: MessageBubbleProps) {
   const isOutbound = message.direction === "OUTBOUND";
   const mediaLabel = renderMediaLabel(message);
+  const firstLinkUrl = useMemo(() => extractFirstUrl(message.text), [message.text]);
+  const [linkPreview, setLinkPreview] = useState<LinkPreviewItem | null>(null);
   const canUseAsProof =
     !isOutbound && (message.type === "IMAGE" || message.type === "DOCUMENT") && Boolean(message.mediaUrl) && Boolean(onSelectProofMessage);
   const deliveryIndicator = resolveDeliveryIndicator(message);
+  const senderLabel = message.senderDisplayName?.trim() || message.senderPhoneE164?.trim() || null;
+
+  useEffect(() => {
+    if (!firstLinkUrl) {
+      setLinkPreview(null);
+      return;
+    }
+
+    const cached = linkPreviewCache.get(firstLinkUrl);
+    if (cached && cached.expiresAt > Date.now()) {
+      setLinkPreview(cached.preview);
+      return;
+    }
+
+    const controller = new AbortController();
+    void (async () => {
+      try {
+        const params = new URLSearchParams({ url: firstLinkUrl });
+        const response = await fetch(`/api/link-preview?${params.toString()}`, {
+          signal: controller.signal
+        });
+        if (!response.ok) {
+          linkPreviewCache.set(firstLinkUrl, {
+            expiresAt: Date.now() + LINK_PREVIEW_CACHE_TTL_MS,
+            preview: null
+          });
+          setLinkPreview(null);
+          return;
+        }
+
+        const payload = (await response.json().catch(() => null)) as LinkPreviewResponse | null;
+        const preview = payload?.data?.preview ?? null;
+        linkPreviewCache.set(firstLinkUrl, {
+          expiresAt: Date.now() + LINK_PREVIEW_CACHE_TTL_MS,
+          preview
+        });
+        setLinkPreview(preview);
+      } catch (error) {
+        if (error instanceof DOMException && error.name === "AbortError") {
+          return;
+        }
+        linkPreviewCache.set(firstLinkUrl, {
+          expiresAt: Date.now() + LINK_PREVIEW_CACHE_TTL_MS,
+          preview: null
+        });
+        setLinkPreview(null);
+      }
+    })();
+
+    return () => controller.abort();
+  }, [firstLinkUrl]);
 
   return (
     <div className={isOutbound ? "flex justify-end" : "flex justify-start"}>
@@ -120,6 +241,9 @@ export function MessageBubble({
         }
       >
         {message.type === "SYSTEM" ? <div className="mb-2 inline-flex rounded-full border border-primary/30 bg-primary/10 px-2 py-0.5 text-[10px] uppercase tracking-wider text-primary">System Notice</div> : null}
+        {isGroupChat && senderLabel ? (
+          <p className="mb-1 text-xs font-semibold text-foreground/80">~ {senderLabel}</p>
+        ) : null}
 
         {message.templateName ? (
           <p className="mb-1 text-xs text-muted-foreground">
@@ -133,6 +257,9 @@ export function MessageBubble({
             <p className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
               {isOutbound ? "Membalas" : "Balasan"}
             </p>
+            {isGroupChat && message.replyPreviewSenderName ? (
+              <p className="mb-0.5 text-[11px] font-semibold text-foreground/80">~ {message.replyPreviewSenderName}</p>
+            ) : null}
             <p className="line-clamp-2 break-words text-xs text-foreground/90">
               {message.replyPreviewText?.trim() || "Pesan yang dibalas"}
             </p>
@@ -152,6 +279,26 @@ export function MessageBubble({
           <p className="emoji-render whitespace-pre-wrap break-words text-sm leading-relaxed text-foreground">
             {renderTextWithLinks(message.text)}
           </p>
+        ) : null}
+        {linkPreview ? (
+          <a
+            href={linkPreview.url}
+            target="_blank"
+            rel="noreferrer"
+            className="mt-2 block overflow-hidden rounded-xl border border-border/70 bg-background/70 transition hover:border-primary/40"
+          >
+            {linkPreview.image ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img src={linkPreview.image} alt={linkPreview.title ?? "Link preview"} className="h-32 w-full object-cover" loading="lazy" />
+            ) : null}
+            <div className="space-y-1 px-3 py-2">
+              <p className="line-clamp-2 text-xs font-semibold text-foreground">{linkPreview.title || linkPreview.url}</p>
+              {linkPreview.description ? (
+                <p className="line-clamp-3 text-xs text-muted-foreground">{linkPreview.description}</p>
+              ) : null}
+              <p className="text-[11px] uppercase tracking-wide text-muted-foreground/80">{linkPreview.siteName || safeHostname(linkPreview.url)}</p>
+            </div>
+          </a>
         ) : null}
 
         {isOutbound && message.sendStatus === "FAILED" ? (
@@ -197,6 +344,15 @@ export function MessageBubble({
                 <CornerUpLeft className="h-4 w-4" />
                 Balas
               </DropdownMenuItem>
+              {onReplyPrivatelyMessage && message.direction === "INBOUND" && message.senderPhoneE164 ? (
+                <DropdownMenuItem
+                  onSelect={() => onReplyPrivatelyMessage(message)}
+                  className="flex items-center gap-2"
+                >
+                  <UserRound className="h-4 w-4" />
+                  Balas secara pribadi
+                </DropdownMenuItem>
+              ) : null}
               <DropdownMenuItem
                 onSelect={() => {
                   const text = message.text?.trim() || message.replyPreviewText?.trim() || "";
@@ -210,6 +366,24 @@ export function MessageBubble({
                 <Copy className="h-4 w-4" />
                 Salin
               </DropdownMenuItem>
+              {onForwardMessage ? (
+                <DropdownMenuItem
+                  onSelect={() => onForwardMessage(message)}
+                  className="flex items-center gap-2"
+                >
+                  <Forward className="h-4 w-4" />
+                  Teruskan
+                </DropdownMenuItem>
+              ) : null}
+              {onCreateNoteFromMessage ? (
+                <DropdownMenuItem
+                  onSelect={() => onCreateNoteFromMessage(message)}
+                  className="flex items-center gap-2"
+                >
+                  <NotebookPen className="h-4 w-4" />
+                  Catat
+                </DropdownMenuItem>
+              ) : null}
               {canUseAsProof ? (
                 <DropdownMenuItem
                   onSelect={() => onSelectProofMessage?.(message.id)}
