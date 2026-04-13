@@ -1,0 +1,104 @@
+name: 20byte-vps
+
+x-app-env: &app-env
+  NODE_ENV: production
+  DATABASE_URL: ${DATABASE_URL:-mysql://${MYSQL_USER:-app}:${MYSQL_PASSWORD:-change-this-password}@20byte_mysql:3306/${MYSQL_DATABASE:-20byte}}
+  REDIS_URL: ${REDIS_URL:-redis://20byte_redis:6379}
+  NEXTAUTH_SECRET: ${NEXTAUTH_SECRET:?NEXTAUTH_SECRET is required}
+  NEXTAUTH_URL: ${NEXTAUTH_URL:?NEXTAUTH_URL is required}
+  APP_URL: ${APP_URL:?APP_URL is required}
+  SHORTLINK_BASE_URL: ${SHORTLINK_BASE_URL:-${APP_URL:?APP_URL is required}/r}
+  ABLY_API_KEY: ${ABLY_API_KEY:-}
+  RESEND_API_KEY: ${RESEND_API_KEY:-}
+  RESEND_FROM_EMAIL: ${RESEND_FROM_EMAIL:-}
+  RESEND_REPLY_TO_EMAIL: ${RESEND_REPLY_TO_EMAIL:-}
+  R2_ACCOUNT_ID: ${R2_ACCOUNT_ID:-}
+  R2_ACCESS_KEY_ID: ${R2_ACCESS_KEY_ID:-}
+  R2_SECRET_ACCESS_KEY: ${R2_SECRET_ACCESS_KEY:-}
+  R2_BUCKET: ${R2_BUCKET:-}
+  R2_PUBLIC_URL: ${R2_PUBLIC_URL:-}
+  WHATSAPP_MOCK_MODE: ${WHATSAPP_MOCK_MODE:-false}
+  PAKASIR_PROJECT_SLUG: ${PAKASIR_PROJECT_SLUG:-}
+  PAKASIR_API_KEY: ${PAKASIR_API_KEY:-}
+  PAKASIR_BASE_URL: ${PAKASIR_BASE_URL:-https://app.pakasir.com}
+  PAKASIR_DEFAULT_METHOD: ${PAKASIR_DEFAULT_METHOD:-qris}
+  PAKASIR_WEBHOOK_PATH: ${PAKASIR_WEBHOOK_PATH:-/api/billing/webhooks/pakasir}
+  PAKASIR_WEBHOOK_TOKEN: ${PAKASIR_WEBHOOK_TOKEN:-}
+  SUPERADMIN_EMAILS: ${SUPERADMIN_EMAILS:-}
+
+x-app-base: &app-base
+  image: ${APP_IMAGE:-20byte-vps-app:latest}
+  restart: unless-stopped
+  init: true
+  environment:
+    <<: *app-env
+  volumes:
+    - runtime_data:/app/.runtime
+
+services:
+  app-image:
+    <<: *app-base
+    build:
+      context: .
+      dockerfile: Dockerfile
+    command: ["npm", "run", "start"]
+
+  migrate:
+    <<: *app-base
+    container_name: 20byte_bg_migrate
+    restart: "no"
+    environment:
+      <<: *app-env
+      RUN_PRISMA_MIGRATE: "1"
+    command: ["sh", "-c", "exit 0"]
+
+  worker:
+    <<: *app-base
+    container_name: 20byte_bg_worker
+    command: ["npm", "run", "worker:start"]
+
+  web-blue:
+    <<: *app-base
+    container_name: 20byte_bg_web_blue
+    ports:
+      - "127.0.0.1:${WEB_BLUE_PORT:-3100}:3000"
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "fetch('http://127.0.0.1:3000/api/health').then((response)=>{process.exit(response.ok?0:1);}).catch(()=>process.exit(1));"
+        ]
+      interval: 20s
+      timeout: 10s
+      retries: 10
+      start_period: 45s
+
+  web-green:
+    <<: *app-base
+    container_name: 20byte_bg_web_green
+    ports:
+      - "127.0.0.1:${WEB_GREEN_PORT:-3200}:3000"
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "fetch('http://127.0.0.1:3000/api/health').then((response)=>{process.exit(response.ok?0:1);}).catch(()=>process.exit(1));"
+        ]
+      interval: 20s
+      timeout: 10s
+      retries: 10
+      start_period: 45s
+
+volumes:
+  runtime_data:
+    external: true
+    name: 20byte_runtime_data
+
+networks:
+  default:
+    external: true
+    name: 20byte_default

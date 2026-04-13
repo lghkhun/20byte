@@ -1,6 +1,6 @@
 services:
   web:
-    command: ["sh", "-c", "npx prisma generate && npm run dev"]
+    command: ["npm", "run", "dev"]
     environment:
       NODE_ENV: development
       NEXTAUTH_URL: http://localhost:${APP_PORT:-3000}
@@ -13,7 +13,7 @@ services:
       - app_next:/app/.next
 
   worker:
-    command: ["sh", "-c", "npx prisma generate && npm run worker:start"]
+    command: ["npm", "run", "worker:start"]
     environment:
       NODE_ENV: development
       WHATSAPP_MOCK_MODE: ${WHATSAPP_MOCK_MODE:-true}

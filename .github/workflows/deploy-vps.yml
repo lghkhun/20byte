@@ -10,9 +10,6 @@ jobs:
   deploy:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
       - name: Configure SSH
         env:
           VPS_HOST: ${{ secrets.VPS_HOST }}
@@ -23,37 +20,19 @@ jobs:
           mkdir -p ~/.ssh
           printf '%s\n' "$VPS_SSH_KEY" > ~/.ssh/id_ed25519
           chmod 600 ~/.ssh/id_ed25519
-          ssh-keyscan -p "${VPS_PORT:-22}" "$VPS_HOST" >> ~/.ssh/known_hosts
-
-      - name: Sync Project To VPS
-        env:
-          VPS_HOST: ${{ secrets.VPS_HOST }}
-          VPS_PORT: ${{ secrets.VPS_PORT }}
-          VPS_USER: ${{ secrets.VPS_USER }}
-          VPS_PATH: ${{ secrets.VPS_PATH }}
-        run: |
-          set -eu
-          ssh -p "${VPS_PORT:-22}" "$VPS_USER@$VPS_HOST" "mkdir -p '$VPS_PATH'"
-          rsync -az --delete \
-            --exclude '.git' \
-            --exclude '.github' \
-            --exclude 'node_modules' \
-            --exclude '.next' \
-            --exclude '.env' \
-            --exclude '.runtime' \
-            ./ "$VPS_USER@$VPS_HOST:$VPS_PATH/"
+          ssh-keyscan -H -p "${VPS_PORT:-22}" "$VPS_HOST" >> ~/.ssh/known_hosts
 
       - name: Deploy On VPS
         env:
           VPS_HOST: ${{ secrets.VPS_HOST }}
           VPS_PORT: ${{ secrets.VPS_PORT }}
           VPS_USER: ${{ secrets.VPS_USER }}
-          VPS_PATH: ${{ secrets.VPS_PATH }}
+          VPS_PATH: /srv/20byte
         run: |
           set -eu
           ssh -p "${VPS_PORT:-22}" "$VPS_USER@$VPS_HOST" "
             set -eu
             cd '$VPS_PATH'
-            chmod +x scripts/deploy.sh scripts/docker-entrypoint.sh
+            chmod +x scripts/deploy.sh scripts/bootstrap-vps.sh scripts/docker-entrypoint.sh
             ./scripts/deploy.sh
           "

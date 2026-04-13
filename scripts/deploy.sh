@@ -4,37 +4,172 @@ set -eu
 ROOT_DIR="$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)"
 cd "$ROOT_DIR"
 
-if [ ! -f ".env" ]; then
-  echo "[deploy] missing .env in $ROOT_DIR"
-  echo "[deploy] copy .env.docker.example to .env and fill production values first"
-  exit 1
-fi
+SUDO="${SUDO:-sudo}"
+PROJECT_NAME="${COMPOSE_PROJECT_NAME:-20byte-vps}"
+DOCKER_BIN="${DOCKER_BIN:-docker}"
+BRANCH="${DEPLOY_BRANCH:-main}"
+NGINX_UPSTREAM_SNIPPET="${NGINX_UPSTREAM_SNIPPET:-/etc/nginx/snippets/20byte-active-upstream.conf}"
+ACTIVE_COLOR_FILE="${ACTIVE_COLOR_FILE:-$ROOT_DIR/.deploy/active_color}"
+WEB_BLUE_PORT="${WEB_BLUE_PORT:-3100}"
+WEB_GREEN_PORT="${WEB_GREEN_PORT:-3200}"
+HEALTH_PATH="${HEALTH_PATH:-/api/health}"
+HEALTH_RETRIES="${HEALTH_RETRIES:-30}"
+HEALTH_DELAY="${HEALTH_DELAY:-5}"
+SKIP_GIT_SYNC="${SKIP_GIT_SYNC:-0}"
+KEEP_OLD_WEB="${KEEP_OLD_WEB:-0}"
 
-COMPOSE_CMD="${COMPOSE_CMD:-docker compose -f docker-compose.yml}"
-PROJECT_NAME="${COMPOSE_PROJECT_NAME:-20byte}"
+as_root() {
+  if [ "$(id -u)" -eq 0 ]; then
+    "$@"
+  else
+    "$SUDO" "$@"
+  fi
+}
+
+compose() {
+  as_root "$DOCKER_BIN" compose -f docker-compose.vps.yml --project-name "$PROJECT_NAME" "$@"
+}
+
+require_file() {
+  if [ ! -f "$1" ]; then
+    echo "[deploy] missing required file: $1"
+    exit 1
+  fi
+}
+
+detect_active_color() {
+  if [ -f "$ACTIVE_COLOR_FILE" ]; then
+    color="$(tr -d '[:space:]' <"$ACTIVE_COLOR_FILE")"
+    if [ "$color" = "blue" ] || [ "$color" = "green" ]; then
+      printf '%s\n' "$color"
+      return
+    fi
+  fi
+
+  if [ -f "$NGINX_UPSTREAM_SNIPPET" ]; then
+    if grep -q "127.0.0.1:$WEB_BLUE_PORT" "$NGINX_UPSTREAM_SNIPPET"; then
+      printf 'blue\n'
+      return
+    fi
+    if grep -q "127.0.0.1:$WEB_GREEN_PORT" "$NGINX_UPSTREAM_SNIPPET"; then
+      printf 'green\n'
+      return
+    fi
+  fi
+
+  printf 'legacy\n'
+}
+
+inactive_color_for() {
+  case "$1" in
+    blue) printf 'green\n' ;;
+    green) printf 'blue\n' ;;
+    *) printf 'blue\n' ;;
+  esac
+}
+
+port_for_color() {
+  case "$1" in
+    blue) printf '%s\n' "$WEB_BLUE_PORT" ;;
+    green) printf '%s\n' "$WEB_GREEN_PORT" ;;
+    *)
+      echo "[deploy] unknown color: $1"
+      exit 1
+      ;;
+  esac
+}
+
+write_upstream_snippet() {
+  port="$1"
+  tmpfile="$(mktemp)"
+  printf 'proxy_pass http://127.0.0.1:%s;\n' "$port" >"$tmpfile"
+  as_root install -m 644 "$tmpfile" "$NGINX_UPSTREAM_SNIPPET"
+  rm -f "$tmpfile"
+}
+
+wait_for_health() {
+  port="$1"
+  attempt=1
+  while [ "$attempt" -le "$HEALTH_RETRIES" ]; do
+    if curl -fsS "http://127.0.0.1:${port}${HEALTH_PATH}" >/dev/null 2>&1; then
+      echo "[deploy] healthcheck passed on port $port"
+      return 0
+    fi
+    echo "[deploy] waiting for healthcheck on port $port (attempt $attempt/$HEALTH_RETRIES)"
+    attempt=$((attempt + 1))
+    sleep "$HEALTH_DELAY"
+  done
+  echo "[deploy] healthcheck failed on port $port"
+  return 1
+}
+
+stop_legacy_container_if_present() {
+  name="$1"
+  if as_root docker ps -a --format '{{.Names}}' | grep -qx "$name"; then
+    echo "[deploy] stopping legacy container $name"
+    as_root docker stop "$name" >/dev/null || true
+  fi
+}
+
+require_file ".env"
+require_file "docker-compose.vps.yml"
+require_file "deploy/nginx/20byte.production.conf"
+
+mkdir -p "$ROOT_DIR/.deploy"
+
+if [ "$SKIP_GIT_SYNC" != "1" ]; then
+  echo "[deploy] syncing git branch origin/$BRANCH"
+  git fetch origin "$BRANCH"
+  git reset --hard "origin/$BRANCH"
+  git clean -fd
+fi
 
 echo "[deploy] validating docker compose config..."
-$COMPOSE_CMD --project-name "$PROJECT_NAME" config >/dev/null
+compose config >/dev/null
 
-echo "[deploy] pulling base images..."
-$COMPOSE_CMD --project-name "$PROJECT_NAME" pull mysql redis || true
+active_color="$(detect_active_color)"
+inactive_color="$(inactive_color_for "$active_color")"
+inactive_port="$(port_for_color "$inactive_color")"
+inactive_service="web-$inactive_color"
+
+echo "[deploy] active color: $active_color"
+echo "[deploy] inactive color: $inactive_color ($inactive_port)"
 
 echo "[deploy] building application images..."
-$COMPOSE_CMD --project-name "$PROJECT_NAME" build web worker migrate
+compose build app-image
 
-echo "[deploy] starting stack..."
-$COMPOSE_CMD --project-name "$PROJECT_NAME" up -d
+echo "[deploy] running database migrations..."
+compose run --rm migrate
 
-echo "[deploy] current status:"
-$COMPOSE_CMD --project-name "$PROJECT_NAME" ps
+echo "[deploy] starting inactive web service: $inactive_service"
+compose up -d "$inactive_service"
 
-echo "[deploy] checking local health endpoint..."
-if command -v curl >/dev/null 2>&1; then
-  curl -fsS "http://127.0.0.1:${APP_PORT:-3000}/api/health" >/dev/null
-  echo "[deploy] healthcheck passed"
-else
-  echo "[deploy] curl not found, skipping local health probe"
+wait_for_health "$inactive_port"
+
+echo "[deploy] switching nginx upstream to $inactive_color"
+write_upstream_snippet "$inactive_port"
+as_root nginx -t
+as_root systemctl reload nginx
+
+printf '%s\n' "$inactive_color" >"$ACTIVE_COLOR_FILE"
+
+if [ "$active_color" = "legacy" ]; then
+  stop_legacy_container_if_present "20byte_worker"
 fi
 
-echo "[deploy] tail logs if needed:"
-echo "  $COMPOSE_CMD --project-name \"$PROJECT_NAME\" logs -f migrate web worker"
+echo "[deploy] recreating worker"
+compose up -d --force-recreate worker
+
+if [ "$active_color" = "legacy" ]; then
+  if [ "$KEEP_OLD_WEB" != "1" ]; then
+    stop_legacy_container_if_present "20byte_web"
+  fi
+elif [ "$KEEP_OLD_WEB" != "1" ]; then
+  echo "[deploy] stopping old web service web-$active_color"
+  compose stop "web-$active_color" || true
+fi
+
+echo "[deploy] current status:"
+compose ps
+
+echo "[deploy] active production color is now $inactive_color"

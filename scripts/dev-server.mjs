@@ -6,7 +6,7 @@ import path from "node:path";
 
 const rootDir = process.cwd();
 const nextCacheDir = path.join(rootDir, ".next", "cache");
-const DEV_PORT = 3000;
+const DEV_PORT = Number(process.env.APP_PORT || "3000");
 
 function readCmdline(pid) {
   try {

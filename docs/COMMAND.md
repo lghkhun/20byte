@@ -1,6 +1,12 @@
+npm run dev
+npm run db:migrate
+npm run db:push
+npm run db:studio
+npm run tunnel:vps
 npm run up
 npm run down
 npm run restart
 npm run rebuild
 npm run logs
 npm run ps
+npm run vps:deploy
