@@ -280,9 +280,6 @@ export default async function DashboardPage({
                 <p className="text-[15px] font-bold tracking-tight text-primary">{business.name}</p>
               </div>
             </div>
-            <Badge variant="outline" className="rounded-xl border-border/80 bg-muted/30 px-3 py-1.5 font-mono text-[13px] font-medium text-muted-foreground shadow-sm">
-              {formatDateParam(rangeFrom)} &mdash; {formatDateParam(rangeTo)}
-            </Badge>
           </div>
           <div className="flex shrink-0">
             <DashboardDateRangePicker from={formatDateParam(rangeFrom)} to={formatDateParam(rangeTo)} />

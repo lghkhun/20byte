@@ -135,6 +135,8 @@ export async function listConversations(input: ListConversationsInput): Promise<
         lastMessageAt: true,
         unreadCount: true,
         updatedAt: true,
+        lastMessageSenderName: true,
+        groupParticipantsJson: true,
         shortlinkId: true,
         waChatJid: true,
         crmPipeline: {
@@ -166,7 +168,9 @@ export async function listConversations(input: ListConversationsInput): Promise<
             text: true,
             type: true,
             direction: true,
-            fileName: true
+            fileName: true,
+            senderDisplayName: true,
+            senderPhoneE164: true
           }
         },
         assignedToMember: {
@@ -260,6 +264,8 @@ export async function getConversationById(
       lastMessageAt: true,
       unreadCount: true,
       updatedAt: true,
+      lastMessageSenderName: true,
+      groupParticipantsJson: true,
       shortlinkId: true,
       waChatJid: true,
       crmPipeline: {
@@ -291,7 +297,9 @@ export async function getConversationById(
           text: true,
           type: true,
           direction: true,
-          fileName: true
+          fileName: true,
+          senderDisplayName: true,
+          senderPhoneE164: true
         }
       },
       assignedToMember: {

@@ -6,6 +6,7 @@ import { ServiceError } from "@/server/services/serviceError";
 
 type UpdateMetaIntegrationRequest = {
   orgId?: unknown;
+  datasetId?: unknown;
   pixelId?: unknown;
   accessToken?: unknown;
   testEventCode?: unknown;
@@ -62,8 +63,9 @@ export async function PATCH(request: NextRequest) {
     return errorResponse(400, "INVALID_JSON", "Request body must be valid JSON.");
   }
 
-  if (typeof body.pixelId !== "string" || !body.pixelId.trim()) {
-    return errorResponse(400, "INVALID_META_PIXEL_ID", "pixelId is required.");
+  const datasetIdInput = typeof body.datasetId === "string" ? body.datasetId : typeof body.pixelId === "string" ? body.pixelId : "";
+  if (!datasetIdInput.trim()) {
+    return errorResponse(400, "INVALID_META_DATASET_ID", "datasetId is required.");
   }
 
   if (typeof body.enabled !== "boolean") {
@@ -82,7 +84,7 @@ export async function PATCH(request: NextRequest) {
     const integration = await upsertMetaIntegration({
       actorUserId: auth.session.userId,
       orgId: typeof body.orgId === "string" ? body.orgId : undefined,
-      pixelId: body.pixelId,
+      datasetId: datasetIdInput,
       accessToken: typeof body.accessToken === "string" ? body.accessToken : undefined,
       testEventCode: typeof body.testEventCode === "string" ? body.testEventCode : null,
       enabled: body.enabled

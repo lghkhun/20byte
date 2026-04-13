@@ -20,12 +20,18 @@ export async function loadInvoiceForMarkPaid(orgId: string, invoiceId: string) {
       totalCents: true,
       customer: {
         select: {
+          id: true,
           phoneE164: true
         }
       },
       conversation: {
         select: {
-          trackingId: true
+          trackingId: true,
+          fbclid: true,
+          fbc: true,
+          fbp: true,
+          ctwaClid: true,
+          wabaId: true
         }
       },
       milestones: {

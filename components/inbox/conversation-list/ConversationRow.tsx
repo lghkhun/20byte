@@ -13,6 +13,24 @@ type ConversationRowProps = {
   onSelect: (conversationId: string) => void;
 };
 
+function MetaBadgeLogo() {
+  return (
+    <svg
+      aria-hidden="true"
+      viewBox="0 0 24 24"
+      className="h-3.5 w-3.5 shrink-0"
+      fill="none"
+      xmlns="http://www.w3.org/2000/svg"
+    >
+      <circle cx="12" cy="12" r="12" className="fill-sky-500 dark:fill-sky-400" />
+      <path
+        d="M4.92 12.48C4.92 9.34 6.52 7.22 8.78 7.22C10.27 7.22 11.45 8.12 12.86 10.16C14.16 8.13 15.36 7.22 16.82 7.22C19.09 7.22 20.68 9.34 20.68 12.48C20.68 15.58 19.09 17.78 16.82 17.78C15.27 17.78 14.05 16.9 12.64 14.84C11.35 16.87 10.15 17.78 8.78 17.78C6.52 17.78 4.92 15.58 4.92 12.48ZM7.01 12.48C7.01 14.44 7.88 16.05 9.23 16.05C10.2 16.05 11 15.38 12.17 13.57L9.95 10.55C9.22 9.57 8.6 8.95 7.95 8.95C7.06 8.95 7.01 10.54 7.01 12.48ZM12.64 10.94L14.84 13.95C15.57 14.94 16.23 16.05 17.1 16.05C18.53 16.05 18.59 14.44 18.59 12.48C18.59 10.53 18.53 8.95 17.1 8.95C16.09 8.95 15.27 9.72 14.12 11.36L13.3 12.54L12.64 10.94Z"
+        className="fill-white"
+      />
+    </svg>
+  );
+}
+
 export function ConversationRow({ density, conversation, isSelected, nowMs, onSelect }: ConversationRowProps) {
   const [avatarError, setAvatarError] = useState(false);
   const cachedCustomerAvatarUrl = useLocalImageCache(conversation.customerAvatarUrl, {
@@ -32,6 +50,16 @@ export function ConversationRow({ density, conversation, isSelected, nowMs, onSe
     conversation.lastMessageDirection === "INBOUND" &&
     (conversation.lastMessageType === "IMAGE" || conversation.lastMessageType === "DOCUMENT");
   const isGroup = conversation.waChatJid?.endsWith("@g.us");
+  const senderLabel = conversation.lastMessageSenderName?.trim() || "Kontak";
+  const rawDisplayName = conversation.customerDisplayName?.trim() || null;
+  const hasSuspiciousSelfNameOnPersonal =
+    !isGroup &&
+    Boolean(rawDisplayName) &&
+    conversation.lastMessageDirection === "OUTBOUND" &&
+    rawDisplayName === (conversation.lastMessageSenderName?.trim() || null);
+  const resolvedConversationName = hasSuspiciousSelfNameOnPersonal
+    ? conversation.customerPhoneE164
+    : rawDisplayName ?? conversation.customerPhoneE164;
   const tooltipText = [
     `Source: ${conversation.source ?? "-"}`,
     `Campaign: ${conversation.sourceCampaign ?? "-"}`,
@@ -43,7 +71,8 @@ export function ConversationRow({ density, conversation, isSelected, nowMs, onSe
     ? {
         label: "Shortlink",
         className:
-          "rounded border border-indigo-500/40 bg-indigo-500/10 px-1.5 py-0.5 text-[10px] font-medium text-indigo-700 dark:text-indigo-300"
+          "rounded border border-indigo-500/40 bg-indigo-500/10 px-1.5 py-0.5 text-[10px] font-medium text-indigo-700 dark:text-indigo-300",
+        isMeta: false
       }
     : sourceBadge;
 
@@ -117,26 +146,31 @@ export function ConversationRow({ density, conversation, isSelected, nowMs, onSe
         <div className="min-w-0 flex-1">
           <div className="flex items-start justify-between gap-2">
             <span className="truncate text-sm font-semibold text-foreground">
-              {conversation.customerDisplayName ?? conversation.customerPhoneE164}
+              {resolvedConversationName}
             </span>
             <span className="text-[11px] text-muted-foreground">{formatTimestamp(activityTimestamp, nowMs)}</span>
           </div>
           <div className={`${density === "compact" ? "mt-1" : "mt-1.5"} flex items-center gap-1`}>
             <span className="line-clamp-1 text-xs text-muted-foreground font-medium">
-              {isGroup && conversation.lastMessageSenderName && (
-                <span className="text-foreground/70">~{conversation.lastMessageSenderName}: </span>
+              {isGroup && (
+                <span className="text-foreground/70">~{senderLabel}: </span>
               )}
               {conversation.lastMessagePreview ?? "No message preview yet"}
             </span>
           </div>
           <div className={`${density === "compact" ? "mt-2" : "mt-2.5"} flex items-center justify-between gap-2`}>
             <div className="flex min-w-0 items-center gap-2">
-              <span className={displaySourceBadge.className} title={tooltipText}>
-                {displaySourceBadge.label}
-              </span>
-              <span className="truncate text-[11px] text-muted-foreground max-w-[100px]" title={conversation.assignedToMemberName ?? undefined}>
-                {conversation.assignedToMemberName ? conversation.assignedToMemberName : "Unassigned"}
-              </span>
+              {displaySourceBadge ? (
+                <span className={displaySourceBadge.className} title={tooltipText}>
+                  {displaySourceBadge.isMeta ? <MetaBadgeLogo /> : null}
+                  <span>{displaySourceBadge.label}</span>
+                </span>
+              ) : null}
+              {conversation.assignedToMemberName ? (
+                <span className="truncate text-[11px] text-muted-foreground max-w-[100px]" title={conversation.assignedToMemberName}>
+                  {conversation.assignedToMemberName}
+                </span>
+              ) : null}
             </div>
             <div className="flex items-center gap-2">
               <span

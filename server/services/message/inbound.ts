@@ -1,5 +1,6 @@
 import { extractInvisibleAttributionMarker } from "@/lib/attribution/invisibleMarker";
 import { extractTrackingRef } from "@/lib/attribution/trackingRef";
+import { prisma } from "@/lib/db/prisma";
 import { enqueueMetaEventJob } from "@/server/queues/metaEventQueue";
 import type { Prisma } from "@prisma/client";
 
@@ -44,6 +45,11 @@ function buildInboundContext(input: StoreInboundMessageInput) {
     senderDisplayName: normalizeOptional(input.senderDisplayName),
     shortlinkCode: resolvedShortlinkCode,
     trackingId: normalizeOptional(input.trackingId) ?? trackingExtract.trackingId,
+    fbclid: normalizeOptional(input.fbclid),
+    fbc: normalizeOptional(input.fbc),
+    fbp: normalizeOptional(input.fbp),
+    ctwaClid: normalizeOptional(input.ctwaClid),
+    wabaId: normalizeOptional(input.wabaId),
     replyToWaMessageId: normalizeOptional(input.replyToWaMessageId),
     replyPreviewText: normalizeMessageText(input.replyPreviewText),
     text: normalizeMessageText(invisibleExtract.cleanText),
@@ -75,7 +81,13 @@ function resolveConversationAttribution(
     ad: customer.ad ?? customer.medium ?? attribution?.ad ?? attribution?.medium ?? undefined,
     platform: customer.platform ?? customer.adset ?? attribution?.adset ?? attribution?.platform ?? undefined,
     medium: customer.medium ?? customer.ad ?? attribution?.ad ?? attribution?.medium ?? undefined,
-    shortlinkId: attribution?.shortlinkId
+    shortlinkId: attribution?.shortlinkId,
+    trackingId: attribution?.trackingId,
+    fbclid: attribution?.fbclid,
+    fbc: attribution?.fbc,
+    fbp: attribution?.fbp,
+    ctwaClid: attribution?.ctwaClid,
+    wabaId: attribution?.wabaId
   };
 }
 
@@ -103,7 +115,12 @@ export async function storeInboundMessage(input: StoreInboundMessageInput): Prom
         platform: resolved?.platform,
         medium: resolved?.medium,
         shortlinkId: resolved?.shortlinkId,
-        trackingId: context.trackingId
+        trackingId: context.trackingId,
+        fbclid: resolved?.fbclid ?? context.fbclid,
+        fbc: resolved?.fbc ?? context.fbc,
+        fbp: resolved?.fbp ?? context.fbp,
+        ctwaClid: context.ctwaClid,
+        wabaId: context.wabaId
       };
     },
     getOrCreateCustomer: async (tx: Prisma.TransactionClient, attribution) =>
@@ -132,13 +149,33 @@ export async function storeInboundMessage(input: StoreInboundMessageInput): Prom
     status: createdMessage.conversationStatus
   });
 
-  if (createdMessage.conversationCreated && context.trackingId) {
+  if (createdMessage.customerCreated) {
+    const conversationAttribution = await prisma.conversation.findFirst({
+      where: {
+        id: createdMessage.conversationId,
+        orgId: context.orgId
+      },
+      select: {
+        trackingId: true,
+        fbclid: true,
+        fbc: true,
+        fbp: true,
+        ctwaClid: true,
+        wabaId: true
+      }
+    });
     void enqueueMetaEventJob({
       orgId: context.orgId,
-      kind: "CHAT_STARTED",
-      conversationId: createdMessage.conversationId,
-      trackingId: context.trackingId,
-      customerPhoneE164: context.customerPhoneE164
+      kind: "LEAD",
+      customerId: createdMessage.customerId,
+      dedupeKey: `lead:${createdMessage.customerId}`,
+      trackingId: conversationAttribution?.trackingId ?? context.trackingId,
+      customerPhoneE164: context.customerPhoneE164,
+      fbclid: conversationAttribution?.fbclid ?? context.fbclid,
+      fbc: conversationAttribution?.fbc ?? context.fbc,
+      fbp: conversationAttribution?.fbp ?? context.fbp,
+      ctwaClid: conversationAttribution?.ctwaClid ?? context.ctwaClid,
+      wabaId: conversationAttribution?.wabaId ?? context.wabaId
     }).catch(() => undefined);
   }
 

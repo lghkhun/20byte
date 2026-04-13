@@ -31,13 +31,12 @@ export function useInboxWorkspaceShortcuts(input: UseInboxWorkspaceShortcutsInpu
         return;
       }
 
+      const key = event.key.toLowerCase();
       const target = event.target as HTMLElement | null;
       const isTypingTarget = target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement || target?.isContentEditable === true;
-      if (isTypingTarget) {
+      if (isTypingTarget && key !== "escape") {
         return;
       }
-
-      const key = event.key.toLowerCase();
       if (event.ctrlKey && key === "/") {
         event.preventDefault();
         setIsShortcutHelpOpen((current) => !current);

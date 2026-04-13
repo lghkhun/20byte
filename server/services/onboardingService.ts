@@ -71,6 +71,7 @@ export async function getOwnerOnboardingStatus(userId: string): Promise<OwnerOnb
     prisma.metaIntegration.findUnique({
       where: { orgId: primaryOrganization.id },
       select: {
+        datasetId: true,
         pixelId: true,
         accessTokenEnc: true,
         isEnabled: true
@@ -98,7 +99,7 @@ export async function getOwnerOnboardingStatus(userId: string): Promise<OwnerOnb
 
   const metaReady = Boolean(
     metaIntegration?.isEnabled &&
-      hasText(metaIntegration.pixelId) &&
+      (hasText(metaIntegration.datasetId) || hasText(metaIntegration.pixelId)) &&
       hasText(metaIntegration.accessTokenEnc)
   );
 

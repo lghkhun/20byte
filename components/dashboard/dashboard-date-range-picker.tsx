@@ -85,8 +85,10 @@ export function DashboardDateRangePicker({ from, to }: DashboardDateRangePickerP
           type="button"
           variant="outline"
           className={cn(
-            "h-10 rounded-xl border-border/70 bg-background/70",
-            selectedDayCount === days && "border-primary/30 bg-primary text-primary-foreground hover:bg-primary/90 hover:text-primary-foreground"
+            "h-10 rounded-xl transition-colors",
+            selectedDayCount === days 
+              ? "border-emerald-600 bg-emerald-500 text-white hover:bg-emerald-600 hover:text-white" 
+              : "border-border/70 bg-background/70 hover:bg-muted/60 text-muted-foreground"
           )}
           onClick={() => applyPreset(days)}
         >

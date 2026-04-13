@@ -78,7 +78,7 @@ export async function POST(request: NextRequest) {
       return errorResponse(400, "PHONE_REQUIRED", "Phone number is required to send test event.");
     }
 
-    const endpoint = new URL(`https://graph.facebook.com/v18.0/${runtime.pixelId}/events`);
+    const endpoint = new URL(`https://graph.facebook.com/v18.0/${runtime.datasetId}/events`);
     const eventId = `test_${randomUUID().replace(/-/g, "").slice(0, 16)}`;
 
     const response = await fetch(endpoint.toString(), {
@@ -93,7 +93,7 @@ export async function POST(request: NextRequest) {
             event_name: "Lead",
             event_time: Math.floor(Date.now() / 1000),
             event_id: eventId,
-            action_source: "system_generated",
+            action_source: "physical_store",
             user_data: {
               ph: [sha256(normalizedPhone)]
             },
@@ -116,7 +116,7 @@ export async function POST(request: NextRequest) {
         sent: true,
         eventId,
         phone: normalizedPhone,
-        pixelId: runtime.pixelId,
+        datasetId: runtime.datasetId,
         testEventCode: runtime.testEventCode ?? null
       },
       200

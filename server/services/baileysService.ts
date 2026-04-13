@@ -914,6 +914,16 @@ async function processInboundMessage(orgId: string, message: WAMessage, socket: 
   if (!kind.type) {
     return;
   }
+  const referralMeta = extractReferralMeta(message);
+  const waAccountMeta = await prisma.waAccount.findUnique({
+    where: {
+      orgId
+    },
+    select: {
+      wabaId: true
+    }
+  });
+  const wabaId = normalize(waAccountMeta?.wabaId ?? undefined);
 
   const participantJid = normalize(
     (message.key as { participant?: string | null } | undefined)?.participant ?? undefined
@@ -943,11 +953,14 @@ async function processInboundMessage(orgId: string, message: WAMessage, socket: 
   }
 
   if (isFromMe) {
+    const outboundCustomerDisplayName = isGroupChat
+      ? normalize((await resolveGroupDisplayName(remoteJid, socket)) ?? undefined)
+      : undefined;
     const outboundResult = await storeExternalOutboundMessage({
       orgId,
       customerPhoneE164,
       waChatJid: remoteJid,
-      customerDisplayName: normalize((await resolveGroupDisplayName(remoteJid, socket)) ?? message.pushName ?? undefined),
+      customerDisplayName: outboundCustomerDisplayName,
       customerAvatarUrl,
       senderWaJid: senderWaJid ?? undefined,
       senderPhoneE164: senderPhoneE164 ?? undefined,
@@ -981,6 +994,11 @@ async function processInboundMessage(orgId: string, message: WAMessage, socket: 
     senderWaJid: senderWaJid ?? undefined,
     senderPhoneE164: senderPhoneE164 ?? undefined,
     senderDisplayName: senderDisplayName ?? undefined,
+    ctwaClid: referralMeta.ctwaClid ?? undefined,
+    fbclid: referralMeta.fbclid ?? undefined,
+    fbc: referralMeta.fbc ?? undefined,
+    fbp: referralMeta.fbp ?? undefined,
+    wabaId: wabaId || undefined,
     waMessageId,
     replyToWaMessageId: quotedContext.replyToWaMessageId,
     replyPreviewText: quotedContext.replyPreviewText,
@@ -998,6 +1016,80 @@ async function processInboundMessage(orgId: string, message: WAMessage, socket: 
     const reason = inboundResult.duplicate ? "duplicate" : "ignored";
     console.info(`[baileys] inbound ${reason} org=${orgId} waMessageId=${waMessageId || "-"} remoteJid=${remoteJid}`);
   }
+}
+
+function normalizeReferralValue(value: unknown): string | null {
+  if (typeof value !== "string") {
+    return null;
+  }
+  const normalized = value.trim();
+  if (!normalized) {
+    return null;
+  }
+  return normalized.slice(0, 191);
+}
+
+function extractReferralMeta(message: WAMessage): {
+  ctwaClid: string | null;
+  fbclid: string | null;
+  fbc: string | null;
+  fbp: string | null;
+} {
+  const seen = new Set<unknown>();
+  let ctwaClid: string | null = null;
+  let fbclid: string | null = null;
+  let fbc: string | null = null;
+  let fbp: string | null = null;
+
+  function absorbUrl(rawUrl: string | null): void {
+    if (!rawUrl) {
+      return;
+    }
+    try {
+      const url = new URL(rawUrl);
+      fbclid = fbclid ?? normalizeReferralValue(url.searchParams.get("fbclid"));
+      fbc = fbc ?? normalizeReferralValue(url.searchParams.get("fbc"));
+      fbp = fbp ?? normalizeReferralValue(url.searchParams.get("fbp"));
+    } catch {
+      // ignore malformed URL
+    }
+  }
+
+  function visit(value: unknown): void {
+    if (!value || typeof value !== "object") {
+      return;
+    }
+    if (seen.has(value)) {
+      return;
+    }
+    seen.add(value);
+
+    if (Array.isArray(value)) {
+      for (const item of value) {
+        visit(item);
+      }
+      return;
+    }
+
+    const record = value as Record<string, unknown>;
+    ctwaClid = ctwaClid ?? normalizeReferralValue(record.ctwa_clid ?? record.ctwaClid);
+    fbclid = fbclid ?? normalizeReferralValue(record.fbclid);
+    fbc = fbc ?? normalizeReferralValue(record.fbc);
+    fbp = fbp ?? normalizeReferralValue(record.fbp);
+    absorbUrl(normalizeReferralValue(record.source_url ?? record.sourceUrl));
+
+    for (const item of Object.values(record)) {
+      visit(item);
+    }
+  }
+
+  visit(message);
+  return {
+    ctwaClid,
+    fbclid,
+    fbc,
+    fbp
+  };
 }
 
 async function processOutboundStatusUpdate(

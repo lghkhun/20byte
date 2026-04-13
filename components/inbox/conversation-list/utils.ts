@@ -35,18 +35,25 @@ export function formatTimestamp(value: string | null, nowMs: number = Date.now()
   }).format(date);
 }
 
-export function getSourceBadge(source: string | null): { label: string; className: string } {
-  if (source === "meta_ads") {
+export function getSourceBadge(source: string | null): { label: string; className: string; isMeta: boolean } | null {
+  const normalizedSource = source?.trim().toLowerCase() ?? "";
+  if (!normalizedSource || normalizedSource === "organic") {
+    return null;
+  }
+
+  if (normalizedSource === "meta_ads" || normalizedSource === "meta") {
     return {
       label: "META",
       className:
-        "rounded border border-sky-500/40 bg-sky-500/10 px-1.5 py-0.5 text-[10px] font-medium text-sky-700 dark:text-sky-300"
+        "inline-flex items-center gap-1 rounded border border-sky-500/30 bg-sky-500/10 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-sky-700 dark:text-sky-300",
+      isMeta: true
     };
   }
 
   return {
-    label: "ORGANIC",
-    className: "rounded border border-border bg-background/50 px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground"
+    label: normalizedSource.replace(/[_-]+/g, " ").trim().toUpperCase(),
+    className: "rounded border border-border bg-background/50 px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground",
+    isMeta: false
   };
 }
 

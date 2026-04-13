@@ -2,6 +2,7 @@ import { InvoiceStatus } from "@prisma/client";
 
 import { prisma } from "@/lib/db/prisma";
 import { publishInvoiceUpdatedEvent } from "@/lib/ably/publisher";
+import { enqueueMetaEventJob } from "@/server/queues/metaEventQueue";
 import { writeAuditLogSafe } from "@/server/services/auditLogService";
 import { syncConversationCrmStageFromInvoice } from "@/server/services/crmPipelineService";
 import { requireInvoiceAccess } from "@/server/services/invoice/access";
@@ -32,9 +33,27 @@ export async function sendInvoiceToCustomer(input: SendInvoiceInput): Promise<Se
     select: {
       id: true,
       invoiceNo: true,
+      customerId: true,
+      currency: true,
+      totalCents: true,
       status: true,
       publicToken: true,
-      conversationId: true
+      conversationId: true,
+      customer: {
+        select: {
+          phoneE164: true
+        }
+      },
+      conversation: {
+        select: {
+          trackingId: true,
+          fbclid: true,
+          fbc: true,
+          fbp: true,
+          ctwaClid: true,
+          wabaId: true
+        }
+      }
     }
   });
 
@@ -122,6 +141,23 @@ export async function sendInvoiceToCustomer(input: SendInvoiceInput): Promise<Se
     invoiceId: updated.id,
     status: updated.status
   });
+  void enqueueMetaEventJob({
+    orgId,
+    kind: "INITIATE_CHECKOUT",
+    customerId: invoice.customerId,
+    invoiceId: invoice.id,
+    invoiceNo: invoice.invoiceNo,
+    dedupeKey: `initiate_checkout:${invoice.invoiceNo}`,
+    customerPhoneE164: invoice.customer.phoneE164,
+    trackingId: invoice.conversation?.trackingId ?? undefined,
+    fbclid: invoice.conversation?.fbclid ?? undefined,
+    fbc: invoice.conversation?.fbc ?? undefined,
+    fbp: invoice.conversation?.fbp ?? undefined,
+    ctwaClid: invoice.conversation?.ctwaClid ?? undefined,
+    wabaId: invoice.conversation?.wabaId ?? undefined,
+    currency: invoice.currency,
+    value: invoice.totalCents / 100
+  }).catch(() => undefined);
 
   return {
     ...updated,

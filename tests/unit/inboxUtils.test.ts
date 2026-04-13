@@ -58,11 +58,13 @@ test("conversation list utils handle initials, source badge, timestamp fallback"
   assert.equal(toInitials(null, "no-digits"), "NA");
 
   const metaBadge = getSourceBadge("meta_ads");
+  assert.ok(metaBadge);
   assert.equal(metaBadge.label, "META");
+  assert.equal(metaBadge.isMeta, true);
   assert.match(metaBadge.className, /sky/);
 
   const organicBadge = getSourceBadge("organic");
-  assert.equal(organicBadge.label, "ORGANIC");
+  assert.equal(organicBadge, null);
 
   assert.equal(formatTimestamp(null), "-");
   assert.equal(formatTimestamp("invalid"), "-");

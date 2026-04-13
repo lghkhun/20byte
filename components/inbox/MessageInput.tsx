@@ -1,18 +1,20 @@
 "use client";
 
-import { type FormEvent, type KeyboardEvent, useRef, useState } from "react";
+import { type FormEvent, type KeyboardEvent, useEffect, useRef, useState } from "react";
 import EmojiPicker, { EmojiStyle, Theme } from "emoji-picker-react";
 import { Paperclip, Smile } from "lucide-react";
 
-import { AttachmentPendingBar } from "@/components/inbox/input/AttachmentPendingBar";
 import { ImageAttachmentEditorModal } from "@/components/inbox/input/ImageAttachmentEditorModal";
+import { VideoAttachmentEditorModal } from "@/components/inbox/input/VideoAttachmentEditorModal";
 import { isAllowedAttachmentType } from "@/components/inbox/input/utils";
+import { dismissNotify, notifyError, notifyLoading } from "@/lib/ui/notify";
 import { Button } from "@/components/ui/button";
 import { useTheme } from "next-themes";
 
 type MessageInputProps = {
   density?: "compact" | "comfy";
   disabled: boolean;
+  focusKey?: string | null;
   textValue: string;
   replyTarget?: { id: string; text: string; author?: string | null } | null;
   onClearReplyTarget?: () => void;
@@ -29,6 +31,7 @@ type MessageInputProps = {
 export function MessageInput({
   density = "comfy",
   disabled,
+  focusKey = null,
   textValue,
   replyTarget = null,
   onClearReplyTarget,
@@ -49,7 +52,73 @@ export function MessageInput({
   const [isSendingAttachment, setIsSendingAttachment] = useState(false);
   const [isEmojiOpen, setIsEmojiOpen] = useState(false);
   const [isImageEditorOpen, setIsImageEditorOpen] = useState(false);
+  const [isVideoEditorOpen, setIsVideoEditorOpen] = useState(false);
   const [attachmentText, setAttachmentText] = useState("");
+  const attachmentLoadingToastIdRef = useRef<string | number | null>(null);
+
+  async function sendAttachmentNow(
+    attachment: {
+      file: File;
+      fileName: string;
+      mimeType: string;
+      size: number;
+    },
+    options?: {
+      text?: string | null;
+      clearComposerText?: boolean;
+      clearAttachmentText?: boolean;
+    }
+  ) {
+    if (disabled || isSendingAttachment) {
+      return;
+    }
+
+    setAttachmentError(null);
+    setIsSendingAttachment(true);
+    attachmentLoadingToastIdRef.current = notifyLoading("Mengirim lampiran...", {
+      id: "inbox-attachment-send-loading"
+    });
+    try {
+      await onSendAttachment(attachment, {
+        replyToMessageId: replyTarget?.id ?? null,
+        text: options?.text ?? null
+      });
+      if (options?.clearComposerText) {
+        onTextValueChange("");
+      }
+      if (options?.clearAttachmentText) {
+        setAttachmentText("");
+      }
+      setPendingAttachment(null);
+      onClearReplyTarget?.();
+      requestAnimationFrame(() => {
+        inputRef.current?.focus();
+      });
+    } catch {
+      setAttachmentError("Gagal mengirim lampiran.");
+      notifyError("Gagal mengirim lampiran.");
+    } finally {
+      if (attachmentLoadingToastIdRef.current !== null) {
+        dismissNotify(attachmentLoadingToastIdRef.current);
+        attachmentLoadingToastIdRef.current = null;
+      }
+      setIsSendingAttachment(false);
+    }
+  }
+
+  useEffect(() => {
+    if (disabled || !focusKey || isImageEditorOpen || isVideoEditorOpen) {
+      return;
+    }
+
+    const rafId = window.requestAnimationFrame(() => {
+      inputRef.current?.focus();
+      const valueLength = inputRef.current?.value?.length ?? 0;
+      inputRef.current?.setSelectionRange(valueLength, valueLength);
+    });
+
+    return () => window.cancelAnimationFrame(rafId);
+  }, [disabled, focusKey, isImageEditorOpen, isVideoEditorOpen]);
 
   function applyPendingFile(file: File) {
     if (!isAllowedAttachmentType(file.type)) {
@@ -58,16 +127,28 @@ export function MessageInput({
     }
 
     setAttachmentError(null);
-    setPendingAttachment({
+    const nextAttachment = {
       file,
       fileName: file.name,
       mimeType: file.type || "application/octet-stream",
       size: file.size
-    });
+    };
+    setPendingAttachment(nextAttachment);
 
     if (file.type.startsWith("image/")) {
       setIsImageEditorOpen(true);
+      return;
     }
+    if (file.type.startsWith("video/")) {
+      setIsVideoEditorOpen(true);
+      return;
+    }
+
+    void sendAttachmentNow(nextAttachment, {
+      text: textValue.trim() || null,
+      clearComposerText: Boolean(textValue.trim()),
+      clearAttachmentText: true
+    });
   }
 
   async function submitText() {
@@ -96,29 +177,6 @@ export function MessageInput({
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     await submitText();
-  }
-
-  async function handleSendAttachment() {
-    if (disabled || !pendingAttachment || isSendingAttachment) {
-      return;
-    }
-
-    setAttachmentError(null);
-    setIsSendingAttachment(true);
-    try {
-      await onSendAttachment(pendingAttachment, {
-        replyToMessageId: replyTarget?.id ?? null,
-        text: attachmentText.trim() || null
-      });
-      setPendingAttachment(null);
-      setAttachmentText("");
-      onClearReplyTarget?.();
-      requestAnimationFrame(() => {
-        inputRef.current?.focus();
-      });
-    } finally {
-      setIsSendingAttachment(false);
-    }
   }
 
   function handleKeyDown(event: KeyboardEvent<HTMLTextAreaElement>) {
@@ -232,30 +290,6 @@ export function MessageInput({
         ) : null}
       </div>
 
-      {pendingAttachment ? (
-        <AttachmentPendingBar
-          pendingAttachment={pendingAttachment}
-          disabled={disabled}
-          isSendingAttachment={isSendingAttachment}
-          onSend={() => {
-            void handleSendAttachment();
-          }}
-          onRemove={() => {
-            setPendingAttachment(null);
-            setAttachmentText("");
-          }}
-        />
-      ) : null}
-      {pendingAttachment ? (
-        <textarea
-          value={attachmentText}
-          onChange={(event) => setAttachmentText(event.target.value)}
-          rows={2}
-          placeholder="Tambah pesan/caption untuk media..."
-          className="w-full resize-none rounded-xl border border-border bg-background/70 px-3 py-2 text-sm text-foreground outline-none placeholder:text-muted-foreground/70 focus:border-primary"
-        />
-      ) : null}
-
       {attachmentError ? <p className="text-xs text-destructive">{attachmentError}</p> : null}
 
       <ImageAttachmentEditorModal
@@ -265,15 +299,49 @@ export function MessageInput({
         onCaptionTextChange={setAttachmentText}
         onCancel={() => {
           setIsImageEditorOpen(false);
+          setPendingAttachment(null);
+          setAttachmentText("");
         }}
-        onApply={(editedFile) => {
-          setPendingAttachment({
+        onApply={async (editedFile) => {
+          const nextAttachment = {
             file: editedFile,
             fileName: editedFile.name,
             mimeType: editedFile.type || "application/octet-stream",
             size: editedFile.size
-          });
+          };
+
+          setAttachmentError(null);
           setIsImageEditorOpen(false);
+          await sendAttachmentNow(nextAttachment, {
+            text: attachmentText.trim() || null,
+            clearAttachmentText: true
+          });
+        }}
+      />
+      <VideoAttachmentEditorModal
+        open={isVideoEditorOpen}
+        file={pendingAttachment && pendingAttachment.mimeType.startsWith("video/") ? pendingAttachment.file : null}
+        captionText={attachmentText}
+        onCaptionTextChange={setAttachmentText}
+        onCancel={() => {
+          setIsVideoEditorOpen(false);
+          setPendingAttachment(null);
+          setAttachmentText("");
+        }}
+        onApply={async (trimmedFile) => {
+          const nextAttachment = {
+            file: trimmedFile,
+            fileName: trimmedFile.name,
+            mimeType: trimmedFile.type || "video/webm",
+            size: trimmedFile.size
+          };
+
+          setAttachmentError(null);
+          setIsVideoEditorOpen(false);
+          await sendAttachmentNow(nextAttachment, {
+            text: attachmentText.trim() || null,
+            clearAttachmentText: true
+          });
         }}
       />
     </form>

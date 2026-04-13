@@ -112,10 +112,18 @@ export async function markInvoicePaid(input: MarkInvoicePaidInput): Promise<Mark
     });
     void enqueueMetaEventJob({
       orgId,
-      kind: "INVOICE_PAID",
+      kind: "PURCHASE",
+      customerId: invoice.customer.id,
       invoiceId: updated.id,
+      invoiceNo: invoice.invoiceNo,
+      dedupeKey: `purchase:${invoice.invoiceNo}`,
       customerPhoneE164: invoice.customer.phoneE164,
       trackingId: invoice.conversation?.trackingId ?? undefined,
+      fbclid: invoice.conversation?.fbclid ?? undefined,
+      fbc: invoice.conversation?.fbc ?? undefined,
+      fbp: invoice.conversation?.fbp ?? undefined,
+      ctwaClid: invoice.conversation?.ctwaClid ?? undefined,
+      wabaId: invoice.conversation?.wabaId ?? undefined,
       currency: invoice.currency,
       value: invoice.totalCents / 100
     }).catch(() => undefined);

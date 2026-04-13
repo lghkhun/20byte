@@ -13,6 +13,7 @@ type MetaIntegrationRow = {
   id: string;
   orgId: string;
   pixelId: string;
+  datasetId: string | null;
   accessTokenEnc: string;
   testEventCode: string | null;
   isEnabled: number | boolean;
@@ -22,7 +23,8 @@ type MetaIntegrationRow = {
 
 export type MetaIntegrationView = {
   orgId: string;
-  pixelId: string;
+  datasetId: string;
+  legacyPixelId: string | null;
   testEventCode: string | null;
   enabled: boolean;
   hasAccessToken: boolean;
@@ -31,7 +33,8 @@ export type MetaIntegrationView = {
 
 export type MetaIntegrationRuntime = {
   orgId: string;
-  pixelId: string;
+  datasetId: string;
+  legacyPixelId: string | null;
   accessToken: string;
   testEventCode: string | null;
   enabled: boolean;
@@ -40,7 +43,7 @@ export type MetaIntegrationRuntime = {
 type UpsertMetaIntegrationInput = {
   actorUserId: string;
   orgId?: string;
-  pixelId: string;
+  datasetId: string;
   accessToken?: string;
   testEventCode?: string | null;
   enabled: boolean;
@@ -112,9 +115,11 @@ function decryptSecret(value: string): string {
 }
 
 function mapRowToView(row: MetaIntegrationRow): MetaIntegrationView {
+  const datasetId = normalizeOptional(row.datasetId) ?? normalizeRequired(row.pixelId, "legacyPixelId");
   return {
     orgId: row.orgId,
-    pixelId: row.pixelId,
+    datasetId,
+    legacyPixelId: normalizeOptional(row.pixelId),
     testEventCode: row.testEventCode,
     enabled: Boolean(row.isEnabled),
     hasAccessToken: Boolean(row.accessTokenEnc),
@@ -124,7 +129,7 @@ function mapRowToView(row: MetaIntegrationRow): MetaIntegrationView {
 
 async function findIntegration(orgId: string): Promise<MetaIntegrationRow | null> {
   const rows = await prisma.$queryRaw<MetaIntegrationRow[]>(Prisma.sql`
-    SELECT id, orgId, pixelId, accessTokenEnc, testEventCode, isEnabled, createdAt, updatedAt
+    SELECT id, orgId, pixelId, datasetId, accessTokenEnc, testEventCode, isEnabled, createdAt, updatedAt
     FROM MetaIntegration
     WHERE orgId = ${orgId}
     LIMIT 1
@@ -143,7 +148,7 @@ export async function upsertMetaIntegration(input: UpsertMetaIntegrationInput): 
   const orgId = await resolvePrimaryOrganizationIdForUser(input.actorUserId, input.orgId?.trim() ?? "");
   await requireOrgSettingsAccess(input.actorUserId, orgId);
 
-  const pixelId = normalizeRequired(input.pixelId, "pixelId");
+  const datasetId = normalizeRequired(input.datasetId, "datasetId");
   const testEventCode = normalizeOptional(input.testEventCode);
   const accessToken = normalizeOptional(input.accessToken);
 
@@ -154,14 +159,14 @@ export async function upsertMetaIntegration(input: UpsertMetaIntegrationInput): 
     }
 
     await prisma.$executeRaw(Prisma.sql`
-      INSERT INTO MetaIntegration (id, orgId, pixelId, accessTokenEnc, testEventCode, isEnabled, createdAt, updatedAt)
-      VALUES (${randomBytes(12).toString("hex")}, ${orgId}, ${pixelId}, ${encryptSecret(accessToken)}, ${testEventCode}, ${input.enabled}, NOW(3), NOW(3))
+      INSERT INTO MetaIntegration (id, orgId, pixelId, datasetId, accessTokenEnc, testEventCode, isEnabled, createdAt, updatedAt)
+      VALUES (${randomBytes(12).toString("hex")}, ${orgId}, ${datasetId}, ${datasetId}, ${encryptSecret(accessToken)}, ${testEventCode}, ${input.enabled}, NOW(3), NOW(3))
     `);
   } else {
     const encryptedToken = accessToken ? encryptSecret(accessToken) : existing.accessTokenEnc;
     await prisma.$executeRaw(Prisma.sql`
       UPDATE MetaIntegration
-      SET pixelId = ${pixelId},
+      SET datasetId = ${datasetId},
           accessTokenEnc = ${encryptedToken},
           testEventCode = ${testEventCode},
           isEnabled = ${input.enabled},
@@ -196,7 +201,8 @@ export async function getMetaIntegrationRuntime(orgIdInput: string): Promise<Met
 
   return {
     orgId: row.orgId,
-    pixelId: row.pixelId,
+    datasetId: normalizeOptional(row.datasetId) ?? row.pixelId,
+    legacyPixelId: normalizeOptional(row.pixelId),
     accessToken: decryptSecret(row.accessTokenEnc),
     testEventCode: row.testEventCode,
     enabled: Boolean(row.isEnabled)
@@ -216,7 +222,8 @@ export async function getMetaIntegrationRuntimeForActor(
 
   return {
     orgId: row.orgId,
-    pixelId: row.pixelId,
+    datasetId: normalizeOptional(row.datasetId) ?? row.pixelId,
+    legacyPixelId: normalizeOptional(row.pixelId),
     accessToken: decryptSecret(row.accessTokenEnc),
     testEventCode: row.testEventCode,
     enabled: Boolean(row.isEnabled)

@@ -405,7 +405,7 @@ export default function BillingPage() {
     }
   }
   return (
-    <div className="inbox-scroll h-full overflow-y-auto p-4 md:p-6 lg:p-8">
+    <div className="w-full flex-1 inbox-scroll h-full overflow-y-auto p-4 md:p-6 lg:p-8">
       <div className="w-full space-y-6">
         {/* Modern Header */}
         <header className="rounded-3xl border border-border/60 bg-gradient-to-b from-card to-background/50 px-6 py-6 shadow-[0_2px_10px_-4px_rgba(0,0,0,0.02)] flex items-center gap-5">
@@ -425,10 +425,10 @@ export default function BillingPage() {
             <div className="h-8 w-8 animate-spin rounded-full border-4 border-primary/20 border-t-primary" />
           </div>
         ) : (
-          <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_480px] items-start">
+          <div className="grid gap-6 xl:grid-cols-[380px_minmax(0,1fr)] 2xl:grid-cols-[420px_minmax(0,1fr)] items-start">
             {/* Left Column: ATM Card */}
             <section className="space-y-6">
-              <div className="relative overflow-hidden rounded-[28px] border border-border/10 bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 p-8 shadow-xl">
+              <div className="relative w-full aspect-[1.586/1] overflow-hidden rounded-[24px] border border-border/10 bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 p-6 sm:p-8 shadow-xl flex flex-col justify-between">
                 {/* Decorative Elements */}
                 <div className="absolute right-0 top-0 opacity-[0.15] blur-[60px] pointer-events-none">
                   <div className="h-64 w-64 rounded-full bg-primary" />
@@ -437,35 +437,35 @@ export default function BillingPage() {
                   <div className="h-64 w-64 rounded-full bg-emerald-500" />
                 </div>
                 
-                <div className="relative z-10 flex flex-col justify-between h-[220px]">
-                  <div className="flex items-start justify-between">
-                    <div>
-                      <p className="text-[11px] font-bold uppercase tracking-[0.15em] text-slate-400">
-                        {status === "TRIALING" ? "Masa Trial Berakhir" : status === "ACTIVE" ? "Periode Berlangganan Aktif" : "Status Periode Langganan"}
+                <div className="relative z-10 flex flex-col justify-between h-full">
+                  <div className="flex items-start justify-between gap-4">
+                    <div className="min-w-0 pr-2">
+                      <p className="text-[10px] sm:text-[11px] font-bold uppercase tracking-[0.15em] text-slate-400 line-clamp-1">
+                        {status === "TRIALING" ? "Masa Trial Berakhir" : status === "ACTIVE" ? "Periode Aktif" : "Status Langganan"}
                       </p>
-                      <p className="mt-2.5 text-[26px] font-bold tracking-tight text-white drop-shadow-md">
+                      <p className="mt-1.5 sm:mt-2.5 text-[18px] sm:text-[22px] font-bold tracking-tight text-white drop-shadow-md truncate">
                         {status === "TRIALING"
                           ? formatDate(subscriptionPayload?.subscription?.trialEndAt)
                           : formatDate(subscriptionPayload?.subscription?.currentPeriodEndAt)}
                       </p>
                     </div>
-                    <span className="rounded-lg border border-white/20 bg-white/10 px-3 py-1.5 text-[11px] font-bold tracking-widest uppercase text-white backdrop-blur-md shadow-sm">
+                    <span className="rounded-lg border border-white/20 bg-white/10 px-2 py-1 sm:px-3 sm:py-1.5 text-[9px] sm:text-[10px] font-bold tracking-widest uppercase text-white backdrop-blur-md shadow-sm shrink-0">
                       {status}
                     </span>
                   </div>
                   
-                  <div className="flex items-end justify-between">
-                    <div className="flex items-center gap-3">
+                  <div className="flex items-end justify-between gap-3 mt-8">
+                    <div className="flex items-center gap-2.5 sm:gap-3">
                       {/* Simulating Premium ATM Chip */}
-                      <div className="h-10 w-14 rounded-md border border-amber-500/30 bg-gradient-to-br from-amber-200 via-amber-400 to-amber-600 opacity-90 shadow-inner overflow-hidden relative">
+                      <div className="h-8 w-11 sm:h-10 sm:w-14 shrink-0 rounded-md border border-amber-500/30 bg-gradient-to-br from-amber-200 via-amber-400 to-amber-600 opacity-90 shadow-inner overflow-hidden relative">
                         <div className="absolute inset-0 bg-[linear-gradient(90deg,transparent_20%,rgba(255,255,255,0.3)_50%,transparent_80%)] border-l" />
                         <div className="absolute inset-0 bg-[linear-gradient(0deg,transparent_20%,rgba(255,255,255,0.3)_50%,transparent_80%)] border-t" />
                       </div>
-                      <span className="text-[14px] font-bold tracking-[0.2em] text-slate-300 drop-shadow-sm uppercase">20BYT • {orgId ? orgId.slice(-4) : "****"}</span>
+                      <span className="text-[11px] sm:text-[14px] font-bold tracking-[0.15em] sm:tracking-[0.2em] text-slate-300 drop-shadow-sm uppercase">20BYT • {orgId ? orgId.slice(-4) : "****"}</span>
                     </div>
                     <Button 
                       onClick={() => setIsPricingDialogOpen(true)}
-                      className="rounded-[14px] bg-white text-slate-900 hover:bg-slate-100 font-bold shadow-[0_4px_14px_0_rgba(255,255,255,0.2)] h-11 px-7 transition-all active:scale-95"
+                      className="shrink-0 rounded-[12px] sm:rounded-[14px] bg-white text-slate-900 hover:bg-slate-100 font-bold shadow-[0_4px_14px_0_rgba(255,255,255,0.2)] h-9 px-4 sm:h-11 sm:px-6 text-[12px] sm:text-[14px] transition-all active:scale-95"
                     >
                       Perpanjang
                     </Button>

@@ -268,37 +268,85 @@ export function InboxWorkspace() {
       input.message.type === "DOCUMENT";
     const trimmedText = input.message.text?.trim() ?? "";
     const mediaCaption = trimmedText ? `FWD: ${trimmedText}` : undefined;
+    const fallbackFileNameByType =
+      input.message.type === "IMAGE"
+        ? "forwarded-image.jpg"
+        : input.message.type === "VIDEO"
+          ? "forwarded-video.mp4"
+          : input.message.type === "AUDIO"
+            ? "forwarded-audio.ogg"
+            : "forwarded-document.bin";
+    const forwardedFileName = input.message.fileName?.trim() || fallbackFileNameByType;
 
-    if (
-      isForwardableMediaType &&
-      input.message.mediaId &&
-      input.message.mediaUrl &&
-      input.message.fileName
-    ) {
-      const response = await fetch("/api/inbox/send", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          conversationId,
-          type: input.message.type,
-          text: mediaCaption,
-          mediaId: input.message.mediaId,
-          mediaUrl: input.message.mediaUrl,
-          mimeType: input.message.mimeType,
-          fileName: input.message.fileName,
-          fileSize: input.message.fileSize
-        })
-      });
-      const payload = (await response.json().catch(() => null)) as { error?: { message?: string } } | null;
-      if (!response.ok) {
-        throw new Error(payload?.error?.message ?? "Gagal meneruskan media.");
+    if (isForwardableMediaType && (input.message.mediaUrl || input.message.mediaId)) {
+      let mediaForwardSucceeded = false;
+      let mediaForwardError: Error | null = null;
+
+      if (input.message.mediaUrl) {
+        try {
+          const sourceMediaResponse = await fetch(input.message.mediaUrl);
+          if (!sourceMediaResponse.ok) {
+            throw new Error(`Source media fetch failed (${sourceMediaResponse.status})`);
+          }
+
+          const sourceBlob = await sourceMediaResponse.blob();
+          const sourceFile = new File([sourceBlob], forwardedFileName, {
+            type: sourceBlob.type || input.message.mimeType || "application/octet-stream"
+          });
+
+          const formData = new FormData();
+          formData.append("conversationId", conversationId);
+          formData.append("type", input.message.type);
+          if (mediaCaption) {
+            formData.append("text", mediaCaption);
+          }
+          formData.append("file", sourceFile);
+
+          const multipartResponse = await fetch("/api/inbox/send", {
+            method: "POST",
+            body: formData
+          });
+          const multipartPayload = (await multipartResponse.json().catch(() => null)) as { error?: { message?: string } } | null;
+          if (!multipartResponse.ok) {
+            throw new Error(multipartPayload?.error?.message ?? "Gagal meneruskan media.");
+          }
+
+          mediaForwardSucceeded = true;
+        } catch (error) {
+          mediaForwardError = error instanceof Error ? error : new Error("Failed to forward media binary.");
+        }
       }
 
-      if (!input.suppressToast) {
-        notifySuccess("Media berhasil diteruskan.");
+      if (!mediaForwardSucceeded && input.message.mediaId && input.message.mediaUrl) {
+        const response = await fetch("/api/inbox/send", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            conversationId,
+            type: input.message.type,
+            text: mediaCaption,
+            mediaId: input.message.mediaId,
+            mediaUrl: input.message.mediaUrl,
+            mimeType: input.message.mimeType,
+            fileName: forwardedFileName,
+            fileSize: input.message.fileSize
+          })
+        });
+        const payload = (await response.json().catch(() => null)) as { error?: { message?: string } } | null;
+        if (!response.ok) {
+          throw new Error(payload?.error?.message ?? mediaForwardError?.message ?? "Gagal meneruskan media.");
+        }
+
+        mediaForwardSucceeded = true;
       }
-      void loadConversations({ background: true });
-      return;
+
+      if (mediaForwardSucceeded) {
+        if (!input.suppressToast) {
+          notifySuccess("Media berhasil diteruskan.");
+        }
+        void loadConversations({ background: true });
+        return;
+      }
     }
 
     const fallbackText =

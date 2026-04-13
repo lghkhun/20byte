@@ -15,6 +15,11 @@ type InboundContext = {
   senderPhoneE164?: string;
   senderDisplayName?: string;
   trackingId?: string;
+  fbclid?: string;
+  fbc?: string;
+  fbp?: string;
+  ctwaClid?: string;
+  wabaId?: string;
   replyToWaMessageId?: string;
   replyPreviewText?: string;
   text?: string;
@@ -29,10 +34,12 @@ type InboundContext = {
 
 type CreatedInboundMessage = {
   id: string;
+  customerId: string;
   conversationId: string;
   conversationStatus: "OPEN" | "CLOSED";
   assignedToMemberId: string | null;
   conversationCreated: boolean;
+  customerCreated: boolean;
 };
 
 export async function findExistingInboundByWaMessageId(waMessageId: string): Promise<{ id: string } | null> {
@@ -57,6 +64,7 @@ export async function storeInboundMessageInTransaction(params: {
     ad: string | null;
     platform: string | null;
     medium: string | null;
+    created: boolean;
   }>;
   getOrCreateConversation: (
     tx: Prisma.TransactionClient,
@@ -242,10 +250,12 @@ export async function storeInboundMessageInTransaction(params: {
 
     return {
       id: created.id,
+      customerId: customer.id,
       conversationId: created.conversationId,
       conversationStatus: updatedConversation.status,
       assignedToMemberId: updatedConversation.assignedToMemberId,
-      conversationCreated: conversation.created
+      conversationCreated: conversation.created,
+      customerCreated: customer.created
     };
   });
 }

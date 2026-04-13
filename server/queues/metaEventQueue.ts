@@ -4,15 +4,22 @@ import { sendRedisCommand } from "@/lib/redis/redisResp";
 
 const META_EVENT_QUEUE_KEY = "20byte:meta:event";
 
-export type MetaEventKind = "CHAT_STARTED" | "INVOICE_CREATED" | "INVOICE_PAID";
+export type MetaEventKind = "LEAD" | "INITIATE_CHECKOUT" | "PURCHASE";
 
 export type MetaEventJobPayload = {
   orgId: string;
   kind: MetaEventKind;
   customerPhoneE164: string;
-  conversationId?: string;
+  customerId?: string;
   invoiceId?: string;
+  invoiceNo?: string;
   trackingId?: string;
+  dedupeKey?: string;
+  fbclid?: string;
+  fbc?: string;
+  fbp?: string;
+  ctwaClid?: string;
+  wabaId?: string;
   currency?: string;
   value?: number;
 };

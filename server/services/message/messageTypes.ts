@@ -11,6 +11,11 @@ export type StoreInboundMessageInput = {
   senderDisplayName?: string;
   shortlinkCode?: string;
   trackingId?: string;
+  fbclid?: string;
+  fbc?: string;
+  fbp?: string;
+  ctwaClid?: string;
+  wabaId?: string;
   waMessageId: string;
   replyToWaMessageId?: string;
   replyPreviewText?: string;
@@ -138,6 +143,11 @@ export type ResolvedAttribution = {
   medium?: string;
   shortlinkId?: string;
   trackingId?: string;
+  fbclid?: string;
+  fbc?: string;
+  fbp?: string;
+  ctwaClid?: string;
+  wabaId?: string;
 };
 
 export type RetryOutboundMessageInput = {

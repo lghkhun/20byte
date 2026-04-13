@@ -133,6 +133,7 @@ model Org {
   shortlinks         Shortlink[]
   shortlinkClicks    ShortlinkClick[]
   metaIntegrations   MetaIntegration[]
+  metaEventDispatches MetaEventDispatch[]
   auditLogs          AuditLog[]
   setupTokens        AccountSetupToken[]
   subscription       OrgSubscription?
@@ -337,6 +338,11 @@ model Conversation {
   sourceMedium       String?
   shortlinkId        String?
   trackingId         String?
+  fbclid             String?
+  fbc                String?
+  fbp                String?
+  ctwaClid           String?
+  wabaId             String?
   waChatJid          String?
   groupParticipantsJson String?      @db.LongText
   crmPipelineId      String?
@@ -361,6 +367,7 @@ model Conversation {
   @@index([customerId])
   @@index([orgId, waChatJid], map: "conv_org_wa_chat_jid_idx")
   @@index([trackingId])
+  @@index([ctwaClid])
   @@index([crmPipelineId])
   @@index([crmStageId])
 }
@@ -643,6 +650,9 @@ model ShortlinkClick {
   orgId       String
   shortlinkId String
   trackingId  String?
+  fbclid      String?
+  fbc         String?
+  fbp         String?
 
   createdAt   DateTime  @default(now())
   clickedAt   DateTime  @default(now())
@@ -655,12 +665,14 @@ model ShortlinkClick {
   @@index([shortlinkId, clickedAt])
   @@index([orgId, clickedAt])
   @@index([trackingId])
+  @@index([fbclid])
 }
 
 model MetaIntegration {
   id             String   @id @default(cuid())
   orgId          String
   pixelId        String
+  datasetId      String?
   accessTokenEnc String   @db.Text
   testEventCode  String?
   isEnabled      Boolean  @default(false)
@@ -671,6 +683,23 @@ model MetaIntegration {
 
   @@unique([orgId])
   @@index([orgId])
+}
+
+model MetaEventDispatch {
+  id         String   @id @default(cuid())
+  orgId      String
+  dedupeKey  String
+  kind       String
+  attempts   Int      @default(0)
+  sentAt     DateTime?
+  lastError  String?  @db.Text
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  org        Org      @relation(fields: [orgId], references: [id])
+
+  @@unique([orgId, dedupeKey])
+  @@index([orgId, sentAt, updatedAt])
 }
 
 model AuditLog {

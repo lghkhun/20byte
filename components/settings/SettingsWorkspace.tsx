@@ -7,6 +7,7 @@ import { Building2, MessageSquareShare, ShieldCheck, Users2 } from "lucide-react
 import { BankAccountManager } from "@/components/settings/BankAccountManager";
 import { BusinessSettings } from "@/components/settings/BusinessSettings";
 import { MetaCapiManager } from "@/components/settings/MetaCapiManager";
+import { ShortlinkManager } from "@/components/settings/ShortlinkManager";
 import { TeamSettings } from "@/components/settings/TeamSettings";
 import { WhatsAppConnectionSettings } from "@/components/settings/WhatsAppConnectionSettings";
 import { SettingsHeaderActionContext } from "@/components/settings/settings-header-actions";
@@ -27,7 +28,7 @@ const SETTINGS_TABS: Array<{ id: SettingsTabValue; label: string }> = [
   { id: "business", label: "Business" },
   { id: "team", label: "Team" },
   { id: "whatsapp", label: "WhatsApp" },
-  { id: "shortlinks", label: "Meta Pixel + CAPI" }
+  { id: "shortlinks", label: "Shortlinks + Meta CAPI" }
 ];
 
 const SETTINGS_TAB_META: Record<
@@ -59,8 +60,8 @@ const SETTINGS_TAB_META: Record<
   },
   shortlinks: {
     icon: ShieldCheck,
-    title: "Meta Pixel & CAPI",
-    description: "Kelola Pixel ID dan Conversions API token untuk kebutuhan tracking dan event conversion.",
+    title: "Shortlinks & Meta CAPI",
+    description: "Kelola shortlink kampanye, dataset CAPI, dan sinkronisasi event conversion.",
     badge: "Attribution"
   }
 };
@@ -240,8 +241,9 @@ export function SettingsWorkspace({
                 </div>
               ) : null}
               {activeTab === "shortlinks" ? (
-                <div className="px-2 pb-4">
+                <div className="space-y-6 px-2 pb-4">
                   <MetaCapiManager />
+                  <ShortlinkManager />
                 </div>
               ) : null}
             </SettingsHeaderActionContext.Provider>

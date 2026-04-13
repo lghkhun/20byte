@@ -2,9 +2,11 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import { createPortal } from "react-dom";
-import { Circle, Crop, Highlighter, Minus, Pencil, RectangleHorizontal, RotateCcw, Type, Undo2, X } from "lucide-react";
+import { Circle, Crop, Droplet, Highlighter, Minus, Pencil, RectangleHorizontal, RotateCcw, Type, Undo2, X } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
+import { Slider } from "@/components/ui/slider";
+import { cn } from "@/lib/utils";
 
 type Tool = "pen" | "highlight" | "line" | "rect" | "circle" | "text" | "blur" | "crop";
 
@@ -53,7 +55,7 @@ type ImageAttachmentEditorModalProps = {
   captionText: string;
   onCaptionTextChange: (value: string) => void;
   onCancel: () => void;
-  onApply: (file: File) => void;
+  onApply: (file: File) => void | Promise<void>;
 };
 
 function toCanvasPoint(canvas: HTMLCanvasElement, clientX: number, clientY: number): Point {
@@ -148,7 +150,6 @@ export function ImageAttachmentEditorModal({
   const [tool, setTool] = useState<Tool>("pen");
   const [color, setColor] = useState("#f43f5e");
   const [lineWidth, setLineWidth] = useState(4);
-  const [textToolValue, setTextToolValue] = useState("");
   const [sourceUrl, setSourceUrl] = useState<string | null>(null);
   const [imageElement, setImageElement] = useState<HTMLImageElement | null>(null);
   const [shapes, setShapes] = useState<Shape[]>([]);
@@ -173,7 +174,7 @@ export function ImageAttachmentEditorModal({
         { id: "rect", label: "Kotak", icon: RectangleHorizontal },
         { id: "circle", label: "Lingkaran", icon: Circle },
         { id: "text", label: "Teks", icon: Type },
-        { id: "blur", label: "Blur", icon: Circle },
+        { id: "blur", label: "Blur", icon: Droplet },
         { id: "crop", label: "Crop", icon: Crop }
       ] satisfies Array<{ id: Tool; label: string; icon: typeof Pencil }>,
     []
@@ -227,13 +228,26 @@ export function ImageAttachmentEditorModal({
     const scaleY = canvas.clientHeight / canvas.height;
     const left = shape.at.x * scaleX;
     const top = shape.at.y * scaleY;
-    const width = Math.min(Math.max(canvas.clientWidth - left - 16, 160), 380);
+    const width = Math.min(Math.max(canvas.clientWidth - left - 16, 200), canvas.clientWidth - 32);
 
     return {
       position: "absolute",
-      left,
-      top,
-      width
+      left: left - 2,
+      top: top - 2,
+      width,
+      color: shape.color,
+      fontSize: `${shape.fontSize * scaleY}px`,
+      lineHeight: 1.25,
+      fontFamily: "ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, Segoe UI, Roboto, sans-serif",
+      fontWeight: 600,
+      background: "transparent",
+      outline: "none",
+      border: "1px dashed rgba(255,255,255,0.6)",
+      padding: 0,
+      minHeight: `${shape.fontSize * scaleY * 1.5}px`,
+      resize: "none",
+      overflow: "hidden",
+      whiteSpace: "pre-wrap"
     };
   }, [editingTextShapeIndex, shapes]);
 
@@ -387,19 +401,7 @@ export function ImageAttachmentEditorModal({
         return;
       }
       if (tool === "text") {
-        const trimmed = textToolValue.trim();
-        if (!trimmed) {
-          return;
-        }
-        const textShape: TextShape = {
-          type: "text",
-          color,
-          fontSize: Math.max(14, lineWidth * 4),
-          at: point,
-          text: trimmed
-        };
-        setShapes((previous) => [...previous, textShape]);
-        return;
+        return; // Handled directly in onPointerDown for spawning text
       }
       if (tool === "pen" || tool === "highlight") {
         setDraftShape({
@@ -427,7 +429,7 @@ export function ImageAttachmentEditorModal({
         end: point
       });
     },
-    [color, lineWidth, textToolValue, tool]
+    [color, lineWidth, tool]
   );
 
   const moveDraw = useCallback(
@@ -499,16 +501,19 @@ export function ImageAttachmentEditorModal({
       return;
     }
     setIsExporting(true);
-    const mimeType = file.type && file.type.startsWith("image/") ? file.type : "image/png";
-    const blob = await new Promise<Blob | null>((resolve) => {
-      canvas.toBlob((value) => resolve(value), mimeType, 0.95);
-    });
-    setIsExporting(false);
-    if (!blob) {
-      return;
+    try {
+      const mimeType = file.type && file.type.startsWith("image/") ? file.type : "image/png";
+      const blob = await new Promise<Blob | null>((resolve) => {
+        canvas.toBlob((value) => resolve(value), mimeType, 0.95);
+      });
+      if (!blob) {
+        return;
+      }
+      const editedFile = new File([blob], originalName, { type: blob.type || mimeType, lastModified: Date.now() });
+      await onApply(editedFile);
+    } finally {
+      setIsExporting(false);
     }
-    const editedFile = new File([blob], originalName, { type: blob.type || mimeType, lastModified: Date.now() });
-    onApply(editedFile);
   }, [file, onApply, originalName]);
 
   if (!open || !file || !isClient) {
@@ -518,92 +523,114 @@ export function ImageAttachmentEditorModal({
 
   return createPortal(
     <div className="fixed inset-0 z-[220] flex h-screen w-screen flex-col bg-black/90 backdrop-blur-sm">
-      <div className="flex items-center justify-between border-b border-white/10 px-3 py-2 text-white">
-        <div className="min-w-0">
-          <p className="truncate text-sm font-medium">{originalName}</p>
-          <p className="text-xs text-white/70">Edit gambar sebelum kirim</p>
-        </div>
-        <Button type="button" variant="ghost" size="icon" className="h-8 w-8 text-white hover:bg-white/10" onClick={onCancel} aria-label="Tutup">
-          <X className="h-4 w-4" />
-        </Button>
-      </div>
-
-      <div className="flex items-center gap-1 overflow-x-auto border-b border-white/10 px-2 py-2">
-        {toolbarTools.map((entry) => {
-          const Icon = entry.icon;
-          const active = tool === entry.id;
-          return (
-            <Button
-              key={entry.id}
-              type="button"
-              variant="ghost"
-              size="sm"
-              className={`h-8 shrink-0 rounded-full px-3 text-xs ${active ? "bg-emerald-500/25 text-emerald-300" : "text-white/85 hover:bg-white/10 hover:text-white"}`}
-              onClick={() => setTool(entry.id)}
-            >
-              <Icon className="mr-1.5 h-3.5 w-3.5" />
-              {entry.label}
-            </Button>
-          );
-        })}
-        <input
-          type="color"
-          value={color}
-          onChange={(event) => setColor(event.target.value)}
-          className="h-8 w-9 shrink-0 cursor-pointer rounded border border-white/20 bg-transparent p-0.5"
-          title="Warna"
-        />
-        <input
-          type="range"
-          min={1}
-          max={24}
-          value={lineWidth}
-          onChange={(event) => setLineWidth(Number(event.target.value))}
-          className="h-8 w-24 shrink-0 accent-emerald-500"
-          title="Ketebalan"
-        />
-        {tool === "text" ? (
-          <input
-            type="text"
-            value={textToolValue}
-            onChange={(event) => setTextToolValue(event.target.value)}
-            placeholder="Teks anotasi..."
-            className="h-8 w-44 shrink-0 rounded-full border border-white/20 bg-white/5 px-3 text-xs text-white outline-none placeholder:text-white/45"
-          />
-        ) : null}
-        <Button type="button" variant="ghost" size="sm" className="h-8 shrink-0 rounded-full px-3 text-xs text-white/85 hover:bg-white/10 hover:text-white" onClick={() => setShapes((current) => current.slice(0, -1))}>
-          <Undo2 className="mr-1.5 h-3.5 w-3.5" />
-          Undo
-        </Button>
-        <Button
-          type="button"
-          variant="ghost"
-          size="sm"
-          className="h-8 shrink-0 rounded-full px-3 text-xs text-white/85 hover:bg-white/10 hover:text-white"
-          onClick={() => {
-            setShapes([]);
-            setDraftShape(null);
-            setCropDraft(null);
-            setEditingTextShapeIndex(null);
-            setEditingTextValue("");
-          }}
-        >
-          <RotateCcw className="mr-1.5 h-3.5 w-3.5" />
-          Reset
-        </Button>
-        {tool === "crop" ? (
-          <Button
-            type="button"
-            size="sm"
-            className="h-8 shrink-0 rounded-full bg-emerald-600 px-3 text-xs text-white hover:bg-emerald-500"
-            onClick={handleApplyCrop}
-          >
-            Terapkan Crop
+      <div className="border-b border-white/10">
+        <div className="mx-auto flex w-full max-w-5xl items-center justify-between px-5 py-2 text-white md:px-6">
+          <div className="min-w-0">
+            <p className="truncate text-sm font-medium">{originalName}</p>
+            <p className="text-xs text-white/70">Edit gambar sebelum kirim</p>
+          </div>
+          <Button type="button" variant="ghost" size="icon" className="h-8 w-8 text-white hover:bg-white/10" onClick={onCancel} aria-label="Tutup">
+            <X className="h-4 w-4" />
           </Button>
-        ) : null}
+        </div>
       </div>
 
-      <div ref={canvasContainerRef} className="relative flex min-h-0 flex-1 items-center justify-center p-3">
+      <div className="border-b border-white/10 bg-black/40">
+        <div className="mx-auto flex w-full max-w-5xl items-center justify-between px-4 py-2.5 md:px-6">
+          <div className="flex flex-1 items-center gap-1 overflow-x-auto" style={{ scrollbarWidth: "none", msOverflowStyle: "none" }}>
+            {toolbarTools.map((entry) => {
+              const Icon = entry.icon;
+              const active = tool === entry.id;
+              return (
+                <Button
+                  key={entry.id}
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  className={cn(
+                    "h-8 shrink-0 rounded-xl px-2.5 text-[11px] font-medium transition-all",
+                    active ? "bg-emerald-500/20 text-emerald-400" : "text-white/70 hover:bg-white/10 hover:text-white"
+                  )}
+                  onClick={() => setTool(entry.id)}
+                >
+                  <Icon className="mr-1.5 h-3.5 w-3.5" />
+                  {entry.label}
+                </Button>
+              );
+            })}
+          </div>
+          
+          <div className="ml-4 flex shrink-0 items-center gap-3 border-l border-white/10 pl-4">
+            <div className="flex items-center gap-2">
+              <div className="relative h-6 w-6 shrink-0 overflow-hidden rounded-full border-[1.5px] border-white/20 shadow-sm transition-transform hover:scale-110">
+                <input
+                  type="color"
+                  value={color}
+                  onChange={(event) => {
+                    const c = event.target.value;
+                    setColor(c);
+                    if (editingTextShapeIndex !== null) {
+                      setShapes(prev => prev.map((s, i) => i === editingTextShapeIndex && s.type === "text" ? { ...s, color: c } : s));
+                    }
+                  }}
+                  className="absolute -inset-2 h-10 w-10 cursor-pointer appearance-none border-none bg-transparent"
+                  title="Warna"
+                />
+              </div>
+              <div className="flex w-24 shrink-0 items-center px-2">
+                <Slider
+                  min={1}
+                  max={24}
+                  step={1}
+                  value={[lineWidth]}
+                  onValueChange={([val]) => {
+                    setLineWidth(val);
+                    if (editingTextShapeIndex !== null) {
+                      setShapes(prev => prev.map((s, i) => i === editingTextShapeIndex && s.type === "text" ? { ...s, fontSize: Math.max(14, val * 4) } : s));
+                    }
+                  }}
+                  className="w-full [&_[role=slider]]:border-emerald-500 [&_[role=slider]]:bg-emerald-500 [&>span:first-child]:bg-white/20 [&_[data-orientation=horizontal]>span]:bg-emerald-500"
+                  title="Ketebalan coretan / Ukuran teks"
+                />
+              </div>
+            </div>
+
+            <div className="flex items-center gap-1 border-l border-white/10 pl-3">
+              <Button type="button" variant="ghost" size="icon" className="h-8 w-8 rounded-lg text-white/70 hover:bg-white/10 hover:text-white" title="Undo" onClick={() => setShapes((current) => current.slice(0, -1))}>
+                <Undo2 className="h-4 w-4" />
+              </Button>
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                className="h-8 w-8 rounded-lg text-white/70 hover:bg-white/10 hover:text-white"
+                title="Reset"
+                onClick={() => {
+                  setShapes([]);
+                  setDraftShape(null);
+                  setCropDraft(null);
+                  setEditingTextShapeIndex(null);
+                  setEditingTextValue("");
+                }}
+              >
+                <RotateCcw className="h-4 w-4" />
+              </Button>
+              {tool === "crop" ? (
+                <Button
+                  type="button"
+                  size="sm"
+                  className="ml-1 h-8 rounded-lg bg-emerald-600 px-3 text-[11px] font-medium text-white hover:bg-emerald-500"
+                  onClick={handleApplyCrop}
+                >
+                  Terapkan Crop
+                </Button>
+              ) : null}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div ref={canvasContainerRef} className="relative mx-auto flex h-full w-full max-w-5xl min-h-0 flex-1 items-center justify-center px-5 py-3 md:px-6">
         <canvas
           ref={canvasRef}
           className="max-h-full max-w-full rounded-lg bg-black object-contain shadow-2xl"
@@ -629,12 +656,21 @@ export function ImageAttachmentEditorModal({
                   setIsPointerDown(true);
                   return;
                 }
+              } else {
+                const newShape: TextShape = {
+                  type: "text",
+                  color,
+                  fontSize: Math.max(14, lineWidth * 4),
+                  at: point,
+                  text: ""
+                };
+                setShapes((prev) => [...prev, newShape]);
+                setEditingTextShapeIndex(shapes.length);
+                setEditingTextValue("");
+                return;
               }
             }
             startDraw(point);
-            if (tool === "text") {
-              return;
-            }
             setIsPointerDown(true);
           }}
           onDoubleClick={(event) => {
@@ -715,27 +751,37 @@ export function ImageAttachmentEditorModal({
               }
             }}
             style={editingTextboxStyle}
-            className="rounded-lg border border-emerald-400/70 bg-black/70 px-2 py-1 text-sm text-white outline-none"
+            className="z-10 focus:ring-0"
           />
         ) : null}
       </div>
 
-      <div className="space-y-2 border-t border-white/10 px-3 py-3">
-        <p className="text-xs font-medium text-white/75">Pesan untuk media (caption)</p>
-        <textarea
-          value={captionText}
-          onChange={(event) => onCaptionTextChange(event.target.value)}
-          rows={2}
-          placeholder="Tulis pesan yang ikut dikirim bersama media..."
-          className="w-full resize-none rounded-xl border border-white/15 bg-white/5 px-3 py-2 text-sm text-white outline-none placeholder:text-white/45 focus:border-emerald-500/80"
-        />
-        <div className="flex items-center justify-end gap-2">
-          <Button type="button" variant="ghost" className="text-white/90 hover:bg-white/10 hover:text-white" onClick={onCancel}>
-            Batal
-          </Button>
-          <Button type="button" className="bg-emerald-600 text-white hover:bg-emerald-500" onClick={() => void exportEditedImage()} disabled={isExporting}>
-            {isExporting ? "Memproses..." : "Pakai Gambar Ini"}
-          </Button>
+      <div className="border-t border-white/10">
+        <div className="mx-auto w-full max-w-5xl space-y-2 px-5 py-3 md:px-6">
+          <p className="text-xs font-medium text-white/75">Pesan untuk media (caption)</p>
+          <textarea
+            value={captionText}
+            onChange={(event) => onCaptionTextChange(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key === "Enter" && !event.shiftKey) {
+                event.preventDefault();
+                if (!isExporting) {
+                  void exportEditedImage();
+                }
+              }
+            }}
+            rows={2}
+            placeholder="Tulis pesan yang ikut dikirim bersama media..."
+            className="w-full resize-none rounded-xl border border-white/15 bg-white/5 px-3 py-2 text-sm text-white outline-none placeholder:text-white/45 focus:border-emerald-500/80"
+          />
+          <div className="flex items-center justify-end gap-2">
+            <Button type="button" variant="ghost" className="text-white/90 hover:bg-white/10 hover:text-white" onClick={onCancel}>
+              Batal
+            </Button>
+            <Button type="button" className="bg-emerald-600 text-white hover:bg-emerald-500" onClick={() => void exportEditedImage()} disabled={isExporting}>
+              {isExporting ? "Mengirim..." : "Kirim"}
+            </Button>
+          </div>
         </div>
       </div>
     </div>

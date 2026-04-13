@@ -369,7 +369,8 @@ export async function getOrCreateCustomer(
       adset: existing.adset ?? existing.platform ?? attribution?.adset ?? attribution?.platform ?? null,
       ad: existing.ad ?? existing.medium ?? attribution?.ad ?? attribution?.medium ?? null,
       platform: existing.platform ?? existing.adset ?? attribution?.adset ?? attribution?.platform ?? null,
-      medium: existing.medium ?? existing.ad ?? attribution?.ad ?? attribution?.medium ?? null
+      medium: existing.medium ?? existing.ad ?? attribution?.ad ?? attribution?.medium ?? null,
+      created: false
     };
   }
 
@@ -455,7 +456,8 @@ export async function getOrCreateCustomer(
         adset: updatedLegacy.adset ?? updatedLegacy.platform ?? attribution?.adset ?? attribution?.platform ?? null,
         ad: updatedLegacy.ad ?? updatedLegacy.medium ?? attribution?.ad ?? attribution?.medium ?? null,
         platform: updatedLegacy.platform ?? updatedLegacy.adset ?? attribution?.adset ?? attribution?.platform ?? null,
-        medium: updatedLegacy.medium ?? updatedLegacy.ad ?? attribution?.ad ?? attribution?.medium ?? null
+        medium: updatedLegacy.medium ?? updatedLegacy.ad ?? attribution?.ad ?? attribution?.medium ?? null,
+        created: false
       };
     }
   }
@@ -485,7 +487,10 @@ export async function getOrCreateCustomer(
       platform: true,
       medium: true
     }
-  });
+  }).then((row) => ({
+    ...row,
+    created: true
+  }));
 }
 
 export async function getOrCreateOpenConversation(
@@ -517,7 +522,12 @@ export async function getOrCreateOpenConversation(
       sourcePlatform: true,
       sourceMedium: true,
       shortlinkId: true,
-      trackingId: true
+      trackingId: true,
+      fbclid: true,
+      fbc: true,
+      fbp: true,
+      ctwaClid: true,
+      wabaId: true
     }
   });
 
@@ -540,6 +550,21 @@ export async function getOrCreateOpenConversation(
     }
     if (!latestConversation.trackingId && attribution?.trackingId) {
       updateData.trackingId = attribution.trackingId;
+    }
+    if (!latestConversation.fbclid && attribution?.fbclid) {
+      updateData.fbclid = attribution.fbclid;
+    }
+    if (!latestConversation.fbc && attribution?.fbc) {
+      updateData.fbc = attribution.fbc;
+    }
+    if (!latestConversation.fbp && attribution?.fbp) {
+      updateData.fbp = attribution.fbp;
+    }
+    if (!latestConversation.ctwaClid && attribution?.ctwaClid) {
+      updateData.ctwaClid = attribution.ctwaClid;
+    }
+    if (!latestConversation.wabaId && attribution?.wabaId) {
+      updateData.wabaId = attribution.wabaId;
     }
     if (!latestConversation.waChatJid && normalizedWaChatJid) {
       updateData.waChatJid = normalizedWaChatJid;
@@ -579,6 +604,11 @@ export async function getOrCreateOpenConversation(
       sourceMedium: attribution?.medium ?? null,
       shortlinkId: attribution?.shortlinkId ?? null,
       trackingId: attribution?.trackingId ?? null,
+      fbclid: attribution?.fbclid ?? null,
+      fbc: attribution?.fbc ?? null,
+      fbp: attribution?.fbp ?? null,
+      ctwaClid: attribution?.ctwaClid ?? null,
+      wabaId: attribution?.wabaId ?? null,
       waChatJid: normalizedWaChatJid
     },
     select: {

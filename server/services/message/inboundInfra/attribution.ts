@@ -22,6 +22,13 @@ export async function resolveInboundAttribution(
         medium: string | null;
       }
     | null = null;
+  let clickMeta:
+    | {
+        fbclid: string | null;
+        fbc: string | null;
+        fbp: string | null;
+      }
+    | null = null;
 
   if (normalizedTrackingId) {
     const click = await tx.shortlinkClick.findFirst({
@@ -30,6 +37,9 @@ export async function resolveInboundAttribution(
         trackingId: normalizedTrackingId
       },
       select: {
+        fbclid: true,
+        fbc: true,
+        fbp: true,
         shortlink: {
           select: {
             id: true,
@@ -44,6 +54,13 @@ export async function resolveInboundAttribution(
       }
     });
     shortlink = click?.shortlink ?? null;
+    clickMeta = click
+      ? {
+          fbclid: click.fbclid ?? null,
+          fbc: click.fbc ?? null,
+          fbp: click.fbp ?? null
+        }
+      : null;
   }
 
   if (!shortlink && normalizedCode) {
@@ -78,6 +95,9 @@ export async function resolveInboundAttribution(
     ad: shortlink.adName ?? shortlink.medium ?? undefined,
     platform: shortlink.adset ?? shortlink.platform ?? undefined,
     medium: shortlink.adName ?? shortlink.medium ?? undefined,
-    shortlinkId: shortlink.id
+    shortlinkId: shortlink.id,
+    fbclid: clickMeta?.fbclid ?? undefined,
+    fbc: clickMeta?.fbc ?? undefined,
+    fbp: clickMeta?.fbp ?? undefined
   };
 }

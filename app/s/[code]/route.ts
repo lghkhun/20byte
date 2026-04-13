@@ -9,6 +9,11 @@ function normalize(value: string | undefined): string {
   return (value ?? "").trim();
 }
 
+function normalizeTrackingParam(value: string | null): string | null {
+  const normalized = normalize(value ?? undefined);
+  return normalized ? normalized.slice(0, 191) : null;
+}
+
 function getClientIpHash(request: NextRequest): string | null {
   const forwarded = request.headers.get("x-forwarded-for") ?? "";
   const firstIp = normalize(forwarded.split(",")[0]);
@@ -109,12 +114,18 @@ export async function GET(
   const ipHash = getClientIpHash(request);
   const userAgent = normalize(request.headers.get("user-agent") ?? undefined) || null;
   const trackingId = generateTrackingId(shortlink.code);
+  const fbclid = normalizeTrackingParam(request.nextUrl.searchParams.get("fbclid"));
+  const fbc = normalizeTrackingParam(request.nextUrl.searchParams.get("fbc"));
+  const fbp = normalizeTrackingParam(request.nextUrl.searchParams.get("fbp"));
 
   await prisma.shortlinkClick.create({
     data: {
       orgId: shortlink.orgId,
       shortlinkId: shortlink.id,
       trackingId,
+      fbclid,
+      fbc,
+      fbp,
       ipHash,
       userAgent
     }

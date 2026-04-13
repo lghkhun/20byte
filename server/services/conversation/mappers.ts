@@ -136,16 +136,35 @@ export function toConversationListItem(row: {
     type: string;
     direction: "INBOUND" | "OUTBOUND";
     fileName: string | null;
+    senderDisplayName?: string | null;
+    senderPhoneE164?: string | null;
   }>;
 }): ConversationListItem {
   const firstMessage = row.messages?.[0] ?? null;
+  const isGroupConversation = Boolean(row.waChatJid?.endsWith("@g.us"));
+  const normalizedCustomerName = row.customer.displayName?.trim() || null;
+  const inboundSenderName = firstMessage?.direction === "INBOUND"
+    ? firstMessage.senderDisplayName?.trim() || firstMessage.senderPhoneE164?.trim() || null
+    : null;
+  const normalizedLastMessageSender = row.lastMessageSenderName?.trim() || null;
+  const shouldTreatGroupNameAsSenderName =
+    isGroupConversation &&
+    Boolean(normalizedCustomerName) &&
+    Boolean(normalizedLastMessageSender) &&
+    normalizedCustomerName!.toLowerCase() === normalizedLastMessageSender!.toLowerCase();
+  const groupFallbackName = row.waChatJid
+    ? `Grup ${row.waChatJid.split("@")[0].slice(-6)}`
+    : "Grup WhatsApp";
+  const resolvedCustomerDisplayName = isGroupConversation
+    ? (shouldTreatGroupNameAsSenderName ? groupFallbackName : normalizedCustomerName ?? groupFallbackName)
+    : (inboundSenderName ?? normalizedCustomerName);
 
   return {
     id: row.id,
     orgId: row.orgId,
     customerId: row.customerId,
     customerPhoneE164: row.customer.phoneE164,
-    customerDisplayName: row.customer.displayName,
+    customerDisplayName: resolvedCustomerDisplayName,
     customerAvatarUrl: sanitizeConversationAvatarUrl(row.customer.waProfilePicUrl),
     customerLeadStatus: row.customer.leadStatus,
     crmPipelineId: row.crmPipelineId,

@@ -774,6 +774,7 @@ export function ChatWindow({
         <MessageInput
           density={density}
           disabled={!isConversationSelected}
+          focusKey={conversation?.id ?? null}
           textValue={activeDraft}
           replyTarget={replyTarget}
           onClearReplyTarget={() => setReplyTarget(null)}

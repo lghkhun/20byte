@@ -165,8 +165,21 @@ export function AppSidebar({ user, ownerOnboardingStatus = null }: AppSidebarPro
   const [checkoutPaymentExpiresAt, setCheckoutPaymentExpiresAt] = useState<string | null>(null);
   const [checkoutQrDataUrl, setCheckoutQrDataUrl] = useState<string | null>(null);
   const [checkoutNowMs, setCheckoutNowMs] = useState(() => Date.now());
+  const [isCommunityDialogOpen, setIsCommunityDialogOpen] = useState(false);
+  const [communityQrDataUrl, setCommunityQrDataUrl] = useState<string | null>(null);
   const loadingToastIdRef = useRef<string | number | null>(null);
   const billingReminderCacheRef = useRef<{ checkedAt: number; message: string | null } | null>(null);
+
+  useEffect(() => {
+    let canceled = false;
+    QRCode.toDataURL("https://chat.whatsapp.com/Da8N0AS3OT8743sWOyYwCZ?mode=gi_t", {
+      width: 320,
+      margin: 1
+    }).then(url => {
+       if (!canceled) setCommunityQrDataUrl(url);
+    }).catch(() => {});
+    return () => { canceled = true };
+  }, []);
 
   const navMain = useMemo(
     () => [
@@ -473,6 +486,26 @@ export function AppSidebar({ user, ownerOnboardingStatus = null }: AppSidebarPro
             <SidebarOnboardingCard status={ownerOnboardingStatus} />
           </div>
         ) : null}
+        <div className="mx-3 mb-2 group-data-[collapsible=icon]:hidden">
+          <button
+            onClick={() => setIsCommunityDialogOpen(true)}
+            className="group relative w-full overflow-hidden rounded-2xl border border-emerald-500/20 bg-gradient-to-br from-emerald-500/10 to-emerald-500/5 px-4 py-3 text-left transition-all hover:border-emerald-500/40 hover:shadow-lg hover:shadow-emerald-500/10"
+          >
+            <div className="absolute inset-0 bg-gradient-to-r from-emerald-500/0 via-emerald-500/10 to-emerald-500/0 opacity-0 transition-opacity duration-500 group-hover:opacity-100" />
+            <div className="relative z-10">
+              <p className="flex items-center gap-2 text-[13px] font-bold text-emerald-600 dark:text-emerald-500">
+                <span className="flex h-[22px] w-[22px] items-center justify-center rounded-full bg-emerald-500/20 text-[11px] ring-2 ring-emerald-500/10">💚</span>
+                Komunitas 20byte
+              </p>
+              <p className="mt-1.5 text-[11px] font-medium leading-[1.5] text-emerald-900/70 dark:text-emerald-100/70">
+                Gabung grup WhatsApp kami untuk tanya-jawab, diskusi, dan request fitur!
+              </p>
+              <p className="mt-2 text-[10px] font-bold uppercase tracking-widest text-emerald-600/80 transition-colors group-hover:text-emerald-600 dark:text-emerald-400/80 dark:group-hover:text-emerald-400">
+                Join Grup WA &rarr;
+              </p>
+            </div>
+          </button>
+        </div>
         <NavUser user={user} />
       </SidebarFooter>
       <SidebarRail side="left" />
@@ -542,6 +575,48 @@ export function AppSidebar({ user, ownerOnboardingStatus = null }: AppSidebarPro
               </p>
             </div>
           ) : null}
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={isCommunityDialogOpen} onOpenChange={setIsCommunityDialogOpen}>
+        <DialogContent className="sm:max-w-[380px] p-0 rounded-[28px] overflow-hidden gap-0 border border-emerald-500/20 bg-white shadow-2xl">
+          <div className="bg-gradient-to-br from-emerald-500 to-emerald-600 px-6 py-8 text-center text-white relative">
+            <div className="absolute inset-0 opacity-20 bg-[radial-gradient(circle_at_top_right,_rgba(255,255,255,0.4),_transparent_60%)]"></div>
+            <div className="relative z-10">
+              <div className="mx-auto mb-3 flex h-14 w-14 items-center justify-center rounded-2xl bg-white/20 ring-4 ring-white/10 backdrop-blur-sm">
+                <MessageCircle className="h-7 w-7 text-white" />
+              </div>
+              <h2 className="text-[20px] font-bold tracking-tight">Komunitas 20byte</h2>
+              <p className="mt-2 text-[13px] font-medium leading-relaxed text-emerald-50">
+                Wadah resmi untuk Anda bertanya, berbagi tips, serta memberi masukan dan request fitur langsung ke tim kami!
+              </p>
+            </div>
+          </div>
+          
+          <div className="px-6 py-8 flex flex-col items-center bg-gradient-to-b from-emerald-500/5 to-transparent">
+            {communityQrDataUrl ? (
+              <div className="flex items-center justify-center rounded-[20px] border-2 border-emerald-100 bg-white p-3 shadow-xl shadow-emerald-900/5">
+                <Image src={communityQrDataUrl} alt="QR Komunitas" width={220} height={220} unoptimized className="object-contain" />
+              </div>
+            ) : (
+              <div className="h-[220px] w-[220px] bg-emerald-50 animate-pulse rounded-[20px] border-2 border-emerald-100" />
+            )}
+
+            <div className="my-5 flex w-full items-center gap-3 px-4">
+              <div className="h-px flex-1 bg-border/60" />
+              <span className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground/60">Atau via link</span>
+              <div className="h-px flex-1 bg-border/60" />
+            </div>
+
+            <Button
+              asChild
+              className="w-full rounded-2xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold h-12 shadow-lg shadow-emerald-600/20"
+            >
+              <a href="https://chat.whatsapp.com/Da8N0AS3OT8743sWOyYwCZ?mode=gi_t" target="_blank" rel="noopener noreferrer">
+                Klik untuk Bergabung ke Grup
+              </a>
+            </Button>
+          </div>
         </DialogContent>
       </Dialog>
     </Sidebar>

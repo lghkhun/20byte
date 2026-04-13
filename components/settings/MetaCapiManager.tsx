@@ -19,7 +19,8 @@ type OrgItem = {
 
 type MetaIntegrationView = {
   orgId: string;
-  pixelId: string;
+  datasetId: string;
+  legacyPixelId: string | null;
   testEventCode: string | null;
   enabled: boolean;
   hasAccessToken: boolean;
@@ -72,7 +73,7 @@ export function MetaCapiManager() {
   const [isSaving, setIsSaving] = useState(false);
   const [isSendingTest, setIsSendingTest] = useState(false);
   const [isLoadingStatus, setIsLoadingStatus] = useState(false);
-  const [pixelId, setPixelId] = useState("");
+  const [datasetId, setDatasetId] = useState("");
   const [testEventCode, setTestEventCode] = useState("");
   const [accessTokenInput, setAccessTokenInput] = useState("");
   const [enabled, setEnabled] = useState(false);
@@ -98,7 +99,7 @@ export function MetaCapiManager() {
     });
 
     const integration = payload.data?.integration ?? null;
-    setPixelId(integration?.pixelId ?? "");
+    setDatasetId(integration?.datasetId ?? integration?.legacyPixelId ?? "");
     setTestEventCode(integration?.testEventCode ?? "");
     setEnabled(integration?.enabled ?? false);
     setHasAccessToken(Boolean(integration?.hasAccessToken));
@@ -196,7 +197,7 @@ export function MetaCapiManager() {
           "Content-Type": "application/json"
         },
         body: JSON.stringify({
-          pixelId,
+          datasetId,
           accessToken: accessTokenInput.trim() ? accessTokenInput : undefined,
           testEventCode: testEventCode.trim() || null,
           enabled
@@ -214,9 +215,9 @@ export function MetaCapiManager() {
       invalidateFetchCache("GET:/api/meta/integration");
       invalidateFetchCache("GET:/api/meta/integration/status");
       await loadMetaStatus();
-      setSuccess("Konfigurasi Meta Pixel & CAPI tersimpan.");
+      setSuccess("Konfigurasi Meta Dataset & CAPI tersimpan.");
     } catch (err) {
-      setError(toErrorMessage(err, "Gagal menyimpan konfigurasi Meta Pixel & CAPI."));
+      setError(toErrorMessage(err, "Gagal menyimpan konfigurasi Meta Dataset & CAPI."));
     } finally {
       setIsSaving(false);
     }
@@ -260,7 +261,7 @@ export function MetaCapiManager() {
             <Sparkles className="h-4 w-4" />
           </div>
           <div>
-            <p className="text-sm font-semibold text-foreground">Meta Pixel + Conversions API</p>
+            <p className="text-sm font-semibold text-foreground">Meta Dataset + Conversions API</p>
             <p className="mt-1 text-sm leading-6 text-muted-foreground">
               Konfigurasi disimpan per bisnis di server. Access token tidak pernah dikembalikan ke frontend.
             </p>
@@ -280,14 +281,14 @@ export function MetaCapiManager() {
             <div className="space-y-3 rounded-2xl border border-border/70 bg-background/60 p-4">
               <div className="flex items-center gap-2">
                 <ShieldCheck className="h-4 w-4 text-emerald-600" />
-                <p className="text-sm font-semibold text-foreground">Meta Pixel</p>
+                <p className="text-sm font-semibold text-foreground">Meta Dataset</p>
               </div>
               <div className="space-y-2">
-                <Label htmlFor="pixel-id">Pixel ID</Label>
+                <Label htmlFor="dataset-id">Dataset ID</Label>
                 <Input
-                  id="pixel-id"
-                  value={pixelId}
-                  onChange={(event) => setPixelId(event.currentTarget.value)}
+                  id="dataset-id"
+                  value={datasetId}
+                  onChange={(event) => setDatasetId(event.currentTarget.value)}
                   placeholder="Contoh: 123456789012345"
                   autoComplete="off"
                   disabled={isLoading || isSaving}
@@ -327,7 +328,7 @@ export function MetaCapiManager() {
               <div className="flex items-center justify-between rounded-xl border border-border/70 bg-card px-3 py-2.5">
                 <div>
                   <p className="text-sm font-medium text-foreground">Aktifkan integrasi</p>
-                  <p className="text-xs text-muted-foreground">Kirim event conversion via CAPI.</p>
+                  <p className="text-xs text-muted-foreground">Kirim event conversion via dataset CAPI.</p>
                 </div>
                 <Switch checked={enabled} onCheckedChange={setEnabled} disabled={isLoading || isSaving} />
               </div>
@@ -361,7 +362,7 @@ export function MetaCapiManager() {
                 type="button"
                 className="rounded-xl"
                 onClick={() => void handleSendTestEvent()}
-                disabled={isLoading || isSendingTest || !pixelId.trim() || !hasAccessToken}
+                disabled={isLoading || isSendingTest || !datasetId.trim() || !hasAccessToken}
               >
                 {isSendingTest ? "Sending..." : "Send Test Event"}
               </Button>
