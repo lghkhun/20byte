@@ -103,6 +103,11 @@ wait_for_health() {
   return 1
 }
 
+ensure_active_color_dir() {
+  dir_path="$(dirname "$ACTIVE_COLOR_FILE")"
+  mkdir -p "$dir_path"
+}
+
 stop_legacy_container_if_present() {
   name="$1"
   if as_root docker ps -a --format '{{.Names}}' | grep -qx "$name"; then
@@ -151,6 +156,7 @@ write_upstream_snippet "$inactive_port"
 as_root nginx -t
 as_root systemctl reload nginx
 
+ensure_active_color_dir
 printf '%s\n' "$inactive_color" >"$ACTIVE_COLOR_FILE"
 
 if [ "$active_color" = "legacy" ]; then
