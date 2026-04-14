@@ -1,4 +1,0 @@
-[GET] http://127.0.0.1:3100/api/orgs => [200] OK
-[GET] http://127.0.0.1:3100/api/invoices?page=1&limit=200 => [200] OK
-[GET] http://127.0.0.1:3100/api/invoices?page=1&limit=200 => [200] OK
-[GET] http://127.0.0.1:3100/api/invoices/cmmsbsfzz000ci03zhozk7e15/timeline => [200] OK

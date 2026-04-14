@@ -1,6 +1,0 @@
-[     633ms] [ERROR] Failed to load resource: the server responded with a status of 404 (Not Found) @ http://localhost:3000/favicon.ico:0
-[   72505ms] [ERROR] Failed to load resource: the server responded with a status of 404 (Not Found) @ http://localhost:3000/i/invalid-token-for-audit:0
-[   73034ms] [WARNING] No default component was found for a parallel route rendered on this page. Falling back to nearest NotFound boundary.
-Learn more: https://nextjs.org/docs/app/building-your-application/routing/parallel-routes#defaultjs
-
- @ webpack-internal:///(app-pages-browser)/./node_modules/next/dist/shared/lib/utils/warn-once.js:15
