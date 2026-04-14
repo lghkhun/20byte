@@ -8,6 +8,9 @@ RUN npm ci && npx prisma generate
 
 FROM base AS builder
 
+ENV NODE_OPTIONS=--max-old-space-size=2048
+ENV NEXT_TELEMETRY_DISABLED=1
+
 COPY . .
 RUN npm run build
 
