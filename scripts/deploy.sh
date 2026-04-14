@@ -17,6 +17,7 @@ HEALTH_RETRIES="${HEALTH_RETRIES:-30}"
 HEALTH_DELAY="${HEALTH_DELAY:-5}"
 SKIP_GIT_SYNC="${SKIP_GIT_SYNC:-0}"
 KEEP_OLD_WEB="${KEEP_OLD_WEB:-0}"
+DOCKER_PRUNE_AFTER_DEPLOY="${DOCKER_PRUNE_AFTER_DEPLOY:-1}"
 
 as_root() {
   if [ "$(id -u)" -eq 0 ]; then
@@ -177,5 +178,12 @@ fi
 
 echo "[deploy] current status:"
 compose ps
+
+if [ "$DOCKER_PRUNE_AFTER_DEPLOY" = "1" ]; then
+  echo "[deploy] pruning dangling docker images"
+  as_root "$DOCKER_BIN" image prune -f >/dev/null || true
+  echo "[deploy] pruning docker builder cache older than 24h"
+  as_root "$DOCKER_BIN" builder prune -af --filter "until=24h" >/dev/null || true
+fi
 
 echo "[deploy] active production color is now $inactive_color"

@@ -12,7 +12,15 @@ ENV NODE_OPTIONS=--max-old-space-size=2048
 ENV NEXT_TELEMETRY_DISABLED=1
 
 COPY . .
-RUN npm run build
+RUN sh -lc ' \
+  (while true; do echo "[docker-build] next build still running..."; sleep 30; done) & \
+  heartbeat_pid=$!; \
+  npm run build; \
+  build_status=$?; \
+  kill "$heartbeat_pid" 2>/dev/null || true; \
+  wait "$heartbeat_pid" 2>/dev/null || true; \
+  exit "$build_status" \
+'
 
 FROM node:20-alpine AS runner
 
