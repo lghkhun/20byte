@@ -23,6 +23,7 @@ export type CrmPipelineItem = {
 
 export type CrmPipelineKanbanCard = {
   id: string;
+  customerId: string;
   customerName: string;
   customerPhoneE164: string;
   status: "OPEN" | "CLOSED";
@@ -62,6 +63,8 @@ export type CrmPipelineKanbanBoard = {
     cards: CrmPipelineKanbanCard[];
   };
 };
+
+type ConversationScope = "CUSTOMER_ONLY" | "GROUP_ONLY" | "ALL";
 
 function normalize(value: string | undefined): string {
   return (value ?? "").trim();
@@ -127,10 +130,17 @@ function toConversationStatus(status: string | undefined): ConversationStatus | 
     return ConversationStatus.CLOSED;
   }
 
-  throw new ServiceError(400, "INVALID_CONVERSATION_STATUS", "status must be OPEN, CLOSED, or ALL.");
+  throw new ServiceError(
+    400,
+    "INVALID_CONVERSATION_STATUS",
+    "status must be OPEN, CLOSED, or ALL."
+  );
 }
 
-function parseDateInput(value: string | undefined, field: "activityFrom" | "activityTo"): Date | undefined {
+function parseDateInput(
+  value: string | undefined,
+  field: "activityFrom" | "activityTo"
+): Date | undefined {
   const normalized = normalize(value);
   if (!normalized) {
     return undefined;
@@ -165,28 +175,51 @@ function normalizeCardLimit(value: number | undefined): number {
   return rounded;
 }
 
-function mapKanbanCard(row: {
-  id: string;
-  status: ConversationStatus;
-  assignedToMemberId: string | null;
-  unreadCount: number;
-  lastMessageAt: Date | null;
-  customer: {
-    phoneE164: string;
-    displayName: string | null;
-  };
-  messages: Array<{
-    text: string | null;
-    type: string;
-    fileName: string | null;
-  }>;
-}, invoiceCounters: { total: number; unpaid: number }): CrmPipelineKanbanCard {
+function toConversationScope(value: string | undefined): ConversationScope {
+  const normalized = normalize(value);
+  if (!normalized) {
+    return "ALL";
+  }
+
+  if (normalized === "CUSTOMER_ONLY" || normalized === "GROUP_ONLY" || normalized === "ALL") {
+    return normalized;
+  }
+
+  throw new ServiceError(
+    400,
+    "INVALID_CONVERSATION_SCOPE",
+    "chatScope must be CUSTOMER_ONLY, GROUP_ONLY, or ALL."
+  );
+}
+
+function mapKanbanCard(
+  row: {
+    id: string;
+    customerId: string;
+    status: ConversationStatus;
+    assignedToMemberId: string | null;
+    unreadCount: number;
+    lastMessageAt: Date | null;
+    customer: {
+      phoneE164: string;
+      displayName: string | null;
+    };
+    messages: Array<{
+      text: string | null;
+      type: string;
+      fileName: string | null;
+    }>;
+  },
+  invoiceCounters: { total: number; unpaid: number }
+): CrmPipelineKanbanCard {
   const latestMessage = row.messages[0] ?? null;
-  const fallbackPreview = latestMessage?.type === "TEXT" ? "" : latestMessage?.fileName || latestMessage?.type || "";
+  const fallbackPreview =
+    latestMessage?.type === "TEXT" ? "" : latestMessage?.fileName || latestMessage?.type || "";
   const latestTextPreview = normalizeLegacyLocalInvoiceLinks(latestMessage?.text?.trim() || "");
 
   return {
     id: row.id,
+    customerId: row.customerId,
     customerName: row.customer.displayName?.trim() || row.customer.phoneE164,
     customerPhoneE164: row.customer.phoneE164,
     status: row.status,
@@ -226,7 +259,12 @@ export async function ensureDefaultCrmPipeline(orgId: string): Promise<void> {
       }
     });
   } catch (error) {
-    if (typeof error === "object" && error && "code" in error && (error as { code?: string }).code === "P2002") {
+    if (
+      typeof error === "object" &&
+      error &&
+      "code" in error &&
+      (error as { code?: string }).code === "P2002"
+    ) {
       // Another request already created the default pipeline.
       return;
     }
@@ -234,7 +272,10 @@ export async function ensureDefaultCrmPipeline(orgId: string): Promise<void> {
   }
 }
 
-export async function listCrmPipelines(actorUserId: string, orgIdInput: string): Promise<CrmPipelineItem[]> {
+export async function listCrmPipelines(
+  actorUserId: string,
+  orgIdInput: string
+): Promise<CrmPipelineItem[]> {
   const orgId = normalize(orgIdInput);
   if (!orgId) {
     throw new ServiceError(400, "MISSING_ORG_ID", "orgId is required.");
@@ -274,6 +315,7 @@ export async function listCrmPipelineKanbanBoard(input: {
   activityFrom?: string;
   activityTo?: string;
   cardLimit?: number;
+  chatScope?: string;
 }): Promise<CrmPipelineKanbanBoard> {
   const orgId = normalize(input.orgId);
   const pipelineId = normalize(input.pipelineId);
@@ -282,12 +324,17 @@ export async function listCrmPipelineKanbanBoard(input: {
   const activityFrom = parseDateInput(input.activityFrom, "activityFrom");
   const activityTo = parseDateInput(input.activityTo, "activityTo");
   const cardLimit = normalizeCardLimit(input.cardLimit);
+  const chatScope = toConversationScope(input.chatScope);
 
   if (!orgId) {
     throw new ServiceError(400, "MISSING_ORG_ID", "orgId is required.");
   }
   if (activityFrom && activityTo && activityFrom.getTime() > activityTo.getTime()) {
-    throw new ServiceError(400, "INVALID_DATE_RANGE", "activityFrom must be before or equal to activityTo.");
+    throw new ServiceError(
+      400,
+      "INVALID_DATE_RANGE",
+      "activityFrom must be before or equal to activityTo."
+    );
   }
 
   await requireCrmAccess(input.actorUserId, orgId);
@@ -358,7 +405,11 @@ export async function listCrmPipelineKanbanBoard(input: {
     });
 
     if (!assigneeMembership) {
-      throw new ServiceError(404, "ASSIGNEE_NOT_FOUND", "Selected assignee does not exist in this organization.");
+      throw new ServiceError(
+        404,
+        "ASSIGNEE_NOT_FOUND",
+        "Selected assignee does not exist in this organization."
+      );
     }
 
     assignedToMemberIdFilter = assigneeMembership.id;
@@ -384,12 +435,30 @@ export async function listCrmPipelineKanbanBoard(input: {
       where: {
         orgId,
         ...(status ? { status } : {}),
-        ...(assignedToMemberIdFilter === undefined ? {} : { assignedToMemberId: assignedToMemberIdFilter }),
-        ...((activityFrom || activityTo)
+        ...(assignedToMemberIdFilter === undefined
+          ? {}
+          : { assignedToMemberId: assignedToMemberIdFilter }),
+        ...(activityFrom || activityTo
           ? {
               lastMessageAt: {
                 ...(activityFrom ? { gte: activityFrom } : {}),
                 ...(activityTo ? { lte: activityTo } : {})
+              }
+            }
+          : {}),
+        ...(chatScope === "CUSTOMER_ONLY"
+          ? {
+              NOT: {
+                waChatJid: {
+                  endsWith: "@g.us"
+                }
+              }
+            }
+          : {}),
+        ...(chatScope === "GROUP_ONLY"
+          ? {
+              waChatJid: {
+                endsWith: "@g.us"
               }
             }
           : {}),
@@ -398,6 +467,8 @@ export async function listCrmPipelineKanbanBoard(input: {
       orderBy: [{ lastMessageAt: "desc" }, { updatedAt: "desc" }],
       select: {
         id: true,
+        customerId: true,
+        waChatJid: true,
         status: true,
         assignedToMemberId: true,
         unreadCount: true,
@@ -473,12 +544,30 @@ export async function listCrmPipelineKanbanBoard(input: {
 
   const cardsByStage = new Map<string, CrmPipelineKanbanCard[]>();
   const unassignedCards: CrmPipelineKanbanCard[] = [];
+  const seenCustomerIds = new Set<string>();
+  const seenPhoneNumbers = new Set<string>();
 
   for (const stage of pipeline.stages) {
     cardsByStage.set(stage.id, []);
   }
 
   for (const conversation of conversations) {
+    const normalizedPhone = conversation.customer.phoneE164.trim().replace(/\s+/g, "");
+    if (!normalizedPhone) {
+      continue;
+    }
+    const isGroupConversation = conversation.waChatJid?.endsWith("@g.us") ?? false;
+    if (!isGroupConversation) {
+      if (seenCustomerIds.has(conversation.customerId)) {
+        continue;
+      }
+      if (seenPhoneNumbers.has(normalizedPhone)) {
+        continue;
+      }
+      seenCustomerIds.add(conversation.customerId);
+      seenPhoneNumbers.add(normalizedPhone);
+    }
+
     const card = mapKanbanCard(conversation, {
       total: totalInvoiceMap.get(conversation.id) ?? 0,
       unpaid: unpaidInvoiceMap.get(conversation.id) ?? 0
@@ -654,7 +743,11 @@ export async function assignConversationPipeline(input: {
   const pipelineId = normalize(input.pipelineId);
   const stageId = normalize(input.stageId);
   if (!orgId || !conversationId || !pipelineId || !stageId) {
-    throw new ServiceError(400, "INVALID_PIPELINE_ASSIGNMENT", "conversationId, pipelineId, and stageId are required.");
+    throw new ServiceError(
+      400,
+      "INVALID_PIPELINE_ASSIGNMENT",
+      "conversationId, pipelineId, and stageId are required."
+    );
   }
 
   await requireCrmAccess(input.actorUserId, orgId);
@@ -716,7 +809,10 @@ export async function assignConversationPipeline(input: {
   });
 }
 
-export function rankStageNameForInvoiceTarget(name: string, target: "INVOICE_SENT" | "INVOICE_PAID"): number {
+export function rankStageNameForInvoiceTarget(
+  name: string,
+  target: "INVOICE_SENT" | "INVOICE_PAID"
+): number {
   const value = name.toLowerCase();
   if (target === "INVOICE_SENT") {
     if (value.includes("invoice")) {

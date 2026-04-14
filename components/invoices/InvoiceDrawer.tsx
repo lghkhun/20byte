@@ -225,7 +225,8 @@ function DueDatePickerField({
                   button_next:
                     "absolute right-0 inline-flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground transition hover:bg-muted hover:text-foreground",
                   weekdays: "mb-1 grid grid-cols-7",
-                  weekday: "flex h-8 items-center justify-center text-xs font-medium text-muted-foreground",
+                  weekday:
+                    "flex h-8 items-center justify-center text-xs font-medium text-muted-foreground",
                   week: "grid grid-cols-7",
                   day: "flex items-center justify-center",
                   day_button:
@@ -335,7 +336,16 @@ export function InvoiceDrawer({
     handleUpdateItems,
     handleSendInvoice,
     handleMarkPaid
-  } = useInvoiceDrawer({ open, customerId, conversationId, orgId, customerDisplayName, customerPhoneE164, onClose });
+  } = useInvoiceDrawer({
+    open,
+    customerId,
+    conversationId,
+    orgId,
+    customerDisplayName,
+    customerDisplayNameSnapshot: customerName,
+    customerPhoneE164,
+    onClose
+  });
 
   useEffect(() => {
     if (!open) {
@@ -458,7 +468,9 @@ export function InvoiceDrawer({
   }
 
   function toggleCatalogSelection(itemId: string) {
-    setCatalogSelectedIds((current) => (current.includes(itemId) ? current.filter((id) => id !== itemId) : [...current, itemId]));
+    setCatalogSelectedIds((current) =>
+      current.includes(itemId) ? current.filter((id) => id !== itemId) : [...current, itemId]
+    );
   }
 
   function handleApplyCatalogItems() {
@@ -485,11 +497,17 @@ export function InvoiceDrawer({
       try {
         const [profileResponse, membersResponse, businessResponse] = await Promise.all([
           fetch("/api/auth/profile", { cache: "no-store" }),
-          orgId ? fetch(`/api/orgs/members?orgId=${encodeURIComponent(orgId)}`, { cache: "no-store" }) : Promise.resolve(null),
-          fetch(`/api/orgs/business${orgId ? `?orgId=${encodeURIComponent(orgId)}` : ""}`, { cache: "no-store" })
+          orgId
+            ? fetch(`/api/orgs/members?orgId=${encodeURIComponent(orgId)}`, { cache: "no-store" })
+            : Promise.resolve(null),
+          fetch(`/api/orgs/business${orgId ? `?orgId=${encodeURIComponent(orgId)}` : ""}`, {
+            cache: "no-store"
+          })
         ]);
 
-        const profilePayload = (await profileResponse.json().catch(() => null)) as ProfilePayload | null;
+        const profilePayload = (await profileResponse
+          .json()
+          .catch(() => null)) as ProfilePayload | null;
         const user = profilePayload?.data?.user;
         const nextUserId = user?.id ?? "";
         const nextUserLabel = user?.name?.trim() || user?.email || "Business Owner";
@@ -499,7 +517,9 @@ export function InvoiceDrawer({
           setCurrentUserLabel(nextUserLabel);
         }
 
-        const businessPayload = (await businessResponse.json().catch(() => null)) as BusinessProfilePayload | null;
+        const businessPayload = (await businessResponse
+          .json()
+          .catch(() => null)) as BusinessProfilePayload | null;
         if (!ignore) {
           setBusinessProfile(businessPayload?.data?.profile ?? null);
         }
@@ -512,7 +532,9 @@ export function InvoiceDrawer({
           return;
         }
 
-        const membersPayload = (await membersResponse.json().catch(() => null)) as { data?: { members?: MemberOption[] } } | null;
+        const membersPayload = (await membersResponse.json().catch(() => null)) as {
+          data?: { members?: MemberOption[] };
+        } | null;
         const nextMembers = membersPayload?.data?.members ?? [];
 
         if (!ignore) {
@@ -544,8 +566,10 @@ export function InvoiceDrawer({
   const canSendInvoice = !isSendingInvoice && Boolean(invoiceId);
   const canMarkPaid = !isMarkingPaid && Boolean(invoiceId);
   const lineSummaries = items.map((item) => computeInvoiceLine(item));
-  const dpAmountCents = kind === InvoiceKind.DP_AND_FINAL ? Math.round((totalCents * dpPercentage) / 100) : totalCents;
-  const finalAmountCents = kind === InvoiceKind.DP_AND_FINAL ? Math.max(0, totalCents - dpAmountCents) : 0;
+  const dpAmountCents =
+    kind === InvoiceKind.DP_AND_FINAL ? Math.round((totalCents * dpPercentage) / 100) : totalCents;
+  const finalAmountCents =
+    kind === InvoiceKind.DP_AND_FINAL ? Math.max(0, totalCents - dpAmountCents) : 0;
   const filteredCatalogItems = catalogItems.filter((item) => {
     const code = buildCatalogCode(item.id).toLowerCase();
     const name = item.name.toLowerCase();
@@ -554,12 +578,17 @@ export function InvoiceDrawer({
     return (
       (!catalogSearchCode.trim() || code.includes(catalogSearchCode.trim().toLowerCase())) &&
       (!catalogSearchName.trim() || name.includes(catalogSearchName.trim().toLowerCase())) &&
-      (!catalogSearchCategory.trim() || category.includes(catalogSearchCategory.trim().toLowerCase()))
+      (!catalogSearchCategory.trim() ||
+        category.includes(catalogSearchCategory.trim().toLowerCase()))
     );
   });
 
   return (
-    <Drawer open={open} onOpenChange={(nextOpen) => (!nextOpen ? onClose() : undefined)} direction="right">
+    <Drawer
+      open={open}
+      onOpenChange={(nextOpen) => (!nextOpen ? onClose() : undefined)}
+      direction="right"
+    >
       <DrawerContent className="data-[vaul-drawer-direction=right]:border-l-border lg:max-w-4xl xl:max-w-[1100px]">
         <DrawerHeader className="shrink-0 border-b border-border/70 px-5 py-4 md:px-6">
           <div className="flex items-start justify-between gap-4">
@@ -594,7 +623,9 @@ export function InvoiceDrawer({
                   Down Payment
                 </button>
                 {invoiceNo ? (
-                  <span className="rounded-md border border-border bg-background px-3 py-1 text-xs text-muted-foreground">{invoiceNo}</span>
+                  <span className="rounded-md border border-border bg-background px-3 py-1 text-xs text-muted-foreground">
+                    {invoiceNo}
+                  </span>
                 ) : null}
                 {invoiceStatus ? <InvoiceStatusBadge status={invoiceStatus} /> : null}
               </div>
@@ -607,7 +638,11 @@ export function InvoiceDrawer({
           </div>
         </DrawerHeader>
 
-        <form id="invoice-drawer-form" className="flex min-h-0 flex-1 flex-col overflow-hidden" onSubmit={handleCreateInvoice}>
+        <form
+          id="invoice-drawer-form"
+          className="flex min-h-0 flex-1 flex-col overflow-hidden"
+          onSubmit={handleCreateInvoice}
+        >
           <div className="inbox-scroll min-h-0 flex-1 overflow-y-auto overscroll-contain px-5 pb-36 pt-4 md:px-6 md:pt-5">
             <div className="space-y-6">
               <section className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_320px]">
@@ -622,15 +657,19 @@ export function InvoiceDrawer({
                           className="h-11 w-full bg-transparent text-sm outline-none"
                           disabled
                         >
-                          {salesMembers.length === 0 ? <option value={currentUserId}>{currentUserLabel}</option> : null}
+                          {salesMembers.length === 0 ? (
+                            <option value={currentUserId}>{currentUserLabel}</option>
+                          ) : null}
                           {salesMembers.map((member) => (
                             <option key={member.userId} value={member.userId}>
-                              {(member.name?.trim() || member.email)} • {member.role}
+                              {member.name?.trim() || member.email} • {member.role}
                             </option>
                           ))}
                         </select>
                       </div>
-                      <p className="text-xs text-muted-foreground">Informasi salesperson saat ini untuk referensi tampilan invoice.</p>
+                      <p className="text-xs text-muted-foreground">
+                        Informasi salesperson saat ini untuk referensi tampilan invoice.
+                      </p>
                     </label>
 
                     <DueDatePickerField value={invoiceDueDate} onChange={setInvoiceDueDate} />
@@ -641,7 +680,7 @@ export function InvoiceDrawer({
                         value={customerName}
                         placeholder="Nama pelanggan"
                         className="h-11 rounded-md border-border bg-muted/40"
-                        readOnly
+                        onChange={(event) => setCustomerName(event.target.value)}
                       />
                     </label>
 
@@ -656,7 +695,7 @@ export function InvoiceDrawer({
                     </label>
                   </div>
                   <p className="text-xs text-muted-foreground">
-                    Data pelanggan mengikuti kontak pada percakapan aktif agar sinkron dengan CRM. Untuk mengubah data pelanggan, lakukan dari modul pelanggan.
+                    Nama pelanggan di invoice bisa diubah tanpa mengubah data customer pada CRM.
                   </p>
 
                   {kind === InvoiceKind.DP_AND_FINAL ? (
@@ -664,11 +703,14 @@ export function InvoiceDrawer({
                       <div className="space-y-1">
                         <p className="text-sm font-medium text-foreground">Skema Down Payment</p>
                         <p className="text-xs text-muted-foreground">
-                          Atur persen DP. Ringkasan otomatis membagi DP dan pelunasan berdasarkan total akhir invoice.
+                          Atur persen DP. Ringkasan otomatis membagi DP dan pelunasan berdasarkan
+                          total akhir invoice.
                         </p>
                       </div>
                       <label className="space-y-2">
-                        <span className="text-xs font-medium uppercase tracking-[0.18em] text-primary/80">DP (%)</span>
+                        <span className="text-xs font-medium uppercase tracking-[0.18em] text-primary/80">
+                          DP (%)
+                        </span>
                         <Input
                           type="number"
                           min={1}
@@ -681,7 +723,6 @@ export function InvoiceDrawer({
                     </div>
                   ) : null}
                 </div>
-
               </section>
 
               <section className="space-y-4">
@@ -689,10 +730,16 @@ export function InvoiceDrawer({
                   <div className="overflow-x-auto">
                     <div className="min-w-[1180px]">
                       <div className="grid grid-cols-[1.35fr_1.3fr_110px_140px_148px_160px_150px_36px] gap-x-4 rounded-xl border border-border/80 bg-muted/40 px-4 text-[11px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">
-                        <div className="flex items-center gap-1 py-3">Produk <span className="text-rose-500">*</span></div>
+                        <div className="flex items-center gap-1 py-3">
+                          Produk <span className="text-rose-500">*</span>
+                        </div>
                         <div className="flex items-center gap-1 py-3">Deskripsi</div>
-                        <div className="flex items-center gap-1 py-3">Kuantitas <span className="text-rose-500">*</span></div>
-                        <div className="flex items-center gap-1 py-3">Harga <span className="text-rose-500">*</span></div>
+                        <div className="flex items-center gap-1 py-3">
+                          Kuantitas <span className="text-rose-500">*</span>
+                        </div>
+                        <div className="flex items-center gap-1 py-3">
+                          Harga <span className="text-rose-500">*</span>
+                        </div>
                         <div className="py-3">Diskon</div>
                         <div className="flex items-center gap-1 py-3">
                           Pajak
@@ -714,13 +761,17 @@ export function InvoiceDrawer({
                               <Input
                                 value={item.name}
                                 placeholder="Nama produk"
-                                onChange={(event) => updateItem(index, { name: event.target.value })}
+                                onChange={(event) =>
+                                  updateItem(index, { name: event.target.value })
+                                }
                                 className="h-11 rounded-md border border-border bg-muted/40 px-3 shadow-none focus-visible:ring-1 focus-visible:ring-primary/40 focus-visible:border-primary/60"
                               />
                               <Input
                                 value={item.description}
                                 placeholder="Opsional"
-                                onChange={(event) => updateItem(index, { description: event.target.value })}
+                                onChange={(event) =>
+                                  updateItem(index, { description: event.target.value })
+                                }
                                 className="h-11 rounded-md border border-border bg-muted/40 px-3 shadow-none focus-visible:ring-1 focus-visible:ring-primary/40 focus-visible:border-primary/60"
                               />
                               <Input
@@ -733,7 +784,9 @@ export function InvoiceDrawer({
                                 onChange={(event) => {
                                   const nextQty = Number(event.target.value);
                                   updateItem(index, {
-                                    qty: Number.isFinite(nextQty) ? Math.max(1, Math.floor(nextQty)) : 1
+                                    qty: Number.isFinite(nextQty)
+                                      ? Math.max(1, Math.floor(nextQty))
+                                      : 1
                                   });
                                 }}
                                 className="h-11 rounded-md border border-border bg-muted/40 px-3 text-left font-medium tabular-nums shadow-none focus-visible:ring-1 focus-visible:ring-primary/40 focus-visible:border-primary/60"
@@ -743,14 +796,20 @@ export function InvoiceDrawer({
                                 min={0}
                                 value={item.priceCents}
                                 placeholder="0"
-                                onChange={(event) => updateItem(index, { priceCents: Number(event.target.value) })}
+                                onChange={(event) =>
+                                  updateItem(index, { priceCents: Number(event.target.value) })
+                                }
                                 className="h-11 rounded-md border border-border bg-muted/40 px-3 text-left font-medium tabular-nums shadow-none focus-visible:ring-1 focus-visible:ring-primary/40 focus-visible:border-primary/60"
                               />
                               <div className="grid h-11 grid-cols-[60px_1fr_24px] overflow-hidden rounded-md border border-border bg-muted/40">
                                 <div className="relative border-r border-border">
                                   <select
                                     value={item.discountType}
-                                    onChange={(event) => updateItem(index, { discountType: event.target.value as "%" | "IDR" })}
+                                    onChange={(event) =>
+                                      updateItem(index, {
+                                        discountType: event.target.value as "%" | "IDR"
+                                      })
+                                    }
                                     className="h-full w-full appearance-none bg-transparent pl-2 pr-6 text-sm outline-none"
                                   >
                                     <option value="%">%</option>
@@ -762,7 +821,9 @@ export function InvoiceDrawer({
                                   type="number"
                                   min={0}
                                   value={item.discountValue}
-                                  onChange={(event) => updateItem(index, { discountValue: Number(event.target.value) })}
+                                  onChange={(event) =>
+                                    updateItem(index, { discountValue: Number(event.target.value) })
+                                  }
                                   className="bg-transparent px-3 text-sm outline-none"
                                 />
                                 <div className="flex items-center justify-center text-sm text-muted-foreground">
@@ -772,7 +833,9 @@ export function InvoiceDrawer({
                               <div className="relative h-11 overflow-hidden rounded-md border border-border bg-muted/40">
                                 <select
                                   value={item.taxLabel}
-                                  onChange={(event) => updateItem(index, { taxLabel: event.target.value })}
+                                  onChange={(event) =>
+                                    updateItem(index, { taxLabel: event.target.value })
+                                  }
                                   className="h-full w-full appearance-none bg-transparent px-3 pr-8 text-sm text-foreground outline-none"
                                 >
                                   {INVOICE_TAX_OPTIONS.map((option) => (
@@ -857,13 +920,17 @@ export function InvoiceDrawer({
                   <div className="space-y-4">
                     <div>
                       <p className="text-sm font-semibold text-foreground">Ringkasan Invoice</p>
-                      <p className="text-xs text-muted-foreground">Diskon, pajak, dan total akhir selalu sinkron dengan item di atas.</p>
+                      <p className="text-xs text-muted-foreground">
+                        Diskon, pajak, dan total akhir selalu sinkron dengan item di atas.
+                      </p>
                     </div>
 
                     <div className="grid gap-3 sm:grid-cols-[72px_1fr]">
                       <select
                         value={invoiceDiscountType}
-                        onChange={(event) => setInvoiceDiscountType(event.target.value as "%" | "IDR")}
+                        onChange={(event) =>
+                          setInvoiceDiscountType(event.target.value as "%" | "IDR")
+                        }
                         className="h-11 rounded-md border border-border bg-muted/40 px-3 text-sm outline-none"
                       >
                         <option value="%">%</option>
@@ -906,13 +973,23 @@ export function InvoiceDrawer({
                       <div className="grid gap-3 rounded-md bg-primary/5 p-4 text-sm sm:grid-cols-2">
                         <div className="rounded-md border border-border/50 bg-background/60 p-4 backdrop-blur-sm">
                           <p className="text-xs uppercase tracking-[0.2em] text-primary/80">DP</p>
-                          <p className="mt-2 text-xl font-semibold text-foreground">{toRupiahLabel(dpAmountCents)}</p>
-                          <p className="mt-1 text-xs text-muted-foreground">{dpPercentage}% dari total invoice</p>
+                          <p className="mt-2 text-xl font-semibold text-foreground">
+                            {toRupiahLabel(dpAmountCents)}
+                          </p>
+                          <p className="mt-1 text-xs text-muted-foreground">
+                            {dpPercentage}% dari total invoice
+                          </p>
                         </div>
                         <div className="rounded-md border border-border/50 bg-background/60 p-4 backdrop-blur-sm">
-                          <p className="text-xs uppercase tracking-[0.2em] text-primary/80">Pelunasan</p>
-                          <p className="mt-2 text-xl font-semibold text-foreground">{toRupiahLabel(finalAmountCents)}</p>
-                          <p className="mt-1 text-xs text-muted-foreground">Sisa tagihan setelah DP dibayar</p>
+                          <p className="text-xs uppercase tracking-[0.2em] text-primary/80">
+                            Pelunasan
+                          </p>
+                          <p className="mt-2 text-xl font-semibold text-foreground">
+                            {toRupiahLabel(finalAmountCents)}
+                          </p>
+                          <p className="mt-1 text-xs text-muted-foreground">
+                            Sisa tagihan setelah DP dibayar
+                          </p>
                         </div>
                       </div>
                     ) : null}
@@ -929,7 +1006,9 @@ export function InvoiceDrawer({
           <DialogContent className="sm:max-w-[520px]">
             <DialogHeader>
               <DialogTitle>Tambah Pelanggan Manual</DialogTitle>
-              <DialogDescription>Lengkapi data pelanggan. Nama dan nomor WhatsApp terisi otomatis.</DialogDescription>
+              <DialogDescription>
+                Lengkapi data pelanggan. Nama dan nomor WhatsApp terisi otomatis.
+              </DialogDescription>
             </DialogHeader>
             <div className="grid gap-4 py-2">
               <label className="space-y-2">
@@ -971,7 +1050,11 @@ export function InvoiceDrawer({
               </label>
             </div>
             <DialogFooter>
-              <Button type="button" variant="ghost" onClick={() => setIsManualCustomerModalOpen(false)}>
+              <Button
+                type="button"
+                variant="ghost"
+                onClick={() => setIsManualCustomerModalOpen(false)}
+              >
                 Batal
               </Button>
               <Button
@@ -987,89 +1070,215 @@ export function InvoiceDrawer({
         </Dialog>
 
         <Dialog open={isCatalogModalOpen} onOpenChange={setIsCatalogModalOpen}>
-          <DialogContent className="max-w-[1180px] gap-0 overflow-hidden border-slate-200 p-0">
-            <div className="bg-white">
-              <DialogHeader className="border-b border-slate-200 px-6 py-6">
-                <div className="inline-flex w-fit rounded-sm bg-sky-50 px-2 py-1 text-xs text-sky-600">Produk</div>
-                <DialogTitle className="pt-2 text-[36px] font-semibold tracking-[-0.03em] text-slate-700">Masukkan Produk</DialogTitle>
-                <DialogDescription className="pt-6 text-base text-slate-600">
-                  Item terpilih <span className="rounded-full bg-lime-100 px-2 py-0.5 font-semibold text-lime-700">{catalogSelectedIds.length}</span>
-                </DialogDescription>
-              </DialogHeader>
-
-              <div className="px-6 py-5">
-                <div className="mb-5 flex items-center justify-end">
+          <DialogContent className="max-w-[1040px] gap-0 overflow-hidden rounded-[24px] border border-slate-200/60 bg-white p-0 shadow-2xl shadow-slate-200/40 sm:rounded-[32px]">
+            <div className="flex flex-col bg-white">
+              {/* Header */}
+              <div className="relative px-6 pb-6 pt-8 sm:px-8">
+                {/* Decorative background blur */}
+                <div className="pointer-events-none absolute inset-x-0 top-0 h-32 bg-gradient-to-b from-emerald-50/50 to-transparent" />
+                <div className="relative flex flex-col gap-6 sm:flex-row sm:items-start sm:justify-between">
+                  <div className="space-y-1.5">
+                    <div className="inline-flex w-fit items-center rounded-full bg-emerald-100/80 px-2.5 py-1 text-[11px] font-bold uppercase tracking-wider text-emerald-700 ring-1 ring-emerald-500/20">
+                      Katalog
+                    </div>
+                    <DialogTitle className="text-3xl font-bold tracking-tight text-slate-800">
+                      Masukkan Produk
+                    </DialogTitle>
+                    <DialogDescription className="flex items-center gap-2 pt-1 text-[15px] font-medium text-slate-500">
+                      Item terpilih
+                      <span
+                        className={cn(
+                          "flex h-6 min-w-[24px] items-center justify-center rounded-full px-2 text-xs font-bold transition-all",
+                          catalogSelectedIds.length > 0
+                            ? "bg-emerald-100 text-emerald-700 ring-1 ring-emerald-500/20"
+                            : "bg-slate-100 text-slate-600"
+                        )}
+                      >
+                        {catalogSelectedIds.length}
+                      </span>
+                    </DialogDescription>
+                  </div>
                   <Button
                     type="button"
-                    className="h-11 rounded-full bg-sky-500 px-6 text-white shadow-[0_10px_24px_rgba(14,165,233,0.24)] hover:bg-sky-600"
+                    className="group relative h-11 w-full shrink-0 overflow-hidden rounded-full bg-emerald-500 px-6 font-semibold text-white shadow-[0_8px_20px_-6px_rgba(16,185,129,0.4)] transition-all hover:-translate-y-0.5 hover:bg-emerald-600 hover:shadow-[0_12px_24px_-8px_rgba(16,185,129,0.5)] active:translate-y-0 active:shadow-[0_4px_10px_-4px_rgba(16,185,129,0.4)] sm:w-auto"
                     onClick={() => setIsCreateCatalogModalOpen(true)}
                   >
-                    <Plus className="mr-2 h-4 w-4" />
-                    Buat Produk Baru
+                    <div className="absolute inset-0 flex h-full w-full justify-center [transform:skew(-12deg)_translateX(-150%)] group-hover:duration-1000 group-hover:[transform:skew(-12deg)_translateX(150%)]">
+                      <div className="relative h-full w-10 bg-white/20" />
+                    </div>
+                    <Plus className="mr-2 h-4.5 w-4.5 stroke-[2.5]" />
+                    <span className="relative z-10">Buat Produk Baru</span>
                   </Button>
                 </div>
+              </div>
 
-                <div className="overflow-hidden rounded-xl border border-slate-200">
-                  <div className="grid grid-cols-[56px_160px_1.25fr_1fr_120px_140px] items-center gap-3 border-b border-slate-200 bg-slate-50 px-4 py-3 text-sm font-medium text-slate-700">
+              {/* Filters & Table */}
+              <div className="px-6 pb-6 sm:px-8">
+                {/* Search Filters */}
+                <div className="mb-5 grid gap-3 sm:grid-cols-3">
+                  <div className="group relative">
+                    <div className="absolute inset-y-0 left-0 flex items-center pl-3.5">
+                      <svg
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        className="h-4.5 w-4.5 text-slate-400 transition-colors group-focus-within:text-emerald-500"
+                        strokeWidth="2"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                      >
+                        <circle cx="11" cy="11" r="8" />
+                        <path d="m21 21-4.3-4.3" />
+                      </svg>
+                    </div>
+                    <Input
+                      value={catalogSearchCode}
+                      onChange={(event) => setCatalogSearchCode(event.target.value)}
+                      placeholder="Cari kode layanan..."
+                      className="h-11 w-full rounded-xl border-slate-200 bg-slate-50/50 pl-10 pr-4 text-[14px] text-slate-700 shadow-sm transition-all focus-visible:border-emerald-500/40 focus-visible:bg-white focus-visible:ring-4 focus-visible:ring-emerald-500/10"
+                    />
+                  </div>
+                  <div className="group relative">
+                    <div className="absolute inset-y-0 left-0 flex items-center pl-3.5">
+                      <svg
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        className="h-4.5 w-4.5 text-slate-400 transition-colors group-focus-within:text-emerald-500"
+                        strokeWidth="2"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                      >
+                        <circle cx="11" cy="11" r="8" />
+                        <path d="m21 21-4.3-4.3" />
+                      </svg>
+                    </div>
+                    <Input
+                      value={catalogSearchName}
+                      onChange={(event) => setCatalogSearchName(event.target.value)}
+                      placeholder="Cari nama layanan..."
+                      className="h-11 w-full rounded-xl border-slate-200 bg-slate-50/50 pl-10 pr-4 text-[14px] text-slate-700 shadow-sm transition-all focus-visible:border-emerald-500/40 focus-visible:bg-white focus-visible:ring-4 focus-visible:ring-emerald-500/10"
+                    />
+                  </div>
+                  <div className="group relative">
+                    <div className="absolute inset-y-0 left-0 flex items-center pl-3.5">
+                      <svg
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        className="h-4.5 w-4.5 text-slate-400 transition-colors group-focus-within:text-emerald-500"
+                        strokeWidth="2"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                      >
+                        <circle cx="11" cy="11" r="8" />
+                        <path d="m21 21-4.3-4.3" />
+                      </svg>
+                    </div>
+                    <Input
+                      value={catalogSearchCategory}
+                      onChange={(event) => setCatalogSearchCategory(event.target.value)}
+                      placeholder="Cari kategori..."
+                      className="h-11 w-full rounded-xl border-slate-200 bg-slate-50/50 pl-10 pr-4 text-[14px] text-slate-700 shadow-sm transition-all focus-visible:border-emerald-500/40 focus-visible:bg-white focus-visible:ring-4 focus-visible:ring-emerald-500/10"
+                    />
+                  </div>
+                </div>
+
+                <div className="overflow-hidden rounded-2xl border border-slate-200 shadow-sm">
+                  <div className="grid grid-cols-[56px_140px_1.25fr_1fr_120px_140px] items-center gap-4 border-b border-slate-200 bg-slate-50/80 px-4 py-3.5 text-[13px] font-semibold uppercase tracking-wider text-slate-500">
                     <div />
-                    <div>
-                      <div>Kode Layanan</div>
-                      <Input
-                        value={catalogSearchCode}
-                        onChange={(event) => setCatalogSearchCode(event.target.value)}
-                        placeholder="Cari kode"
-                        className="mt-2 h-9 rounded-none border-slate-300 bg-white text-sm shadow-none focus-visible:ring-0"
-                      />
-                    </div>
-                    <div>
-                      <div>Nama Layanan</div>
-                      <Input
-                        value={catalogSearchName}
-                        onChange={(event) => setCatalogSearchName(event.target.value)}
-                        placeholder="Cari nama layanan"
-                        className="mt-2 h-9 rounded-none border-slate-300 bg-white text-sm shadow-none focus-visible:ring-0"
-                      />
-                    </div>
-                    <div>
-                      <div>Kategori Layanan</div>
-                      <Input
-                        value={catalogSearchCategory}
-                        onChange={(event) => setCatalogSearchCategory(event.target.value)}
-                        placeholder="Cari kategori"
-                        className="mt-2 h-9 rounded-none border-slate-300 bg-white text-sm shadow-none focus-visible:ring-0"
-                      />
-                    </div>
+                    <div>Kode</div>
+                    <div>Nama Layanan</div>
+                    <div>Kategori</div>
                     <div>Satuan</div>
-                    <div>Harga Jual</div>
+                    <div className="text-right">Harga Jual</div>
                   </div>
 
-                  <div className="max-h-[460px] overflow-y-auto">
+                  <div className="max-h-[420px] overflow-y-auto bg-white">
                     {isCatalogLoading ? (
-                      <div className="px-6 py-10 text-sm text-slate-500">Memuat katalog produk...</div>
+                      <div className="flex flex-col items-center justify-center py-16 text-slate-400">
+                        <div className="h-8 w-8 animate-spin rounded-full border-4 border-slate-200 border-t-emerald-500" />
+                        <span className="mt-4 text-sm font-medium">Memuat katalog produk...</span>
+                      </div>
                     ) : filteredCatalogItems.length === 0 ? (
-                      <div className="px-6 py-10 text-sm text-slate-500">Belum ada item katalog yang cocok.</div>
+                      <div className="flex flex-col items-center justify-center py-16 text-center text-slate-500">
+                        <div className="mb-3 rounded-full bg-slate-50 p-4">
+                          <svg
+                            viewBox="0 0 24 24"
+                            fill="none"
+                            stroke="currentColor"
+                            className="h-8 w-8 text-slate-300"
+                            strokeWidth="1.5"
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                          >
+                            <rect width="18" height="18" x="3" y="3" rx="2" ry="2" />
+                            <line x1="9" x2="15" y1="9" y2="9" />
+                            <line x1="9" x2="15" y1="15" y2="15" />
+                          </svg>
+                        </div>
+                        <p className="text-base font-medium text-slate-700">
+                          Tidak ada produk ditemukan
+                        </p>
+                        <p className="mt-1 text-sm">
+                          Belum ada item katalog yang cocok dengan pencarian Anda.
+                        </p>
+                      </div>
                     ) : (
-                      filteredCatalogItems.map((item) => {
+                      filteredCatalogItems.map((item, index) => {
                         const isSelected = catalogSelectedIds.includes(item.id);
 
                         return (
                           <label
                             key={item.id}
-                            className="grid cursor-pointer grid-cols-[56px_160px_1.25fr_1fr_120px_140px] items-center gap-3 border-t border-slate-100 px-4 py-4 text-[15px] text-slate-600 first:border-t-0 hover:bg-sky-50/40"
+                            className={cn(
+                              "group grid cursor-pointer grid-cols-[56px_140px_1.25fr_1fr_120px_140px] items-center gap-4 px-4 py-3.5 text-[14px] transition-colors",
+                              index !== filteredCatalogItems.length - 1 &&
+                                "border-b border-slate-100",
+                              isSelected ? "bg-emerald-50/60" : "hover:bg-slate-50"
+                            )}
                           >
                             <div className="flex justify-center">
-                              <input
-                                type="checkbox"
-                                checked={isSelected}
-                                onChange={() => toggleCatalogSelection(item.id)}
-                                className="h-5 w-5 rounded border-slate-300 text-sky-500 focus:ring-sky-500"
-                              />
+                              <div
+                                className={cn(
+                                  "flex h-5 w-5 items-center justify-center rounded border transition-all duration-200",
+                                  isSelected
+                                    ? "border-emerald-500 bg-emerald-500 text-white shadow-sm"
+                                    : "border-slate-300 bg-white group-hover:border-emerald-400"
+                                )}
+                              >
+                                {isSelected && (
+                                  <svg
+                                    viewBox="0 0 24 24"
+                                    fill="none"
+                                    stroke="currentColor"
+                                    className="h-3.5 w-3.5"
+                                    strokeWidth="3"
+                                    strokeLinecap="round"
+                                    strokeLinejoin="round"
+                                  >
+                                    <path d="M20 6 9 17l-5-5" />
+                                  </svg>
+                                )}
+                              </div>
                             </div>
-                            <div>{buildCatalogCode(item.id)}</div>
-                            <div className="font-medium text-slate-700">{item.name}</div>
-                            <div>{item.category || "-"}</div>
-                            <div>{item.unit || "-"}</div>
-                            <div>{toRupiahLabel(item.priceCents ?? 0)}</div>
+                            <div className="font-medium text-slate-500">
+                              {buildCatalogCode(item.id)}
+                            </div>
+                            <div className="font-semibold text-slate-800">{item.name}</div>
+                            <div className="text-slate-600">
+                              {item.category ? (
+                                <span className="inline-flex rounded-full bg-slate-100 px-2.5 py-0.5 text-xs font-medium text-slate-600">
+                                  {item.category}
+                                </span>
+                              ) : (
+                                "-"
+                              )}
+                            </div>
+                            <div className="text-slate-600">{item.unit || "-"}</div>
+                            <div className="text-right font-semibold text-slate-800">
+                              {toRupiahLabel(item.priceCents ?? 0)}
+                            </div>
                           </label>
                         );
                       })
@@ -1077,103 +1286,164 @@ export function InvoiceDrawer({
                   </div>
                 </div>
 
-                {catalogError ? <p className="mt-3 text-sm text-destructive">{catalogError}</p> : null}
+                {catalogError ? (
+                  <div className="mt-4 flex items-center rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-[14px] text-red-600">
+                    <svg
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      className="mr-2 h-4 w-4 shrink-0"
+                      strokeWidth="2"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    >
+                      <circle cx="12" cy="12" r="10" />
+                      <line x1="12" y1="8" x2="12" y2="12" />
+                      <line x1="12" y1="16" x2="12.01" y2="16" />
+                    </svg>
+                    {catalogError}
+                  </div>
+                ) : null}
               </div>
 
-              <DialogFooter className="border-t border-slate-200 px-6 py-5 sm:justify-center sm:space-x-5">
-                <Button
-                  type="button"
-                  className="h-11 min-w-[140px] rounded-full bg-lime-500 text-white hover:bg-lime-600"
-                  onClick={handleApplyCatalogItems}
-                  disabled={catalogSelectedIds.length === 0}
-                >
-                  Simpan
-                </Button>
-                <Button
-                  type="button"
-                  variant="secondary"
-                  className="h-11 min-w-[140px] rounded-full bg-slate-200 text-slate-600 hover:bg-slate-300"
-                  onClick={() => setIsCatalogModalOpen(false)}
-                >
-                  Batalkan
-                </Button>
-              </DialogFooter>
+              {/* Footer */}
+              <div className="relative border-t border-slate-100 bg-slate-50/50 px-6 py-5 sm:px-8">
+                <div className="flex flex-col-reverse items-center justify-center gap-3 sm:flex-row sm:gap-4">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="h-12 w-full min-w-[140px] rounded-full border-slate-200 bg-white px-8 text-[15px] font-semibold text-slate-600 transition-all hover:bg-slate-100 hover:text-slate-900 sm:w-auto"
+                    onClick={() => setIsCatalogModalOpen(false)}
+                  >
+                    Batalkan
+                  </Button>
+                  <Button
+                    type="button"
+                    className="h-12 w-full min-w-[140px] rounded-full bg-emerald-500 px-8 text-[15px] font-semibold text-white shadow-[0_8px_20px_-6px_rgba(16,185,129,0.3)] transition-all hover:-translate-y-0.5 hover:bg-emerald-600 hover:shadow-[0_12px_24px_-8px_rgba(16,185,129,0.4)] disabled:pointer-events-none disabled:opacity-60 sm:w-auto"
+                    onClick={handleApplyCatalogItems}
+                    disabled={catalogSelectedIds.length === 0}
+                  >
+                    Simpan Terpilih
+                  </Button>
+                </div>
+              </div>
             </div>
           </DialogContent>
         </Dialog>
 
         <Dialog open={isCreateCatalogModalOpen} onOpenChange={setIsCreateCatalogModalOpen}>
-          <DialogContent className="max-w-[640px] border-slate-200 p-0">
-            <div className="bg-white">
-              <DialogHeader className="border-b border-slate-200 px-6 py-6">
-                <div className="inline-flex w-fit rounded-sm bg-sky-50 px-2 py-1 text-xs text-sky-600">Katalog Jasa</div>
-                <DialogTitle className="pt-2 text-2xl font-semibold text-slate-700">Buat Katalog Produk</DialogTitle>
-                <DialogDescription className="pt-1 text-sm text-slate-500">
-                  Simpan layanan yang sering dijual agar bisa ditambahkan ke invoice lebih cepat.
-                </DialogDescription>
-              </DialogHeader>
-
-              <div className="grid gap-4 px-6 py-6">
-                <label className="space-y-2">
-                  <span className="text-sm font-medium text-slate-700">Nama Layanan</span>
-                  <Input
-                    value={catalogDraft.name}
-                    onChange={(event) => setCatalogDraft((current) => ({ ...current, name: event.target.value }))}
-                    placeholder="Contoh: Jasa Pembuatan Website"
-                    className="h-11 rounded-md border-slate-300 bg-slate-50"
-                  />
-                </label>
-                <label className="space-y-2">
-                  <span className="text-sm font-medium text-slate-700">Kategori Layanan</span>
-                  <Input
-                    value={catalogDraft.category}
-                    onChange={(event) => setCatalogDraft((current) => ({ ...current, category: event.target.value }))}
-                    placeholder="Contoh: Digital Marketing"
-                    className="h-11 rounded-md border-slate-300 bg-slate-50"
-                  />
-                </label>
-                <div className="grid gap-4 sm:grid-cols-2">
-                  <label className="space-y-2">
-                    <span className="text-sm font-medium text-slate-700">Satuan</span>
-                    <Input
-                      value={catalogDraft.unit}
-                      onChange={(event) => setCatalogDraft((current) => ({ ...current, unit: event.target.value }))}
-                      placeholder="Contoh: paket, proyek, sesi, bulan"
-                      className="h-11 rounded-md border-slate-300 bg-slate-50"
-                    />
-                  </label>
-                  <label className="space-y-2">
-                    <span className="text-sm font-medium text-slate-700">Harga Jual</span>
-                    <Input
-                      type="number"
-                      min={0}
-                      value={catalogDraft.priceCents}
-                      onChange={(event) => setCatalogDraft((current) => ({ ...current, priceCents: event.target.value }))}
-                      placeholder="0"
-                      className="h-11 rounded-md border-slate-300 bg-slate-50"
-                    />
-                  </label>
+          <DialogContent className="max-w-[560px] gap-0 overflow-hidden rounded-[24px] border border-slate-200/60 bg-white p-0 shadow-2xl shadow-slate-200/40 sm:rounded-[32px]">
+            <div className="flex flex-col bg-white">
+              {/* Header */}
+              <div className="relative px-6 pb-6 pt-8 sm:px-8">
+                {/* Decorative background blur */}
+                <div className="pointer-events-none absolute inset-x-0 top-0 h-32 bg-gradient-to-b from-emerald-50/50 to-transparent" />
+                <div className="relative">
+                  <div className="inline-flex w-fit items-center rounded-full bg-emerald-100/80 px-2.5 py-1 text-[11px] font-bold uppercase tracking-wider text-emerald-700 ring-1 ring-emerald-500/20">
+                    Katalog Jasa
+                  </div>
+                  <DialogTitle className="mt-4 text-2xl font-bold tracking-tight text-slate-800">
+                    Buat Katalog Produk
+                  </DialogTitle>
+                  <DialogDescription className="mt-2 text-[15px] leading-relaxed text-slate-500">
+                    Simpan layanan yang sering dijual agar bisa ditambahkan ke invoice lebih cepat.
+                  </DialogDescription>
                 </div>
               </div>
 
-              <DialogFooter className="border-t border-slate-200 px-6 py-5">
-                <Button
-                  type="button"
-                  variant="secondary"
-                  className="h-11 rounded-full bg-slate-200 text-slate-600 hover:bg-slate-300"
-                  onClick={() => setIsCreateCatalogModalOpen(false)}
-                >
-                  Batalkan
-                </Button>
-                <Button
-                  type="button"
-                  className="h-11 rounded-full bg-sky-500 text-white hover:bg-sky-600"
-                  onClick={() => void handleCreateCatalog()}
-                  disabled={!catalogDraft.name.trim() || !catalogDraft.priceCents.trim() || isCatalogCreating}
-                >
-                  {isCatalogCreating ? "Menyimpan..." : "Simpan Katalog"}
-                </Button>
-              </DialogFooter>
+              {/* Form Body */}
+              <div className="grid gap-5 px-6 pb-8 sm:px-8">
+                <div className="space-y-5">
+                  <label className="block space-y-2">
+                    <span className="text-[14px] font-semibold text-slate-700">
+                      Nama Layanan <span className="text-red-500">*</span>
+                    </span>
+                    <Input
+                      value={catalogDraft.name}
+                      onChange={(event) =>
+                        setCatalogDraft((current) => ({ ...current, name: event.target.value }))
+                      }
+                      placeholder="Contoh: Jasa Pembuatan Website"
+                      className="h-12 w-full rounded-xl border-slate-200 bg-slate-50/50 px-4 text-[15px] shadow-sm transition-all focus-visible:border-emerald-500/40 focus-visible:bg-white focus-visible:ring-4 focus-visible:ring-emerald-500/10"
+                    />
+                  </label>
+                  <label className="block space-y-2">
+                    <span className="text-[14px] font-semibold text-slate-700">
+                      Kategori Layanan
+                    </span>
+                    <Input
+                      value={catalogDraft.category}
+                      onChange={(event) =>
+                        setCatalogDraft((current) => ({ ...current, category: event.target.value }))
+                      }
+                      placeholder="Contoh: Digital Marketing"
+                      className="h-12 w-full rounded-xl border-slate-200 bg-slate-50/50 px-4 text-[15px] shadow-sm transition-all focus-visible:border-emerald-500/40 focus-visible:bg-white focus-visible:ring-4 focus-visible:ring-emerald-500/10"
+                    />
+                  </label>
+                  <div className="grid gap-5 sm:grid-cols-2">
+                    <label className="block space-y-2">
+                      <span className="text-[14px] font-semibold text-slate-700">Satuan</span>
+                      <Input
+                        value={catalogDraft.unit}
+                        onChange={(event) =>
+                          setCatalogDraft((current) => ({ ...current, unit: event.target.value }))
+                        }
+                        placeholder="Contoh: paket, proyek, sesi"
+                        className="h-12 w-full rounded-xl border-slate-200 bg-slate-50/50 px-4 text-[15px] shadow-sm transition-all focus-visible:border-emerald-500/40 focus-visible:bg-white focus-visible:ring-4 focus-visible:ring-emerald-500/10"
+                      />
+                    </label>
+                    <label className="block space-y-2">
+                      <span className="text-[14px] font-semibold text-slate-700">
+                        Harga Jual <span className="text-red-500">*</span>
+                      </span>
+                      <div className="relative">
+                        <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-4 text-[15px] font-medium text-slate-400">
+                          Rp
+                        </div>
+                        <Input
+                          type="number"
+                          min={0}
+                          value={catalogDraft.priceCents}
+                          onChange={(event) =>
+                            setCatalogDraft((current) => ({
+                              ...current,
+                              priceCents: event.target.value
+                            }))
+                          }
+                          placeholder="0"
+                          className="h-12 w-full rounded-xl border-slate-200 bg-slate-50/50 pl-11 pr-4 text-[15px] font-medium shadow-sm transition-all focus-visible:border-emerald-500/40 focus-visible:bg-white focus-visible:ring-4 focus-visible:ring-emerald-500/10"
+                        />
+                      </div>
+                    </label>
+                  </div>
+                </div>
+              </div>
+
+              {/* Footer */}
+              <div className="relative border-t border-slate-100 bg-slate-50/50 px-6 py-5 sm:px-8">
+                <div className="flex flex-col-reverse justify-end gap-3 sm:flex-row sm:gap-4">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="h-12 w-full min-w-[120px] rounded-full border-slate-200 bg-white px-6 text-[15px] font-semibold text-slate-600 transition-all hover:bg-slate-100 hover:text-slate-900 sm:w-auto"
+                    onClick={() => setIsCreateCatalogModalOpen(false)}
+                  >
+                    Batalkan
+                  </Button>
+                  <Button
+                    type="button"
+                    className="h-12 w-full min-w-[140px] rounded-full bg-emerald-500 px-6 text-[15px] font-semibold text-white shadow-[0_8px_20px_-6px_rgba(16,185,129,0.3)] transition-all hover:-translate-y-0.5 hover:bg-emerald-600 hover:shadow-[0_12px_24px_-8px_rgba(16,185,129,0.4)] disabled:pointer-events-none disabled:opacity-60 sm:w-auto"
+                    onClick={() => void handleCreateCatalog()}
+                    disabled={
+                      !catalogDraft.name.trim() ||
+                      !String(catalogDraft.priceCents).trim() ||
+                      isCatalogCreating
+                    }
+                  >
+                    {isCatalogCreating ? "Menyimpan..." : "Simpan Katalog"}
+                  </Button>
+                </div>
+              </div>
             </div>
           </DialogContent>
         </Dialog>
@@ -1181,30 +1451,69 @@ export function InvoiceDrawer({
         <DrawerFooter className="shrink-0 border-t border-border/70 bg-background/60 backdrop-blur-md px-5 py-4 shadow-[0_-12px_24px_hsl(var(--foreground)/0.04)] md:px-6">
           <div className="flex flex-wrap items-center justify-end gap-3">
             <DrawerClose asChild>
-              <Button type="button" variant="ghost" className="rounded-md text-foreground hover:bg-muted">
+              <Button
+                type="button"
+                variant="ghost"
+                className="rounded-md text-foreground hover:bg-muted"
+              >
                 Batalkan
               </Button>
             </DrawerClose>
-            <Button type="submit" form="invoice-drawer-form" className="rounded-md px-6 shadow-md shadow-primary/10" disabled={!canCreateDraft}>
+            <Button
+              type="submit"
+              form="invoice-drawer-form"
+              className="rounded-md px-6 shadow-md shadow-primary/10"
+              disabled={!canCreateDraft}
+            >
               {isSubmitting ? "Menyimpan..." : "Simpan Invoice"}
             </Button>
-            <Button type="button" variant="secondary" className="rounded-md border border-border/80 bg-background shadow-sm" onClick={() => void handleUpdateItems()} disabled={!canUpdateDraft}>
+            <Button
+              type="button"
+              variant="secondary"
+              className="rounded-md border border-border/80 bg-background shadow-sm"
+              onClick={() => void handleUpdateItems()}
+              disabled={!canUpdateDraft}
+            >
               {isUpdatingItems ? "Updating..." : "Update Draft Items"}
             </Button>
-            <Button type="button" variant="secondary" className="rounded-md border border-border/80 bg-background shadow-sm" onClick={() => void handleSendInvoice()} disabled={!canSendInvoice}>
+            <Button
+              type="button"
+              variant="secondary"
+              className="rounded-md border border-border/80 bg-background shadow-sm"
+              onClick={() => void handleSendInvoice()}
+              disabled={!canSendInvoice}
+            >
               {isSendingInvoice ? "Sending..." : "Send Invoice"}
             </Button>
             {kind === InvoiceKind.DP_AND_FINAL ? (
               <>
-                <Button type="button" variant="secondary" className="rounded-md border border-border/80 bg-background shadow-sm" onClick={() => void handleMarkPaid(PaymentMilestoneType.DP)} disabled={!canMarkPaid}>
+                <Button
+                  type="button"
+                  variant="secondary"
+                  className="rounded-md border border-border/80 bg-background shadow-sm"
+                  onClick={() => void handleMarkPaid(PaymentMilestoneType.DP)}
+                  disabled={!canMarkPaid}
+                >
                   {isMarkingPaid ? "Updating..." : "Mark DP Paid"}
                 </Button>
-                <Button type="button" variant="secondary" className="rounded-md border border-border/80 bg-background shadow-sm" onClick={() => void handleMarkPaid(PaymentMilestoneType.FINAL)} disabled={!canMarkPaid}>
+                <Button
+                  type="button"
+                  variant="secondary"
+                  className="rounded-md border border-border/80 bg-background shadow-sm"
+                  onClick={() => void handleMarkPaid(PaymentMilestoneType.FINAL)}
+                  disabled={!canMarkPaid}
+                >
                   {isMarkingPaid ? "Updating..." : "Mark Final Paid"}
                 </Button>
               </>
             ) : (
-              <Button type="button" variant="secondary" className="rounded-md border border-border/80 bg-background shadow-sm" onClick={() => void handleMarkPaid(PaymentMilestoneType.FULL)} disabled={!canMarkPaid}>
+              <Button
+                type="button"
+                variant="secondary"
+                className="rounded-md border border-border/80 bg-background shadow-sm"
+                onClick={() => void handleMarkPaid(PaymentMilestoneType.FULL)}
+                disabled={!canMarkPaid}
+              >
                 {isMarkingPaid ? "Updating..." : "Mark Paid"}
               </Button>
             )}

@@ -4,6 +4,10 @@ import { timingSafeEqual } from "crypto";
 import { errorResponse, successResponse } from "@/lib/api/http";
 import { getPakasirConfig } from "@/lib/env";
 import { processPakasirWebhook } from "@/server/services/billingService";
+import {
+  processInvoicePakasirWebhook,
+  processTopupPakasirWebhook
+} from "@/server/services/invoiceGatewayService";
 import { ServiceError } from "@/server/services/serviceError";
 
 function hasSameToken(expected: string, provided: string): boolean {
@@ -32,7 +36,15 @@ export async function POST(request: NextRequest) {
   }
 
   try {
-    const result = await processPakasirWebhook(body);
+    const orderId = typeof body.order_id === "string" ? body.order_id.trim() : "";
+    let result: unknown;
+    if (orderId.startsWith("INVPAY-")) {
+      result = await processInvoicePakasirWebhook(body);
+    } else if (orderId.startsWith("TOPUP-")) {
+      result = await processTopupPakasirWebhook(body);
+    } else {
+      result = await processPakasirWebhook(body);
+    }
     return successResponse(result, 200);
   } catch (error) {
     if (error instanceof ServiceError) {

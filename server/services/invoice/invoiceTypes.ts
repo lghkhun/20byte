@@ -50,6 +50,7 @@ export type CreateDraftInvoiceInput = {
   orgId: string;
   customerId: string;
   conversationId?: string;
+  customerDisplayNameSnapshot?: string;
   kind: InvoiceKind;
   currency?: string;
   notes?: string;
@@ -64,6 +65,7 @@ export type EditInvoiceItemsInput = {
   actorUserId: string;
   orgId: string;
   invoiceId: string;
+  customerDisplayNameSnapshot?: string;
   notes?: string;
   terms?: string;
   items: CreateInvoiceItemInput[];
@@ -162,7 +164,12 @@ export type InvoiceListResult = {
 
 export type InvoiceTimelineEvent = {
   id: string;
-  type: "INVOICE_CREATED" | "INVOICE_SENT" | "PROOF_ATTACHED" | "PAYMENT_MARKED" | "INVOICE_COMPLETED";
+  type:
+    | "INVOICE_CREATED"
+    | "INVOICE_SENT"
+    | "PROOF_ATTACHED"
+    | "PAYMENT_MARKED"
+    | "INVOICE_COMPLETED";
   label: string;
   at: Date;
 };

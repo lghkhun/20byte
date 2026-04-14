@@ -18,7 +18,7 @@ import {
 } from "@/components/invoices/invoice-drawer/types";
 
 export function useInvoiceDrawer(props: InvoiceDrawerProps) {
-  const { open, customerId, conversationId } = props;
+  const { open, customerId, conversationId, customerDisplayNameSnapshot } = props;
   const [kind, setKind] = useState<InvoiceKind>(InvoiceKind.FULL);
   const [items, setItems] = useState<InvoiceItemDraft[]>(createDefaultItems);
   const [invoiceDiscountType, setInvoiceDiscountType] = useState<"%" | "IDR">("%");
@@ -26,7 +26,9 @@ export function useInvoiceDrawer(props: InvoiceDrawerProps) {
   const [notes, setNotes] = useState("");
   const [terms, setTerms] = useState("");
   const [dpPercentage, setDpPercentage] = useState(50);
-  const [milestones, setMilestones] = useState<MilestoneDraft[]>(createDefaultMilestones(InvoiceKind.FULL, 0));
+  const [milestones, setMilestones] = useState<MilestoneDraft[]>(
+    createDefaultMilestones(InvoiceKind.FULL, 0)
+  );
   const [invoiceDueDate, setInvoiceDueDate] = useState("");
   const [invoiceId, setInvoiceId] = useState<string | null>(null);
   const [invoiceNo, setInvoiceNo] = useState<string | null>(null);
@@ -85,7 +87,9 @@ export function useInvoiceDrawer(props: InvoiceDrawerProps) {
   }, [open]);
 
   function updateItem(index: number, next: Partial<InvoiceItemDraft>) {
-    setItems((current) => current.map((item, itemIndex) => (itemIndex === index ? { ...item, ...next } : item)));
+    setItems((current) =>
+      current.map((item, itemIndex) => (itemIndex === index ? { ...item, ...next } : item))
+    );
   }
 
   function addItem() {
@@ -123,12 +127,16 @@ export function useInvoiceDrawer(props: InvoiceDrawerProps) {
   }
 
   function removeItem(index: number) {
-    setItems((current) => (current.length <= 1 ? current : current.filter((_, itemIndex) => itemIndex !== index)));
+    setItems((current) =>
+      current.length <= 1 ? current : current.filter((_, itemIndex) => itemIndex !== index)
+    );
   }
 
   function updateMilestone(index: number, next: Partial<MilestoneDraft>) {
     setMilestones((current) =>
-      current.map((milestone, milestoneIndex) => (milestoneIndex === index ? { ...milestone, ...next } : milestone))
+      current.map((milestone, milestoneIndex) =>
+        milestoneIndex === index ? { ...milestone, ...next } : milestone
+      )
     );
   }
 
@@ -177,6 +185,7 @@ export function useInvoiceDrawer(props: InvoiceDrawerProps) {
         body: JSON.stringify({
           customerId,
           conversationId: conversationId ?? undefined,
+          customerDisplayNameSnapshot: customerDisplayNameSnapshot?.trim() || undefined,
           kind,
           currency: "IDR",
           notes: notes.trim() || undefined,
@@ -223,6 +232,7 @@ export function useInvoiceDrawer(props: InvoiceDrawerProps) {
           "Content-Type": "application/json"
         },
         body: JSON.stringify({
+          customerDisplayNameSnapshot: customerDisplayNameSnapshot?.trim() || undefined,
           items: payload.items,
           notes: notes.trim() || undefined,
           terms: terms.trim() || undefined,

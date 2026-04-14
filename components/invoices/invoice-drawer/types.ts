@@ -87,6 +87,7 @@ export type InvoiceDrawerProps = {
   conversationId: string | null;
   orgId?: string | null;
   customerDisplayName?: string | null;
+  customerDisplayNameSnapshot?: string | null;
   customerPhoneE164?: string | null;
   onClose: () => void;
 };
@@ -190,7 +191,11 @@ export function computeInvoiceSummary(
   };
 }
 
-export function createDefaultMilestones(kind: InvoiceKind, totalCents: number, dpPercentage = 50): MilestoneDraft[] {
+export function createDefaultMilestones(
+  kind: InvoiceKind,
+  totalCents: number,
+  dpPercentage = 50
+): MilestoneDraft[] {
   if (kind === InvoiceKind.DP_AND_FINAL) {
     const normalizedDpPercentage = clampPercent(dpPercentage);
     const dpAmount = Math.round(totalCents * (normalizedDpPercentage / 100));

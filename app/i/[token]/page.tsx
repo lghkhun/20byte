@@ -8,6 +8,7 @@ import { PublicInvoiceToolbar } from "@/components/invoices/PublicInvoiceToolbar
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { getPublicInvoicePaymentOptions } from "@/server/services/invoiceGatewayService";
 import { getPublicInvoiceByToken } from "@/server/services/publicInvoiceService";
 
 function formatMoney(amountCents: number, currency: string): string {
@@ -85,6 +86,8 @@ export default async function PublicInvoicePage({
   if (!invoice) {
     notFound();
   }
+  const paymentOptions = await getPublicInvoicePaymentOptions(resolvedParams.token).catch(() => null);
+  const hasGatewayMethod = Boolean(paymentOptions?.qris || (paymentOptions?.va?.length ?? 0) > 0);
 
   const customerLabel = invoice.customerName?.trim() || invoice.customerPhoneE164;
   const primaryBankAccount = invoice.bankAccounts[0] ?? null;
@@ -345,6 +348,26 @@ export default async function PublicInvoicePage({
           </div>
 
           <div className="order-1 lg:order-3">
+            {hasGatewayMethod ? (
+              <Card className="mb-3 rounded-xl border-border/70 bg-white shadow-sm">
+                <CardContent className="space-y-2.5 p-4">
+                  <p className="text-sm font-semibold text-foreground">Pembayaran Online</p>
+                  <p className="text-xs text-muted-foreground">
+                    Pilih metode payment gateway untuk VA/QRIS dengan konfirmasi otomatis.
+                  </p>
+                  <Button type="button" className="w-full" asChild>
+                    <a href={`/i/${encodeURIComponent(resolvedParams.token)}/pay`}>
+                      Bayar via Payment Gateway
+                    </a>
+                  </Button>
+                  {paymentOptions?.autoConfirmLabel ? (
+                    <p className="rounded-md border border-emerald-300/70 bg-emerald-50 px-2.5 py-2 text-[11px] text-emerald-700">
+                      {paymentOptions.autoConfirmLabel}
+                    </p>
+                  ) : null}
+                </CardContent>
+              </Card>
+            ) : null}
             <PublicInvoicePaymentInstructions
               accounts={invoice.bankAccounts}
               formattedTotal={formatMoney(invoice.totalCents, invoice.currency)}

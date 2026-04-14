@@ -110,7 +110,11 @@ function parseBankAccountsJson(raw: string): PublicInvoiceBankAccount[] {
       const bankName = (row as { bankName?: unknown }).bankName;
       const accountNumber = (row as { accountNumber?: unknown }).accountNumber;
       const accountHolder = (row as { accountHolder?: unknown }).accountHolder;
-      if (typeof bankName !== "string" || typeof accountNumber !== "string" || typeof accountHolder !== "string") {
+      if (
+        typeof bankName !== "string" ||
+        typeof accountNumber !== "string" ||
+        typeof accountHolder !== "string"
+      ) {
         continue;
       }
 
@@ -135,11 +139,16 @@ function isMissingInvoiceSelectFieldError(error: unknown): boolean {
   const message = error.message;
   return (
     message.includes("Unknown field `notes` for select statement on model `Invoice`") ||
-    message.includes("Unknown field `terms` for select statement on model `Invoice`")
+    message.includes("Unknown field `terms` for select statement on model `Invoice`") ||
+    message.includes(
+      "Unknown field `customerDisplayNameSnapshot` for select statement on model `Invoice`"
+    )
   );
 }
 
-export async function getPublicInvoiceByToken(publicTokenInput: string): Promise<PublicInvoiceDetail | null> {
+export async function getPublicInvoiceByToken(
+  publicTokenInput: string
+): Promise<PublicInvoiceDetail | null> {
   const publicToken = normalize(publicTokenInput);
   if (!publicToken) {
     return null;
@@ -162,6 +171,7 @@ export async function getPublicInvoiceByToken(publicTokenInput: string): Promise
     totalCents: true,
     dueDate: true,
     createdAt: true,
+    customerDisplayNameSnapshot: true,
     bankAccountsJson: true,
     org: {
       select: {
@@ -277,8 +287,12 @@ export async function getPublicInvoiceByToken(publicTokenInput: string): Promise
     orgResponsibleName: (invoice.org as { responsibleName: string | null }).responsibleName,
     orgBusinessNpwp: (invoice.org as { businessNpwp: string | null }).businessNpwp,
     orgLogoUrl: normalizeAssetUrlForClient((invoice.org as { logoUrl: string | null }).logoUrl),
-    orgSignatureUrl: normalizeAssetUrlForClient((invoice.org as { invoiceSignatureUrl: string | null }).invoiceSignatureUrl),
-    customerName: (invoice.customer as { displayName: string | null }).displayName,
+    orgSignatureUrl: normalizeAssetUrlForClient(
+      (invoice.org as { invoiceSignatureUrl: string | null }).invoiceSignatureUrl
+    ),
+    customerName:
+      (invoice.customerDisplayNameSnapshot as string | null) ??
+      (invoice.customer as { displayName: string | null }).displayName,
     customerPhoneE164: (invoice.customer as { phoneE164: string }).phoneE164,
     items: invoice.items as PublicInvoiceItem[],
     milestones: invoice.milestones as PublicInvoiceMilestone[],

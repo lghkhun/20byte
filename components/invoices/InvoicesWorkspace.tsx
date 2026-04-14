@@ -12,19 +12,40 @@ import {
   getSortedRowModel,
   useReactTable
 } from "@tanstack/react-table";
-import { ArrowUpDown, Copy, ExternalLink, FileText, MoreHorizontal, Search, Trash2 } from "lucide-react";
+import {
+  ArrowUpDown,
+  Copy,
+  ExternalLink,
+  FileText,
+  MoreHorizontal,
+  Search,
+  Trash2
+} from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { InvoiceDrawer } from "@/components/invoices/InvoiceDrawer";
 import { InvoiceStatusBadge } from "@/components/invoices/InvoiceStatusBadge";
-import type { ApiError, InvoiceItem, InvoiceTimeline, OrgItem } from "@/components/invoices/workspace/types";
+import type {
+  ApiError,
+  InvoiceItem,
+  InvoiceTimeline,
+  OrgItem
+} from "@/components/invoices/workspace/types";
 import { toErrorMessage } from "@/components/invoices/workspace/utils";
+import { Skeleton } from "@/components/ui/skeleton";
 import { subscribeToOrgMessageEvents } from "@/lib/ably/client";
 import { fetchOrganizationsCached } from "@/lib/client/orgsCache";
-import { notifyError, notifySuccess } from "@/lib/ui/notify";
+import { dismissNotify, notifyError, notifyLoading, notifySuccess } from "@/lib/ui/notify";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle
+} from "@/components/ui/dialog";
 import {
   Drawer,
   DrawerClose,
@@ -34,12 +55,40 @@ import {
   DrawerHeader,
   DrawerTitle
 } from "@/components/ui/drawer";
-import { DropdownMenu, DropdownMenuCheckboxItem, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import {
+  DropdownMenu,
+  DropdownMenuCheckboxItem,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger
+} from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue
+} from "@/components/ui/select";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow
+} from "@/components/ui/table";
 
-const STATUS_FILTERS: Array<"ALL" | InvoiceStatus> = ["ALL", "DRAFT", "SENT", "PARTIALLY_PAID", "PAID", "VOID"];
+const STATUS_FILTERS: Array<"ALL" | InvoiceStatus> = [
+  "ALL",
+  "DRAFT",
+  "SENT",
+  "PARTIALLY_PAID",
+  "PAID",
+  "VOID"
+];
 const STATUS_FILTER_LABEL: Record<"ALL" | InvoiceStatus, string> = {
   ALL: "Semua Status",
   DRAFT: "Draf",
@@ -87,8 +136,6 @@ type CustomerOptionsCacheEntry = {
   hasMore: boolean;
   cachedAt: number;
 };
-
-type RealtimeConnectionState = "idle" | "initialized" | "connecting" | "connected" | "disconnected" | "suspended" | "failed" | "fallback";
 
 const CUSTOMER_PICKER_CACHE_TTL_MS = 60_000;
 const INVOICES_DATE_FORMATTER = new Intl.DateTimeFormat("id-ID", {
@@ -177,48 +224,14 @@ function toPublicInvoicePath(publicToken: string): string {
   return `/i/${publicToken}`;
 }
 
-function realtimeBadgeTone(state: RealtimeConnectionState): string {
-  switch (state) {
-    case "connected":
-      return "border-emerald-300 bg-emerald-50 text-emerald-700";
-    case "fallback":
-      return "border-amber-300 bg-amber-50 text-amber-700";
-    case "connecting":
-    case "initialized":
-      return "border-blue-300 bg-blue-50 text-blue-700";
-    case "failed":
-    case "disconnected":
-    case "suspended":
-      return "border-rose-300 bg-rose-50 text-rose-700";
-    default:
-      return "border-zinc-300 bg-zinc-50 text-zinc-700";
-  }
-}
-
-function realtimeBadgeLabel(state: RealtimeConnectionState): string {
-  switch (state) {
-    case "connected":
-      return "Realtime tersambung";
-    case "fallback":
-      return "Realtime terganggu (fallback polling)";
-    case "connecting":
-      return "Menyambungkan realtime...";
-    case "initialized":
-      return "Menyiapkan realtime...";
-    case "failed":
-      return "Realtime gagal tersambung";
-    case "disconnected":
-      return "Realtime terputus";
-    case "suspended":
-      return "Realtime ditangguhkan";
-    default:
-      return "Realtime belum aktif";
-  }
-}
-
 function headerSortLabel(title: string, onClick: () => void) {
   return (
-    <Button type="button" variant="ghost" className="h-8 -ml-2 px-2 text-xs uppercase tracking-[0.18em] text-muted-foreground" onClick={onClick}>
+    <Button
+      type="button"
+      variant="ghost"
+      className="h-8 -ml-2 px-2 text-xs uppercase tracking-[0.18em] text-muted-foreground"
+      onClick={onClick}
+    >
       {title}
       <ArrowUpDown className="ml-2 h-3.5 w-3.5" />
     </Button>
@@ -288,14 +301,17 @@ export function InvoicesWorkspace() {
     customerPhoneE164: string;
   } | null>(null);
   const [isInvoiceDrawerOpen, setIsInvoiceDrawerOpen] = useState(false);
-  const [realtimeConnectionState, setRealtimeConnectionState] = useState<RealtimeConnectionState>("idle");
 
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
+  const invoicesLoadingToastIdRef = useRef<string | number | null>(null);
   const realtimePendingInvoiceIdsRef = useRef<Set<string>>(new Set());
   const realtimeRefreshTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const selectedInvoice = useMemo(() => invoices.find((item) => item.id === selectedInvoiceId) ?? null, [invoices, selectedInvoiceId]);
+  const selectedInvoice = useMemo(
+    () => invoices.find((item) => item.id === selectedInvoiceId) ?? null,
+    [invoices, selectedInvoiceId]
+  );
   const activeBusiness = useMemo(() => orgs[0] ?? null, [orgs]);
 
   const summary = useMemo(() => {
@@ -313,7 +329,10 @@ export function InvoicesWorkspace() {
     );
   }, [invoices]);
 
-  const selectedCustomer = useMemo(() => customerOptions.find((customer) => customer.id === selectedCustomerId) ?? null, [customerOptions, selectedCustomerId]);
+  const selectedCustomer = useMemo(
+    () => customerOptions.find((customer) => customer.id === selectedCustomerId) ?? null,
+    [customerOptions, selectedCustomerId]
+  );
   const totalPages = Math.max(1, Math.ceil(totalInvoices / pageSize));
 
   const loadOrganizations = useCallback(async () => {
@@ -346,8 +365,14 @@ export function InvoicesWorkspace() {
       invoicesAbortControllerRef.current?.abort();
       invoicesAbortControllerRef.current = abortController;
       try {
-        const response = await fetch(`/api/invoices?${requestKey}`, { cache: "no-store", signal: abortController.signal });
-        const payload = (await response.json()) as { data?: { invoices?: InvoiceItem[] }; meta?: { total?: number } } & ApiError;
+        const response = await fetch(`/api/invoices?${requestKey}`, {
+          cache: "no-store",
+          signal: abortController.signal
+        });
+        const payload = (await response.json()) as {
+          data?: { invoices?: InvoiceItem[] };
+          meta?: { total?: number };
+        } & ApiError;
         if (!response.ok) {
           throw new Error(payload.error?.message ?? "Gagal memuat daftar invoice.");
         }
@@ -358,7 +383,9 @@ export function InvoicesWorkspace() {
         const rows = payload.data?.invoices ?? [];
         setInvoices(rows);
         setTotalInvoices(payload.meta?.total ?? rows.length);
-        setSelectedInvoiceId((current) => (current && rows.some((row) => row.id === current) ? current : rows[0]?.id ?? null));
+        setSelectedInvoiceId((current) =>
+          current && rows.some((row) => row.id === current) ? current : (rows[0]?.id ?? null)
+        );
         if (rows.length === 0) {
           setTimeline(null);
         }
@@ -399,8 +426,13 @@ export function InvoicesWorkspace() {
     timelineAbortControllerRef.current?.abort();
     timelineAbortControllerRef.current = abortController;
     try {
-      const response = await fetch(`/api/invoices/${encodeURIComponent(selectedInvoiceId)}/timeline`, { cache: "no-store", signal: abortController.signal });
-      const payload = (await response.json()) as { data?: { timeline?: InvoiceTimeline } } & ApiError;
+      const response = await fetch(
+        `/api/invoices/${encodeURIComponent(selectedInvoiceId)}/timeline`,
+        { cache: "no-store", signal: abortController.signal }
+      );
+      const payload = (await response.json()) as {
+        data?: { timeline?: InvoiceTimeline };
+      } & ApiError;
       if (!response.ok) {
         throw new Error(payload.error?.message ?? "Gagal memuat linimasa invoice.");
       }
@@ -425,7 +457,10 @@ export function InvoicesWorkspace() {
     try {
       detailAbortControllerRef.current?.abort();
       detailAbortControllerRef.current = abortController;
-      const response = await fetch(`/api/invoices/${encodeURIComponent(invoiceId)}`, { cache: "no-store", signal: abortController.signal });
+      const response = await fetch(`/api/invoices/${encodeURIComponent(invoiceId)}`, {
+        cache: "no-store",
+        signal: abortController.signal
+      });
       const payload = (await response.json().catch(() => null)) as InvoiceDetailResponse | null;
       if (!response.ok || !payload?.data?.invoice) {
         throw new Error(payload?.error?.message ?? "Gagal memuat detail invoice.");
@@ -464,11 +499,18 @@ export function InvoicesWorkspace() {
         return;
       }
 
-      if (selectedInvoiceId && (pendingIds.length === 0 || pendingIds.includes(selectedInvoiceId))) {
+      if (
+        selectedInvoiceId &&
+        (pendingIds.length === 0 || pendingIds.includes(selectedInvoiceId))
+      ) {
         await loadTimeline();
       }
 
-      if (isDetailModalOpen && invoiceDetail?.id && (pendingIds.length === 0 || pendingIds.includes(invoiceDetail.id))) {
+      if (
+        isDetailModalOpen &&
+        invoiceDetail?.id &&
+        (pendingIds.length === 0 || pendingIds.includes(invoiceDetail.id))
+      ) {
         await loadInvoiceDetail(invoiceDetail.id);
       }
     } catch (refreshError) {
@@ -477,7 +519,14 @@ export function InvoicesWorkspace() {
       }
       setError(toErrorMessage(refreshError, "Gagal menyegarkan data invoice realtime."));
     }
-  }, [invoiceDetail?.id, isDetailModalOpen, loadInvoiceDetail, loadInvoices, loadTimeline, selectedInvoiceId]);
+  }, [
+    invoiceDetail?.id,
+    isDetailModalOpen,
+    loadInvoiceDetail,
+    loadInvoices,
+    loadTimeline,
+    selectedInvoiceId
+  ]);
 
   const scheduleRealtimeRefresh = useCallback(
     (invoiceId?: string) => {
@@ -508,7 +557,9 @@ export function InvoicesWorkspace() {
       const requestId = ++customerLoadRequestIdRef.current;
 
       const cached = append ? null : customerOptionsCacheRef.current.get(query);
-      const isCacheFresh = Boolean(cached && Date.now() - cached.cachedAt < CUSTOMER_PICKER_CACHE_TTL_MS);
+      const isCacheFresh = Boolean(
+        cached && Date.now() - cached.cachedAt < CUSTOMER_PICKER_CACHE_TTL_MS
+      );
       if (cached?.rows) {
         setCustomerOptions(cached.rows);
         setHasMoreCustomers(cached.hasMore);
@@ -536,7 +587,10 @@ export function InvoicesWorkspace() {
           params.set("q", query);
         }
 
-        const response = await fetch(`/api/customers?${params.toString()}`, { cache: "no-store", signal: abortController.signal });
+        const response = await fetch(`/api/customers?${params.toString()}`, {
+          cache: "no-store",
+          signal: abortController.signal
+        });
         const payload = (await response.json().catch(() => null)) as CustomersResponse | null;
         if (!isMountedRef.current || requestId !== customerLoadRequestIdRef.current) {
           return;
@@ -612,8 +666,12 @@ export function InvoicesWorkspace() {
         setError(null);
         setSuccess(null);
         setIsSending(true);
-        const response = await fetch(`/api/invoices/${encodeURIComponent(invoiceId)}/send`, { method: "POST" });
-        const payload = (await response.json()) as { data?: { invoice?: { publicLink?: string } } } & ApiError;
+        const response = await fetch(`/api/invoices/${encodeURIComponent(invoiceId)}/send`, {
+          method: "POST"
+        });
+        const payload = (await response.json()) as {
+          data?: { invoice?: { publicLink?: string } };
+        } & ApiError;
         if (!response.ok) {
           throw new Error(payload.error?.message ?? "Gagal mengirim invoice.");
         }
@@ -673,51 +731,49 @@ export function InvoicesWorkspace() {
     [invoices.length, isDeleting, loadInvoices, page]
   );
 
-  const bulkSendDraftByIds = useCallback(
-    async (invoiceIds: string[]) => {
-      if (invoiceIds.length === 0) {
-        return;
-      }
+  const bulkSendDraftByIds = useCallback(async (invoiceIds: string[]) => {
+    if (invoiceIds.length === 0) {
+      return;
+    }
 
-      const failures: string[] = [];
-      for (const invoiceId of invoiceIds) {
-        // Sequential request keeps timeline updates stable and avoids API burst.
-        // eslint-disable-next-line no-await-in-loop
-        const response = await fetch(`/api/invoices/${encodeURIComponent(invoiceId)}/send`, { method: "POST" });
-        if (!response.ok) {
-          failures.push(invoiceId);
-        }
+    const failures: string[] = [];
+    for (const invoiceId of invoiceIds) {
+      // Sequential request keeps timeline updates stable and avoids API burst.
+      // eslint-disable-next-line no-await-in-loop
+      const response = await fetch(`/api/invoices/${encodeURIComponent(invoiceId)}/send`, {
+        method: "POST"
+      });
+      if (!response.ok) {
+        failures.push(invoiceId);
       }
+    }
 
-      if (failures.length > 0) {
-        throw new Error(`Gagal mengirim ${failures.length} draft invoice.`);
-      }
-    },
-    []
-  );
+    if (failures.length > 0) {
+      throw new Error(`Gagal mengirim ${failures.length} draft invoice.`);
+    }
+  }, []);
 
-  const bulkDeleteDraftByIds = useCallback(
-    async (invoiceIds: string[]) => {
-      if (invoiceIds.length === 0) {
-        return;
-      }
+  const bulkDeleteDraftByIds = useCallback(async (invoiceIds: string[]) => {
+    if (invoiceIds.length === 0) {
+      return;
+    }
 
-      const failures: string[] = [];
-      for (const invoiceId of invoiceIds) {
-        // Sequential request keeps deletion deterministic and easier to trace.
-        // eslint-disable-next-line no-await-in-loop
-        const response = await fetch(`/api/invoices/${encodeURIComponent(invoiceId)}`, { method: "DELETE" });
-        if (!response.ok) {
-          failures.push(invoiceId);
-        }
+    const failures: string[] = [];
+    for (const invoiceId of invoiceIds) {
+      // Sequential request keeps deletion deterministic and easier to trace.
+      // eslint-disable-next-line no-await-in-loop
+      const response = await fetch(`/api/invoices/${encodeURIComponent(invoiceId)}`, {
+        method: "DELETE"
+      });
+      if (!response.ok) {
+        failures.push(invoiceId);
       }
+    }
 
-      if (failures.length > 0) {
-        throw new Error(`Gagal menghapus ${failures.length} draft invoice.`);
-      }
-    },
-    []
-  );
+    if (failures.length > 0) {
+      throw new Error(`Gagal menghapus ${failures.length} draft invoice.`);
+    }
+  }, []);
 
   useEffect(() => {
     let mounted = true;
@@ -760,7 +816,6 @@ export function InvoicesWorkspace() {
   useEffect(() => {
     const orgId = activeBusiness?.id ?? null;
     if (!orgId) {
-      setRealtimeConnectionState("idle");
       return;
     }
 
@@ -779,7 +834,6 @@ export function InvoicesWorkspace() {
       if (fallbackTimer || !active) {
         return;
       }
-      setRealtimeConnectionState("fallback");
       fallbackTimer = setInterval(() => {
         if (!active) {
           return;
@@ -789,7 +843,6 @@ export function InvoicesWorkspace() {
     };
 
     const startSubscription = async () => {
-      setRealtimeConnectionState("connecting");
       try {
         cleanup = await subscribeToOrgMessageEvents({
           orgId,
@@ -798,15 +851,9 @@ export function InvoicesWorkspace() {
               return;
             }
             if (connectionState === "connected") {
-              setRealtimeConnectionState("connected");
               stopFallbackPolling();
               return;
             }
-            if (connectionState === "connecting" || connectionState === "initialized") {
-              setRealtimeConnectionState(connectionState);
-              return;
-            }
-            setRealtimeConnectionState(connectionState);
             startFallbackPolling();
           },
           onInvoiceCreated: (payload) => {
@@ -884,6 +931,10 @@ export function InvoicesWorkspace() {
         clearTimeout(realtimeRefreshTimeoutRef.current);
         realtimeRefreshTimeoutRef.current = null;
       }
+      if (invoicesLoadingToastIdRef.current !== null) {
+        dismissNotify(invoicesLoadingToastIdRef.current);
+        invoicesLoadingToastIdRef.current = null;
+      }
       pendingInvoiceIds.clear();
     };
   }, []);
@@ -937,13 +988,29 @@ export function InvoicesWorkspace() {
     notifySuccess(success);
   }, [success]);
 
+  useEffect(() => {
+    if (isLoading) {
+      if (invoicesLoadingToastIdRef.current === null) {
+        invoicesLoadingToastIdRef.current = notifyLoading("Memuat daftar invoice...");
+      }
+      return;
+    }
+
+    if (invoicesLoadingToastIdRef.current !== null) {
+      dismissNotify(invoicesLoadingToastIdRef.current);
+      invoicesLoadingToastIdRef.current = null;
+    }
+  }, [isLoading]);
+
   const columns = useMemo<ColumnDef<InvoiceItem>[]>(
     () => [
       {
         id: "select",
         header: ({ table }) => (
           <Checkbox
-            checked={table.getIsAllRowsSelected() || (table.getIsSomeRowsSelected() && "indeterminate")}
+            checked={
+              table.getIsAllRowsSelected() || (table.getIsSomeRowsSelected() && "indeterminate")
+            }
             onCheckedChange={(value) => table.toggleAllRowsSelected(Boolean(value))}
             aria-label="Select all"
           />
@@ -960,7 +1027,8 @@ export function InvoicesWorkspace() {
       },
       {
         accessorKey: "invoiceNo",
-        header: ({ column }) => headerSortLabel("Nomor", () => column.toggleSorting(column.getIsSorted() === "asc")),
+        header: ({ column }) =>
+          headerSortLabel("Nomor", () => column.toggleSorting(column.getIsSorted() === "asc")),
         cell: ({ row }) => (
           <button
             type="button"
@@ -978,17 +1046,23 @@ export function InvoicesWorkspace() {
       {
         id: "customer",
         accessorFn: (row) => `${row.customerName ?? ""} ${row.customerPhoneE164}`,
-        header: ({ column }) => headerSortLabel("Pelanggan", () => column.toggleSorting(column.getIsSorted() === "asc")),
+        header: ({ column }) =>
+          headerSortLabel("Pelanggan", () => column.toggleSorting(column.getIsSorted() === "asc")),
         cell: ({ row }) => (
           <div>
-            <p className="font-medium text-foreground">{row.original.customerName?.trim() || row.original.customerPhoneE164}</p>
+            <p className="font-medium text-foreground">
+              {row.original.customerName?.trim() || row.original.customerPhoneE164}
+            </p>
             <p className="text-sm text-muted-foreground">{row.original.customerPhoneE164}</p>
           </div>
         )
       },
       {
         accessorKey: "publicToken",
-        header: ({ column }) => headerSortLabel("Link Publik", () => column.toggleSorting(column.getIsSorted() === "asc")),
+        header: ({ column }) =>
+          headerSortLabel("Link Publik", () =>
+            column.toggleSorting(column.getIsSorted() === "asc")
+          ),
         cell: ({ row }) => {
           const path = toPublicInvoicePath(row.original.publicToken);
           return (
@@ -1010,17 +1084,28 @@ export function InvoicesWorkspace() {
       },
       {
         accessorKey: "createdAt",
-        header: ({ column }) => headerSortLabel("Tanggal", () => column.toggleSorting(column.getIsSorted() === "asc")),
-        cell: ({ row }) => <span className="text-sm text-muted-foreground">{formatDateLabel(row.original.createdAt)}</span>
+        header: ({ column }) =>
+          headerSortLabel("Tanggal", () => column.toggleSorting(column.getIsSorted() === "asc")),
+        cell: ({ row }) => (
+          <span className="text-sm text-muted-foreground">
+            {formatDateLabel(row.original.createdAt)}
+          </span>
+        )
       },
       {
         accessorKey: "totalCents",
-        header: ({ column }) => headerSortLabel("Nilai", () => column.toggleSorting(column.getIsSorted() === "asc")),
-        cell: ({ row }) => <span className="font-semibold text-foreground">{formatMoney(row.original.totalCents, row.original.currency)}</span>
+        header: ({ column }) =>
+          headerSortLabel("Nilai", () => column.toggleSorting(column.getIsSorted() === "asc")),
+        cell: ({ row }) => (
+          <span className="font-semibold text-foreground">
+            {formatMoney(row.original.totalCents, row.original.currency)}
+          </span>
+        )
       },
       {
         accessorKey: "status",
-        header: ({ column }) => headerSortLabel("Status", () => column.toggleSorting(column.getIsSorted() === "asc")),
+        header: ({ column }) =>
+          headerSortLabel("Status", () => column.toggleSorting(column.getIsSorted() === "asc")),
         cell: ({ row }) => <InvoiceStatusBadge status={row.original.status} />
       },
       {
@@ -1032,7 +1117,12 @@ export function InvoicesWorkspace() {
             <div className="flex justify-end">
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
-                  <Button type="button" variant="ghost" className="h-8 w-8 p-0" onClick={(event) => event.stopPropagation()}>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    className="h-8 w-8 p-0"
+                    onClick={(event) => event.stopPropagation()}
+                  >
                     <span className="sr-only">Buka aksi</span>
                     <MoreHorizontal className="h-4 w-4" />
                   </Button>
@@ -1057,7 +1147,14 @@ export function InvoicesWorkspace() {
                     Kirim invoice
                   </DropdownMenuItem>
                   <DropdownMenuItem asChild>
-                    <Link prefetch={false} href={invoice.conversationId ? `/inbox?conversationId=${encodeURIComponent(invoice.conversationId)}` : "/inbox"}>
+                    <Link
+                      prefetch={false}
+                      href={
+                        invoice.conversationId
+                          ? `/inbox?conversationId=${encodeURIComponent(invoice.conversationId)}`
+                          : "/inbox"
+                      }
+                    >
                       Buka Panel CRM
                     </Link>
                   </DropdownMenuItem>
@@ -1102,7 +1199,9 @@ export function InvoicesWorkspace() {
   });
 
   const selectedRows = table.getSelectedRowModel().rows.map((row) => row.original);
-  const selectedDraftIds = selectedRows.filter((item) => item.status === "DRAFT").map((item) => item.id);
+  const selectedDraftIds = selectedRows
+    .filter((item) => item.status === "DRAFT")
+    .map((item) => item.id);
 
   async function handleBulkSend() {
     if (selectedDraftIds.length === 0 || isBulkActing) {
@@ -1143,7 +1242,9 @@ export function InvoicesWorkspace() {
       setError(null);
       setSuccess(null);
 
-      const shouldRefreshDetail = Boolean(selectedInvoiceId && selectedDraftIds.includes(selectedInvoiceId));
+      const shouldRefreshDetail = Boolean(
+        selectedInvoiceId && selectedDraftIds.includes(selectedInvoiceId)
+      );
       await bulkDeleteDraftByIds(selectedDraftIds);
       setSuccess(`Draft invoices deleted (${selectedDraftIds.length}).`);
       const nextPage = invoices.length === selectedDraftIds.length && page > 1 ? page - 1 : page;
@@ -1172,11 +1273,14 @@ export function InvoicesWorkspace() {
       setError(null);
       setSuccess(null);
       setIsMarkingPaid(true);
-      const response = await fetch(`/api/invoices/${encodeURIComponent(selectedInvoice.id)}/mark-paid`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ milestoneType })
-      });
+      const response = await fetch(
+        `/api/invoices/${encodeURIComponent(selectedInvoice.id)}/mark-paid`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ milestoneType })
+        }
+      );
       const payload = (await response.json()) as ApiError;
       if (!response.ok) {
         throw new Error(payload.error?.message ?? "Gagal menandai invoice lunas.");
@@ -1274,7 +1378,9 @@ export function InvoicesWorkspace() {
             customerDisplayName: newCustomerName.trim() || undefined
           })
         });
-        const payload = (await response.json().catch(() => null)) as CreateConversationResponse | null;
+        const payload = (await response
+          .json()
+          .catch(() => null)) as CreateConversationResponse | null;
         if (!response.ok) {
           throw new Error(payload?.error?.message ?? "Gagal menyiapkan percakapan pelanggan.");
         }
@@ -1323,8 +1429,13 @@ export function InvoicesWorkspace() {
               <FileText className="h-5 w-5 lg:h-6 lg:w-6" />
             </div>
             <div>
-              <h1 className="text-xl font-bold tracking-tight text-foreground lg:text-2xl 2xl:text-3xl">Manajemen Invoice</h1>
-              <p className="text-xs text-muted-foreground lg:text-sm">Kelola invoice, pengiriman, pelunasan, dan sinkronisasi stage CRM dari satu workspace.</p>
+              <h1 className="text-xl font-bold tracking-tight text-foreground lg:text-2xl 2xl:text-3xl">
+                Manajemen Invoice
+              </h1>
+              <p className="text-xs text-muted-foreground lg:text-sm">
+                Kelola invoice, pengiriman, pelunasan, dan sinkronisasi stage CRM dari satu
+                workspace.
+              </p>
             </div>
           </div>
           <Button
@@ -1353,45 +1464,53 @@ export function InvoicesWorkspace() {
             Buat Invoice
           </Button>
         </div>
-        <div
-          className={`inline-flex items-center rounded-full border px-3 py-1 text-xs font-medium ${realtimeBadgeTone(
-            realtimeConnectionState
-          )}`}
-          aria-live="polite"
-        >
-          {realtimeBadgeLabel(realtimeConnectionState)}
-        </div>
       </div>
 
       <div className="grid gap-3 lg:grid-cols-3 xl:gap-4">
         <article className="flex flex-col justify-center rounded-[14px] border border-border/70 bg-card p-3 shadow-sm transition-shadow hover:shadow-md lg:rounded-[16px] lg:p-4 2xl:rounded-[20px] 2xl:p-5">
           <div className="flex items-center gap-2">
             <div className="h-1.5 w-1.5 rounded-full bg-emerald-500 lg:h-2 lg:w-2"></div>
-            <p className="text-[10px] font-medium uppercase tracking-[0.12em] text-muted-foreground lg:text-[11px]">Invoice Lunas</p>
+            <p className="text-[10px] font-medium uppercase tracking-[0.12em] text-muted-foreground lg:text-[11px]">
+              Invoice Lunas
+            </p>
           </div>
-          <p className="mt-1.5 text-xl font-semibold tracking-tight text-foreground lg:mt-2 lg:text-2xl 2xl:mt-2.5 2xl:text-[28px]">{summary.paid}</p>
+          <p className="mt-1.5 text-xl font-semibold tracking-tight text-foreground lg:mt-2 lg:text-2xl 2xl:mt-2.5 2xl:text-[28px]">
+            {summary.paid}
+          </p>
         </article>
         <article className="flex flex-col justify-center rounded-[14px] border border-border/70 bg-card p-3 shadow-sm transition-shadow hover:shadow-md lg:rounded-[16px] lg:p-4 2xl:rounded-[20px] 2xl:p-5">
           <div className="flex items-center gap-2">
             <div className="h-1.5 w-1.5 rounded-full bg-rose-500 lg:h-2 lg:w-2"></div>
-            <p className="text-[10px] font-medium uppercase tracking-[0.12em] text-muted-foreground lg:text-[11px]">Belum Lunas</p>
+            <p className="text-[10px] font-medium uppercase tracking-[0.12em] text-muted-foreground lg:text-[11px]">
+              Belum Lunas
+            </p>
           </div>
-          <p className="mt-1.5 text-xl font-semibold tracking-tight text-foreground lg:mt-2 lg:text-2xl 2xl:mt-2.5 2xl:text-[28px]">{summary.unpaid}</p>
+          <p className="mt-1.5 text-xl font-semibold tracking-tight text-foreground lg:mt-2 lg:text-2xl 2xl:mt-2.5 2xl:text-[28px]">
+            {summary.unpaid}
+          </p>
         </article>
         <article className="flex flex-col justify-center rounded-[14px] border border-border/70 bg-card p-3 shadow-sm transition-shadow hover:shadow-md lg:rounded-[16px] lg:p-4 2xl:rounded-[20px] 2xl:p-5">
           <div className="flex items-center gap-2">
             <div className="h-1.5 w-1.5 rounded-full bg-blue-500 lg:h-2 lg:w-2"></div>
-            <p className="text-[10px] font-medium uppercase tracking-[0.12em] text-muted-foreground lg:text-[11px]">Total Pendapatan</p>
+            <p className="text-[10px] font-medium uppercase tracking-[0.12em] text-muted-foreground lg:text-[11px]">
+              Total Pendapatan
+            </p>
           </div>
-          <p className="mt-1.5 text-xl font-semibold tracking-tight text-foreground lg:mt-2 lg:text-2xl 2xl:mt-2.5 2xl:text-[28px]">{formatMoney(summary.revenue, "IDR")}</p>
+          <p className="mt-1.5 text-xl font-semibold tracking-tight text-foreground lg:mt-2 lg:text-2xl 2xl:mt-2.5 2xl:text-[28px]">
+            {formatMoney(summary.revenue, "IDR")}
+          </p>
         </article>
       </div>
 
       <section className="flex min-h-0 flex-1 flex-col rounded-[16px] border border-border/80 bg-card p-3 shadow-md shadow-black/5 lg:rounded-2xl lg:p-4 2xl:rounded-[24px] 2xl:p-6">
         <div className="mb-4 flex flex-wrap items-center justify-between gap-3 2xl:mb-5">
           <div>
-            <h2 className="text-lg font-semibold tracking-tight text-foreground lg:text-xl 2xl:text-2xl">Daftar Invoice</h2>
-            <p className="text-[11px] text-muted-foreground lg:text-xs 2xl:text-sm">Register invoice {activeBusiness?.name ?? "Bisnis"}</p>
+            <h2 className="text-lg font-semibold tracking-tight text-foreground lg:text-xl 2xl:text-2xl">
+              Daftar Invoice
+            </h2>
+            <p className="text-[11px] text-muted-foreground lg:text-xs 2xl:text-sm">
+              Register invoice {activeBusiness?.name ?? "Bisnis"}
+            </p>
           </div>
           <div className="flex w-full flex-wrap items-center gap-2 md:w-auto">
             <label className="relative block w-full md:w-auto">
@@ -1424,7 +1543,11 @@ export function InvoicesWorkspace() {
 
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <Button type="button" variant="secondary" className="h-9 rounded-lg border border-border/80 bg-background md:h-10 md:rounded-xl">
+                <Button
+                  type="button"
+                  variant="secondary"
+                  className="h-9 rounded-lg border border-border/80 bg-background md:h-10 md:rounded-xl"
+                >
                   Kolom
                 </Button>
               </DropdownMenuTrigger>
@@ -1450,7 +1573,12 @@ export function InvoicesWorkspace() {
         {selectedRows.length > 0 ? (
           <div className="mb-3 flex flex-wrap items-center gap-2 rounded-xl border border-border/80 bg-background/60 px-3 py-2">
             <p className="text-sm text-muted-foreground">{selectedRows.length} dipilih</p>
-            <Button type="button" size="sm" onClick={() => void handleBulkSend()} disabled={isBulkActing || selectedDraftIds.length === 0}>
+            <Button
+              type="button"
+              size="sm"
+              onClick={() => void handleBulkSend()}
+              disabled={isBulkActing || selectedDraftIds.length === 0}
+            >
               Kirim Draft ({selectedDraftIds.length})
             </Button>
             <Button
@@ -1472,7 +1600,9 @@ export function InvoicesWorkspace() {
                 <TableRow key={headerGroup.id}>
                   {headerGroup.headers.map((header) => (
                     <TableHead key={header.id}>
-                      {header.isPlaceholder ? null : flexRender(header.column.columnDef.header, header.getContext())}
+                      {header.isPlaceholder
+                        ? null
+                        : flexRender(header.column.columnDef.header, header.getContext())}
                     </TableHead>
                   ))}
                 </TableRow>
@@ -1480,11 +1610,15 @@ export function InvoicesWorkspace() {
             </TableHeader>
             <TableBody>
               {isLoading ? (
-                <TableRow>
-                  <TableCell colSpan={columns.length} className="h-24 text-center text-muted-foreground">
-                    Memuat invoice...
-                  </TableCell>
-                </TableRow>
+                Array.from({ length: 8 }).map((_, rowIndex) => (
+                  <TableRow key={`invoice-skeleton-${rowIndex}`}>
+                    {Array.from({ length: columns.length }).map((__, columnIndex) => (
+                      <TableCell key={`invoice-skeleton-${rowIndex}-${columnIndex}`}>
+                        <Skeleton className="h-4 w-full max-w-[220px]" />
+                      </TableCell>
+                    ))}
+                  </TableRow>
+                ))
               ) : table.getRowModel().rows.length ? (
                 table.getRowModel().rows.map((row) => (
                   <TableRow
@@ -1498,13 +1632,18 @@ export function InvoicesWorkspace() {
                     }}
                   >
                     {row.getVisibleCells().map((cell) => (
-                      <TableCell key={cell.id}>{flexRender(cell.column.columnDef.cell, cell.getContext())}</TableCell>
+                      <TableCell key={cell.id}>
+                        {flexRender(cell.column.columnDef.cell, cell.getContext())}
+                      </TableCell>
                     ))}
                   </TableRow>
                 ))
               ) : (
                 <TableRow>
-                  <TableCell colSpan={columns.length} className="h-24 text-center text-muted-foreground">
+                  <TableCell
+                    colSpan={columns.length}
+                    className="h-24 text-center text-muted-foreground"
+                  >
                     Invoice tidak ditemukan.
                   </TableCell>
                 </TableRow>
@@ -1527,9 +1666,10 @@ export function InvoicesWorkspace() {
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                  <SelectItem value="10">10 baris</SelectItem>
-                  <SelectItem value="20">20 baris</SelectItem>
-                  <SelectItem value="50">50 baris</SelectItem>
+                <SelectItem value="10">10 baris</SelectItem>
+                <SelectItem value="20">20 baris</SelectItem>
+                <SelectItem value="50">50 baris</SelectItem>
+                <SelectItem value="100">100 baris</SelectItem>
               </SelectContent>
             </Select>
             <span className="text-xs text-muted-foreground md:text-sm">
@@ -1565,7 +1705,9 @@ export function InvoicesWorkspace() {
             <div className="flex items-start justify-between gap-4">
               <div>
                 <DrawerTitle>Detail Invoice</DrawerTitle>
-                <DrawerDescription>Detail invoice dengan format dokumen invoice standar dan aksi CRUD.</DrawerDescription>
+                <DrawerDescription>
+                  Detail invoice dengan format dokumen invoice standar dan aksi CRUD.
+                </DrawerDescription>
               </div>
               <DrawerClose asChild>
                 <Button type="button" variant="ghost">
@@ -1583,136 +1725,200 @@ export function InvoicesWorkspace() {
                 <div className="space-y-5">
                   <div className="rounded-xl border border-border/70 bg-background/40 p-5">
                     <div className="flex flex-wrap items-start justify-between gap-4">
-                  <div>
-                    <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">Dokumen Invoice</p>
-                    <h3 className="mt-1 text-2xl font-semibold tracking-tight text-foreground">{invoiceDetail.invoiceNo}</h3>
-                    <p className="mt-1 text-sm text-muted-foreground">
-                      Dibuat: {formatDateLabel(invoiceDetail.createdAt)} | Jatuh Tempo: {formatDateLabel(invoiceDetail.dueDate)}
+                      <div>
+                        <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">
+                          Dokumen Invoice
+                        </p>
+                        <h3 className="mt-1 text-2xl font-semibold tracking-tight text-foreground">
+                          {invoiceDetail.invoiceNo}
+                        </h3>
+                        <p className="mt-1 text-sm text-muted-foreground">
+                          Dibuat: {formatDateLabel(invoiceDetail.createdAt)} | Jatuh Tempo:{" "}
+                          {formatDateLabel(invoiceDetail.dueDate)}
+                        </p>
+                      </div>
+                      <InvoiceStatusBadge status={invoiceDetail.status} />
+                    </div>
+
+                    <div className="mt-5 grid gap-4 md:grid-cols-2">
+                      <div className="rounded-lg border border-border/70 p-3">
+                        <p className="text-xs uppercase tracking-[0.16em] text-muted-foreground">
+                          Dari
+                        </p>
+                        <p className="mt-2 text-sm font-medium text-foreground">
+                          {activeBusiness?.name ?? "Bisnis Anda"}
+                        </p>
+                      </div>
+                      <div className="rounded-lg border border-border/70 p-3">
+                        <p className="text-xs uppercase tracking-[0.16em] text-muted-foreground">
+                          Ditagihkan Ke
+                        </p>
+                        <p className="mt-2 text-sm font-medium text-foreground">
+                          {invoiceDetail.customerName?.trim() || invoiceDetail.customerPhoneE164}
+                        </p>
+                        <p className="text-sm text-muted-foreground">
+                          {invoiceDetail.customerPhoneE164}
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="mt-4 rounded-lg border border-border/70 p-3">
+                      <p className="text-xs uppercase tracking-[0.16em] text-muted-foreground">
+                        Slug Link Publik
+                      </p>
+                      <div className="mt-2 flex flex-wrap items-center gap-2">
+                        <a
+                          href={toPublicInvoicePath(invoiceDetail.publicToken)}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="inline-flex max-w-full items-center gap-2 rounded-md border border-border/70 bg-background px-3 py-1.5 text-sm text-muted-foreground hover:text-foreground"
+                          title={toPublicInvoicePath(invoiceDetail.publicToken)}
+                        >
+                          <span className="max-w-[360px] truncate">
+                            {toPublicInvoicePath(invoiceDetail.publicToken)}
+                          </span>
+                          <ExternalLink className="h-4 w-4 shrink-0" />
+                        </a>
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="secondary"
+                          className="border border-border/80 bg-background"
+                          onClick={() => void handleCopyPublicLink(invoiceDetail.publicToken)}
+                        >
+                          <Copy className="mr-2 h-3.5 w-3.5" />
+                          Salin Link
+                        </Button>
+                      </div>
+                    </div>
+
+                    <div className="mt-5 overflow-auto rounded-lg border border-border/70">
+                      <Table className="min-w-[640px]">
+                        <TableHeader>
+                          <TableRow>
+                            <TableHead>Item</TableHead>
+                            <TableHead>Qty</TableHead>
+                            <TableHead>Harga</TableHead>
+                            <TableHead className="text-right">Subtotal</TableHead>
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {invoiceDetail.items.map((item) => (
+                            <TableRow key={item.id}>
+                              <TableCell>
+                                <p className="font-medium text-foreground">{item.name}</p>
+                                {item.description ? (
+                                  <p className="text-xs text-muted-foreground">
+                                    {item.description}
+                                  </p>
+                                ) : null}
+                              </TableCell>
+                              <TableCell>
+                                {item.qty}
+                                {item.unit ? ` ${item.unit}` : ""}
+                              </TableCell>
+                              <TableCell>
+                                {formatMoney(item.priceCents, invoiceDetail.currency)}
+                              </TableCell>
+                              <TableCell className="text-right font-semibold">
+                                {formatMoney(item.amountCents, invoiceDetail.currency)}
+                              </TableCell>
+                            </TableRow>
+                          ))}
+                        </TableBody>
+                      </Table>
+                    </div>
+
+                    <div className="mt-4 flex justify-end">
+                      <div className="w-full max-w-xs space-y-1 rounded-lg border border-border/70 bg-background/50 p-3 text-sm">
+                        <div className="flex items-center justify-between text-muted-foreground">
+                          <span>Subtotal</span>
+                          <span>
+                            {formatMoney(invoiceDetail.subtotalCents, invoiceDetail.currency)}
+                          </span>
+                        </div>
+                        <div className="flex items-center justify-between text-base font-semibold text-foreground">
+                          <span>Total</span>
+                          <span>
+                            {formatMoney(invoiceDetail.totalCents, invoiceDetail.currency)}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="grid gap-4 md:grid-cols-2">
+                    <div className="rounded-xl border border-border/70 p-4">
+                      <p className="text-xs uppercase tracking-[0.16em] text-muted-foreground">
+                        Termin Pembayaran
+                      </p>
+                      <div className="mt-3 space-y-2">
+                        {invoiceDetail.milestones.map((milestone) => (
+                          <article
+                            key={milestone.id}
+                            className="rounded-lg border border-border/70 p-3"
+                          >
+                            <p className="text-sm font-medium text-foreground">{milestone.type}</p>
+                            <p className="text-sm text-muted-foreground">
+                              {formatMoney(milestone.amountCents, invoiceDetail.currency)}
+                            </p>
+                            <p className="text-xs text-muted-foreground">
+                              Jatuh Tempo: {formatDateLabel(milestone.dueDate)}
+                            </p>
+                            <p className="text-xs text-muted-foreground">
+                              Status: {milestone.status}
+                            </p>
+                          </article>
+                        ))}
+                      </div>
+                    </div>
+
+                    <div className="rounded-xl border border-border/70 p-4">
+                      <p className="text-xs uppercase tracking-[0.16em] text-muted-foreground">
+                        Instruksi Transfer
+                      </p>
+                      <div className="mt-3 space-y-2">
+                        {invoiceDetail.bankAccounts.length === 0 ? (
+                          <p className="text-sm text-muted-foreground">
+                            Belum ada rekening bank yang dikonfigurasi.
+                          </p>
+                        ) : null}
+                        {invoiceDetail.bankAccounts.map((account, index) => (
+                          <article
+                            key={`${account.accountNumber}-${index}`}
+                            className="rounded-lg border border-border/70 p-3"
+                          >
+                            <p className="text-sm font-medium text-foreground">
+                              {account.bankName}
+                            </p>
+                            <p className="text-xs text-muted-foreground">{account.accountNumber}</p>
+                            <p className="text-xs text-muted-foreground">{account.accountHolder}</p>
+                          </article>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="rounded-xl border border-border/70 p-4">
+                    <p className="text-xs uppercase tracking-[0.16em] text-muted-foreground">
+                      Linimasa
                     </p>
-                  </div>
-                  <InvoiceStatusBadge status={invoiceDetail.status} />
-                </div>
-
-                <div className="mt-5 grid gap-4 md:grid-cols-2">
-                  <div className="rounded-lg border border-border/70 p-3">
-                    <p className="text-xs uppercase tracking-[0.16em] text-muted-foreground">Dari</p>
-                    <p className="mt-2 text-sm font-medium text-foreground">{activeBusiness?.name ?? "Bisnis Anda"}</p>
-                  </div>
-                  <div className="rounded-lg border border-border/70 p-3">
-                    <p className="text-xs uppercase tracking-[0.16em] text-muted-foreground">Ditagihkan Ke</p>
-                    <p className="mt-2 text-sm font-medium text-foreground">{invoiceDetail.customerName?.trim() || invoiceDetail.customerPhoneE164}</p>
-                    <p className="text-sm text-muted-foreground">{invoiceDetail.customerPhoneE164}</p>
-                  </div>
-                </div>
-
-                <div className="mt-4 rounded-lg border border-border/70 p-3">
-                  <p className="text-xs uppercase tracking-[0.16em] text-muted-foreground">Slug Link Publik</p>
-                  <div className="mt-2 flex flex-wrap items-center gap-2">
-                    <a
-                      href={toPublicInvoicePath(invoiceDetail.publicToken)}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="inline-flex max-w-full items-center gap-2 rounded-md border border-border/70 bg-background px-3 py-1.5 text-sm text-muted-foreground hover:text-foreground"
-                      title={toPublicInvoicePath(invoiceDetail.publicToken)}
-                    >
-                      <span className="max-w-[360px] truncate">{toPublicInvoicePath(invoiceDetail.publicToken)}</span>
-                      <ExternalLink className="h-4 w-4 shrink-0" />
-                    </a>
-                    <Button type="button" size="sm" variant="secondary" className="border border-border/80 bg-background" onClick={() => void handleCopyPublicLink(invoiceDetail.publicToken)}>
-                      <Copy className="mr-2 h-3.5 w-3.5" />
-                      Salin Link
-                    </Button>
-                  </div>
-                </div>
-
-                <div className="mt-5 overflow-auto rounded-lg border border-border/70">
-                  <Table className="min-w-[640px]">
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>Item</TableHead>
-                        <TableHead>Qty</TableHead>
-                        <TableHead>Harga</TableHead>
-                        <TableHead className="text-right">Subtotal</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {invoiceDetail.items.map((item) => (
-                        <TableRow key={item.id}>
-                          <TableCell>
-                            <p className="font-medium text-foreground">{item.name}</p>
-                            {item.description ? <p className="text-xs text-muted-foreground">{item.description}</p> : null}
-                          </TableCell>
-                          <TableCell>
-                            {item.qty}
-                            {item.unit ? ` ${item.unit}` : ""}
-                          </TableCell>
-                          <TableCell>{formatMoney(item.priceCents, invoiceDetail.currency)}</TableCell>
-                          <TableCell className="text-right font-semibold">{formatMoney(item.amountCents, invoiceDetail.currency)}</TableCell>
-                        </TableRow>
+                    <div className="mt-3 space-y-2">
+                      {timeline?.events?.map((event) => (
+                        <article key={event.id} className="rounded-lg border border-border/70 p-3">
+                          <p className="text-sm font-medium text-foreground">{event.label}</p>
+                          <p className="text-xs text-muted-foreground">
+                            {formatDateLabel(event.at)}
+                          </p>
+                        </article>
                       ))}
-                    </TableBody>
-                  </Table>
-                </div>
-
-                <div className="mt-4 flex justify-end">
-                  <div className="w-full max-w-xs space-y-1 rounded-lg border border-border/70 bg-background/50 p-3 text-sm">
-                    <div className="flex items-center justify-between text-muted-foreground">
-                      <span>Subtotal</span>
-                      <span>{formatMoney(invoiceDetail.subtotalCents, invoiceDetail.currency)}</span>
-                    </div>
-                    <div className="flex items-center justify-between text-base font-semibold text-foreground">
-                      <span>Total</span>
-                      <span>{formatMoney(invoiceDetail.totalCents, invoiceDetail.currency)}</span>
+                      {!timeline?.events?.length ? (
+                        <p className="text-sm text-muted-foreground">Belum ada aktivitas.</p>
+                      ) : null}
                     </div>
                   </div>
                 </div>
-              </div>
-
-              <div className="grid gap-4 md:grid-cols-2">
-                <div className="rounded-xl border border-border/70 p-4">
-                  <p className="text-xs uppercase tracking-[0.16em] text-muted-foreground">Termin Pembayaran</p>
-                  <div className="mt-3 space-y-2">
-                    {invoiceDetail.milestones.map((milestone) => (
-                      <article key={milestone.id} className="rounded-lg border border-border/70 p-3">
-                        <p className="text-sm font-medium text-foreground">{milestone.type}</p>
-                        <p className="text-sm text-muted-foreground">{formatMoney(milestone.amountCents, invoiceDetail.currency)}</p>
-                        <p className="text-xs text-muted-foreground">Jatuh Tempo: {formatDateLabel(milestone.dueDate)}</p>
-                        <p className="text-xs text-muted-foreground">Status: {milestone.status}</p>
-                      </article>
-                    ))}
-                  </div>
-                </div>
-
-                <div className="rounded-xl border border-border/70 p-4">
-                  <p className="text-xs uppercase tracking-[0.16em] text-muted-foreground">Instruksi Transfer</p>
-                  <div className="mt-3 space-y-2">
-                    {invoiceDetail.bankAccounts.length === 0 ? <p className="text-sm text-muted-foreground">Belum ada rekening bank yang dikonfigurasi.</p> : null}
-                    {invoiceDetail.bankAccounts.map((account, index) => (
-                      <article key={`${account.accountNumber}-${index}`} className="rounded-lg border border-border/70 p-3">
-                        <p className="text-sm font-medium text-foreground">{account.bankName}</p>
-                        <p className="text-xs text-muted-foreground">{account.accountNumber}</p>
-                        <p className="text-xs text-muted-foreground">{account.accountHolder}</p>
-                      </article>
-                    ))}
-                  </div>
-                </div>
-              </div>
-
-              <div className="rounded-xl border border-border/70 p-4">
-                <p className="text-xs uppercase tracking-[0.16em] text-muted-foreground">Linimasa</p>
-                <div className="mt-3 space-y-2">
-                  {timeline?.events?.map((event) => (
-                    <article key={event.id} className="rounded-lg border border-border/70 p-3">
-                      <p className="text-sm font-medium text-foreground">{event.label}</p>
-                      <p className="text-xs text-muted-foreground">{formatDateLabel(event.at)}</p>
-                    </article>
-                  ))}
-                  {!timeline?.events?.length ? <p className="text-sm text-muted-foreground">Belum ada aktivitas.</p> : null}
-                </div>
-              </div>
-            </div>
-          )}
-
+              )}
             </div>
           </div>
 
@@ -1744,32 +1950,53 @@ export function InvoicesWorkspace() {
               <Button
                 type="button"
                 onClick={() => void sendInvoiceById(invoiceDetail.id)}
-                disabled={isSending || (invoiceDetail.status !== "DRAFT" && invoiceDetail.status !== "SENT")}
+                disabled={
+                  isSending || (invoiceDetail.status !== "DRAFT" && invoiceDetail.status !== "SENT")
+                }
               >
                 {isSending ? "Mengirim..." : "Kirim Invoice"}
               </Button>
             ) : null}
             {invoiceDetail?.kind === "DP_AND_FINAL" ? (
               <>
-                <Button type="button" variant="secondary" className="border border-border/80 bg-background" onClick={() => void handleMarkPaid("DP")}
-                  disabled={isMarkingPaid}>
+                <Button
+                  type="button"
+                  variant="secondary"
+                  className="border border-border/80 bg-background"
+                  onClick={() => void handleMarkPaid("DP")}
+                  disabled={isMarkingPaid}
+                >
                   Tandai DP Lunas
                 </Button>
-                <Button type="button" variant="secondary" className="border border-border/80 bg-background" onClick={() => void handleMarkPaid("FINAL")}
-                  disabled={isMarkingPaid}>
+                <Button
+                  type="button"
+                  variant="secondary"
+                  className="border border-border/80 bg-background"
+                  onClick={() => void handleMarkPaid("FINAL")}
+                  disabled={isMarkingPaid}
+                >
                   Tandai Pelunasan Lunas
                 </Button>
               </>
-            ) : (
-              invoiceDetail ? (
-                <Button type="button" variant="secondary" className="border border-border/80 bg-background" onClick={() => void handleMarkPaid("FULL")}
-                  disabled={isMarkingPaid}>
-                  Tandai Lunas
-                </Button>
-              ) : null
-            )}
-            {invoiceDetail && (invoiceDetail.status === "DRAFT" || invoiceDetail.status === "VOID") ? (
-              <Button type="button" variant="destructive" onClick={() => void deleteInvoiceById(invoiceDetail.id)} disabled={isDeleting}>
+            ) : invoiceDetail ? (
+              <Button
+                type="button"
+                variant="secondary"
+                className="border border-border/80 bg-background"
+                onClick={() => void handleMarkPaid("FULL")}
+                disabled={isMarkingPaid}
+              >
+                Tandai Lunas
+              </Button>
+            ) : null}
+            {invoiceDetail &&
+            (invoiceDetail.status === "DRAFT" || invoiceDetail.status === "VOID") ? (
+              <Button
+                type="button"
+                variant="destructive"
+                onClick={() => void deleteInvoiceById(invoiceDetail.id)}
+                disabled={isDeleting}
+              >
                 <Trash2 className="mr-2 h-4 w-4" />
                 {isDeleting ? "Menghapus..." : "Hapus"}
               </Button>
@@ -1783,7 +2010,8 @@ export function InvoicesWorkspace() {
           <DialogHeader>
             <DialogTitle>Buat Invoice dari Halaman Invoice</DialogTitle>
             <DialogDescription>
-              Pilih customer dari database (search-select). Sistem akan gunakan/buat conversation otomatis agar invoice tetap terhubung ke CRM.
+              Pilih customer dari database (search-select). Sistem akan gunakan/buat conversation
+              otomatis agar invoice tetap terhubung ke CRM.
             </DialogDescription>
           </DialogHeader>
 
@@ -1799,26 +2027,39 @@ export function InvoicesWorkspace() {
                 placeholder="Cari nama pelanggan atau nomor WhatsApp..."
                 className="h-10"
               />
-              {isLoadingCustomers ? <p className="text-xs text-muted-foreground">Mencari pelanggan...</p> : null}
+              {isLoadingCustomers ? (
+                <p className="text-xs text-muted-foreground">Mencari pelanggan...</p>
+              ) : null}
               <div className="max-h-52 overflow-auto rounded-xl border border-border/70">
                 {customerFetchError ? (
                   <div className="space-y-2 px-3 py-3">
                     <p className="text-sm text-destructive">{customerFetchError}</p>
-                    <Button type="button" size="sm" variant="secondary" className="h-8" onClick={() => void loadCustomers(customerSearchQuery, { force: true })}>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="secondary"
+                      className="h-8"
+                      onClick={() => void loadCustomers(customerSearchQuery, { force: true })}
+                    >
                       Coba Lagi
                     </Button>
                   </div>
                 ) : isLoadingCustomers && customerOptions.length === 0 ? (
                   <div className="space-y-2 px-3 py-3">
                     {Array.from({ length: 5 }).map((_, index) => (
-                      <div key={`customer-skeleton-${index}`} className="animate-pulse rounded-lg border border-border/60 px-3 py-2">
+                      <div
+                        key={`customer-skeleton-${index}`}
+                        className="animate-pulse rounded-lg border border-border/60 px-3 py-2"
+                      >
                         <div className="h-3.5 w-40 rounded bg-muted" />
                         <div className="mt-2 h-3 w-28 rounded bg-muted/80" />
                       </div>
                     ))}
                   </div>
                 ) : customerOptions.length === 0 ? (
-                  <p className="px-3 py-3 text-sm text-muted-foreground">Pelanggan tidak ditemukan.</p>
+                  <p className="px-3 py-3 text-sm text-muted-foreground">
+                    Pelanggan tidak ditemukan.
+                  </p>
                 ) : (
                   <div className="divide-y divide-border/60">
                     {customerOptions.map((customer) => (
@@ -1831,30 +2072,43 @@ export function InvoicesWorkspace() {
                         }}
                       >
                         <div>
-                          <p className="text-sm font-medium text-foreground">{customer.displayName?.trim() || customer.phoneE164}</p>
+                          <p className="text-sm font-medium text-foreground">
+                            {customer.displayName?.trim() || customer.phoneE164}
+                          </p>
                           <p className="text-xs text-muted-foreground">{customer.phoneE164}</p>
                         </div>
-                        <span className="text-xs text-muted-foreground">{customer.latestConversationId ? "sudah ada chat" : "belum ada chat"}</span>
+                        <span className="text-xs text-muted-foreground">
+                          {customer.latestConversationId ? "sudah ada chat" : "belum ada chat"}
+                        </span>
                       </button>
                     ))}
                   </div>
                 )}
                 {hasMoreCustomers ? (
                   <div className="border-t border-border/60 p-2">
-                    <Button type="button" variant="secondary" className="h-8 w-full" onClick={() => void loadMoreCustomers()} disabled={isLoadingCustomers}>
+                    <Button
+                      type="button"
+                      variant="secondary"
+                      className="h-8 w-full"
+                      onClick={() => void loadMoreCustomers()}
+                      disabled={isLoadingCustomers}
+                    >
                       {isLoadingCustomers ? "Memuat..." : "Muat Pelanggan Lain"}
                     </Button>
                   </div>
                 ) : null}
               </div>
             </div>
-
           </div>
 
           <DialogFooter>
-              <Button type="button" variant="secondary" onClick={() => setIsCreateInvoiceModalOpen(false)}>
+            <Button
+              type="button"
+              variant="secondary"
+              onClick={() => setIsCreateInvoiceModalOpen(false)}
+            >
               Batal
-              </Button>
+            </Button>
             <Button
               type="button"
               variant="ghost"
@@ -1883,7 +2137,9 @@ export function InvoicesWorkspace() {
         <DialogContent className="sm:max-w-[560px]">
           <DialogHeader>
             <DialogTitle>Buat Pelanggan Manual</DialogTitle>
-            <DialogDescription>Input manual dipakai saat customer belum ada di database.</DialogDescription>
+            <DialogDescription>
+              Input manual dipakai saat customer belum ada di database.
+            </DialogDescription>
           </DialogHeader>
 
           <div className="space-y-3 rounded-xl border border-border/70 p-3">
@@ -1914,7 +2170,11 @@ export function InvoicesWorkspace() {
           </div>
 
           <DialogFooter>
-            <Button type="button" variant="secondary" onClick={() => setIsManualCustomerModalOpen(false)}>
+            <Button
+              type="button"
+              variant="secondary"
+              onClick={() => setIsManualCustomerModalOpen(false)}
+            >
               Batal
             </Button>
             <Button

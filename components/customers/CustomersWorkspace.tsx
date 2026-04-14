@@ -9,6 +9,7 @@ import { subscribeToOrgMessageEvents } from "@/lib/ably/client";
 import { fetchOrganizationsCached } from "@/lib/client/orgsCache";
 import { notifyError, notifyInfo, notifySuccess, notifyWarning } from "@/lib/ui/notify";
 import { Badge } from "@/components/ui/badge";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -451,7 +452,6 @@ export function CustomersWorkspace() {
 
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshingLeads, setIsRefreshingLeads] = useState(false);
-  const [realtimeStatus, setRealtimeStatus] = useState<RealtimeSubscriptionStatus>("connecting");
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
 
@@ -505,19 +505,17 @@ export function CustomersWorkspace() {
   const activeBusiness = useMemo(() => orgs[0] ?? null, [orgs]);
 
   const updateRealtimeStatus = useCallback((nextStatus: RealtimeSubscriptionStatus) => {
+    const previousStatus = realtimeStatusRef.current;
     realtimeStatusRef.current = nextStatus;
-    setRealtimeStatus((current) => {
-      if (current !== nextStatus) {
-        if (nextStatus === "connected") {
-          notifySuccess("Realtime tersambung", { description: "Pesan & status lead sinkron secara langsung." });
-        } else if (nextStatus === "reconnecting") {
-          notifyWarning("Koneksi realtime terputus", { description: "Mencoba menyambungkan kembali..." });
-        } else if (nextStatus === "fallback") {
-          notifyInfo("Mode fallback aktif", { description: "Koneksi realtime lambat, menggunakan polling berkala." });
-        }
+    if (previousStatus !== nextStatus) {
+      if (nextStatus === "connected") {
+        notifySuccess("Realtime tersambung", { description: "Pesan & status lead sinkron secara langsung." });
+      } else if (nextStatus === "reconnecting") {
+        notifyWarning("Koneksi realtime terputus", { description: "Mencoba menyambungkan kembali..." });
+      } else if (nextStatus === "fallback") {
+        notifyInfo("Mode fallback aktif", { description: "Koneksi realtime lambat, menggunakan polling berkala." });
       }
-      return nextStatus;
-    });
+    }
   }, []);
 
   const fetchLeadDetail = useCallback(async (leadId: string, options?: { openDrawer?: boolean }) => {
@@ -600,35 +598,6 @@ export function CustomersWorkspace() {
     }
     return Array.from(sourceSet).sort((a, b) => a.localeCompare(b));
   }, [leads, sourceFacetOptions]);
-
-  const realtimeStatusMeta = useMemo(() => {
-    if (realtimeStatus === "connected") {
-      return {
-        label: "Realtime tersambung",
-        description: "Update customer diterima langsung.",
-        className: "border-emerald-500/30 bg-emerald-500/10 text-emerald-700"
-      };
-    }
-    if (realtimeStatus === "reconnecting") {
-      return {
-        label: "Menyambung ulang realtime",
-        description: "Sementara memakai fallback polling 20 detik.",
-        className: "border-amber-500/30 bg-amber-500/10 text-amber-700"
-      };
-    }
-    if (realtimeStatus === "fallback") {
-      return {
-        label: "Fallback polling aktif",
-        description: "Koneksi realtime gagal, data tetap disegarkan berkala.",
-        className: "border-rose-500/30 bg-rose-500/10 text-rose-700"
-      };
-    }
-    return {
-      label: "Menghubungkan realtime",
-      description: "Menyiapkan sinkronisasi customer...",
-      className: "border-sky-500/30 bg-sky-500/10 text-sky-700"
-    };
-  }, [realtimeStatus]);
 
   const fetchLeads = useCallback(
     async (options?: { force?: boolean }) => {
@@ -1600,12 +1569,10 @@ export function CustomersWorkspace() {
       const fallback = (lead.displayName?.trim() || lead.phoneE164 || "-").slice(0, 1).toUpperCase();
       return (
         <div className="flex min-w-0 items-center gap-2">
-          {lead.avatarUrl ? (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img src={lead.avatarUrl} alt={lead.displayName?.trim() || lead.phoneE164} className="h-7 w-7 shrink-0 rounded-full border border-border/70 object-cover" />
-          ) : (
-            <span className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-muted text-xs font-semibold text-muted-foreground">{fallback}</span>
-          )}
+          <Avatar className="h-7 w-7 shrink-0 border border-border/70">
+            <AvatarImage src={lead.avatarUrl ?? undefined} alt={lead.displayName?.trim() || lead.phoneE164} className="object-cover" />
+            <AvatarFallback className="text-xs font-semibold text-muted-foreground">{fallback}</AvatarFallback>
+          </Avatar>
           <span className="block truncate text-sm font-medium leading-5 text-foreground">{lead.displayName?.trim() || "-"}</span>
         </div>
       );
@@ -1857,14 +1824,6 @@ export function CustomersWorkspace() {
               <Plus className="h-4 w-4" />
               Add New
             </Button>
-          </div>
-        </div>
-
-        <div className="mt-3 flex items-center justify-between gap-3">
-          <div className={`inline-flex max-w-full items-center gap-2 rounded-xl border px-3 py-2 text-xs ${realtimeStatusMeta.className}`}>
-            <span className="h-2 w-2 shrink-0 rounded-full bg-current/70" aria-hidden />
-            <span className="font-medium">{realtimeStatusMeta.label}</span>
-            <span className="hidden text-current/80 md:inline">• {realtimeStatusMeta.description}</span>
           </div>
         </div>
 

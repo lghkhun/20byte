@@ -91,6 +91,48 @@ enum BillingChargeStatus {
   FAILED
 }
 
+enum InvoiceGatewayFeePolicy {
+  MERCHANT
+  CUSTOMER
+}
+
+enum InvoicePaymentAttemptStatus {
+  PENDING
+  PAID
+  EXPIRED
+  CANCELED
+  FAILED
+  SUPERSEDED
+}
+
+enum WalletLedgerType {
+  TOPUP_CREDIT
+  WITHDRAW_DEBIT
+  WITHDRAW_REFUND
+  INVOICE_FEE_DEBIT
+}
+
+enum WalletLedgerDirection {
+  CREDIT
+  DEBIT
+}
+
+enum WalletTopupStatus {
+  PENDING
+  PAID
+  EXPIRED
+  CANCELED
+  FAILED
+}
+
+enum WalletWithdrawStatus {
+  PENDING
+  APPROVED
+  PAID
+  REJECTED
+  CANCELED
+}
+
 enum AccountSetupTokenPurpose {
   SET_PASSWORD
 }
@@ -142,6 +184,11 @@ model Org {
   bankAccounts       OrgBankAccount[]
   crmPipelines       CrmPipeline[]
   crmPipelineStages  CrmPipelineStage[]
+  invoicePaymentSetting OrgInvoicePaymentSetting?
+  invoicePaymentAttempts InvoicePaymentAttempt[]
+  walletTopups       OrgWalletTopup[]
+  walletLedgers      OrgWalletLedger[]
+  walletWithdrawRequests OrgWalletWithdrawRequest[]
 
   @@index([createdAt])
 }
@@ -490,6 +537,7 @@ model Invoice {
   orgId            String
   customerId       String
   conversationId   String?
+  customerDisplayNameSnapshot String?
 
   invoiceNo        String
   kind             InvoiceKind
@@ -530,11 +578,53 @@ model Invoice {
   items            InvoiceItem[]
   milestones       PaymentMilestone[]
   proofs           PaymentProof[]
+  paymentAttempts  InvoicePaymentAttempt[]
 
   @@index([orgId, customerId, createdAt])
   @@index([conversationId])
   @@index([orgId, conversationId, createdAt], map: "inv_org_conv_created_idx")
   @@unique([orgId, invoiceNo])
+}
+
+model OrgInvoicePaymentSetting {
+  id               String                  @id @default(cuid())
+  orgId            String                  @unique
+  enableBankTransfer Boolean               @default(true)
+  enableQris       Boolean                 @default(false)
+  enabledVaMethodsJson String              @db.LongText
+  feePolicy        InvoiceGatewayFeePolicy @default(CUSTOMER)
+  autoConfirmLabelEnabled Boolean          @default(true)
+  paymentMethodsOrderJson String?          @db.LongText
+  createdAt        DateTime                @default(now())
+  updatedAt        DateTime                @updatedAt
+
+  org              Org                     @relation(fields: [orgId], references: [id])
+}
+
+model InvoicePaymentAttempt {
+  id                 String                      @id @default(cuid())
+  orgId              String
+  invoiceId          String
+  orderId            String                      @unique
+  provider           String                      @default("pakasir")
+  paymentMethod      String
+  feePolicy          InvoiceGatewayFeePolicy
+  invoiceAmountCents Int
+  feeCents           Int                         @default(0)
+  customerPayableCents Int
+  status             InvoicePaymentAttemptStatus @default(PENDING)
+  paymentNumber      String?                     @db.LongText
+  expiresAt          DateTime?
+  paidAt             DateTime?
+  gatewayRawJson     String?                     @db.LongText
+  createdAt          DateTime                    @default(now())
+  updatedAt          DateTime                    @updatedAt
+
+  org                Org                         @relation(fields: [orgId], references: [id])
+  invoice            Invoice                     @relation(fields: [invoiceId], references: [id])
+
+  @@index([orgId, invoiceId, createdAt])
+  @@index([orgId, status, createdAt])
 }
 
 model InvoiceItem {
@@ -779,6 +869,71 @@ model BillingCharge {
 
   @@index([orgId, createdAt])
   @@index([orgId, status, createdAt])
+}
+
+model OrgWalletTopup {
+  id                String           @id @default(cuid())
+  orgId             String
+  orderId           String           @unique
+  amountCents       Int
+  feeCents          Int              @default(0)
+  customerPayableCents Int
+  paymentMethod     String
+  paymentNumber     String?          @db.LongText
+  status            WalletTopupStatus @default(PENDING)
+  expiresAt         DateTime?
+  paidAt            DateTime?
+  gatewayRawJson    String?          @db.LongText
+  createdByUserId   String?
+  createdAt         DateTime         @default(now())
+  updatedAt         DateTime         @updatedAt
+
+  org               Org              @relation(fields: [orgId], references: [id])
+
+  @@index([orgId, status, createdAt])
+  @@index([orgId, createdAt])
+}
+
+model OrgWalletLedger {
+  id                String               @id @default(cuid())
+  orgId             String
+  type              WalletLedgerType
+  direction         WalletLedgerDirection
+  amountCents       Int
+  balanceAfterCents Int
+  referenceType     String
+  referenceId       String
+  note              String?
+  createdByUserId   String?
+  createdAt         DateTime             @default(now())
+
+  org               Org                  @relation(fields: [orgId], references: [id])
+
+  @@index([orgId, createdAt])
+  @@index([orgId, type, createdAt])
+  @@index([referenceType, referenceId])
+}
+
+model OrgWalletWithdrawRequest {
+  id                String              @id @default(cuid())
+  orgId             String
+  amountCents       Int
+  bankName          String
+  accountNumber     String
+  accountHolder     String
+  status            WalletWithdrawStatus @default(PENDING)
+  note              String?             @db.Text
+  processedNote     String?             @db.Text
+  requestedByUserId String
+  processedByUserId String?
+  processedAt       DateTime?
+  createdAt         DateTime            @default(now())
+  updatedAt         DateTime            @updatedAt
+
+  org               Org                 @relation(fields: [orgId], references: [id])
+
+  @@index([orgId, status, createdAt])
+  @@index([orgId, createdAt])
 }
 
 model PlatformMember {

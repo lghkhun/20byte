@@ -3,7 +3,11 @@ import { type NextRequest, NextResponse } from "next/server";
 
 import { requireApiSession } from "@/lib/auth/middleware";
 import { resolvePrimaryOrganizationIdForUser } from "@/server/services/organizationService";
-import { editInvoiceItems, type CreateInvoiceItemInput, type InvoiceMilestoneInput } from "@/server/services/invoiceService";
+import {
+  editInvoiceItems,
+  type CreateInvoiceItemInput,
+  type InvoiceMilestoneInput
+} from "@/server/services/invoiceService";
 import { ServiceError } from "@/server/services/serviceError";
 
 type InvoiceItemInput = {
@@ -25,6 +29,7 @@ type MilestoneInput = {
 
 type EditInvoiceItemsRequest = {
   orgId?: unknown;
+  customerDisplayNameSnapshot?: unknown;
   notes?: unknown;
   terms?: unknown;
   items?: unknown;
@@ -148,7 +153,7 @@ function parseMilestones(value: unknown): InvoiceMilestoneInput[] | undefined | 
 
 export async function PATCH(
   request: NextRequest,
-  context: { params: Promise<{invoiceId: string;}> }
+  context: { params: Promise<{ invoiceId: string }> }
 ) {
   const auth = requireApiSession(request);
   if (auth.response) {
@@ -164,12 +169,20 @@ export async function PATCH(
 
   const items = parseItems(body.items);
   if (!items) {
-    return errorResponse(400, "INVALID_INVOICE_ITEM", "Each item must include name, qty, and priceCents.");
+    return errorResponse(
+      400,
+      "INVALID_INVOICE_ITEM",
+      "Each item must include name, qty, and priceCents."
+    );
   }
 
   const milestones = parseMilestones(body.milestones);
   if (milestones === null) {
-    return errorResponse(400, "INVALID_MILESTONE", "Milestones must contain valid type and amountCents.");
+    return errorResponse(
+      400,
+      "INVALID_MILESTONE",
+      "Milestones must contain valid type and amountCents."
+    );
   }
 
   try {
@@ -181,6 +194,10 @@ export async function PATCH(
       actorUserId: auth.session.userId,
       orgId,
       invoiceId: (await context.params).invoiceId,
+      customerDisplayNameSnapshot:
+        typeof body.customerDisplayNameSnapshot === "string"
+          ? body.customerDisplayNameSnapshot
+          : undefined,
       notes: typeof body.notes === "string" ? body.notes : undefined,
       terms: typeof body.terms === "string" ? body.terms : undefined,
       items,

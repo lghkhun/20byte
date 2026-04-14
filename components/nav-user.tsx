@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { BadgeCheck, ChevronsUpDown, LogOut, ReceiptText, Settings, UserCircle } from "lucide-react";
+import { BadgeCheck, ChevronsUpDown, LogOut, ReceiptText, Settings, UserCircle, Wallet } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -226,6 +226,17 @@ export function NavUser({ user, onMenuOpenChange }: NavUserProps) {
                 >
                   <ReceiptText />
                   Billing
+                </DropdownMenuItem>
+              ) : null}
+              {isOwner ? (
+                <DropdownMenuItem
+                  onSelect={() => {
+                    startMenuLoading("Membuka Finance...");
+                    router.push("/finance");
+                  }}
+                >
+                  <Wallet />
+                  Finance
                 </DropdownMenuItem>
               ) : null}
               <div className="flex items-center justify-between rounded-md px-2 py-1.5 text-sm">

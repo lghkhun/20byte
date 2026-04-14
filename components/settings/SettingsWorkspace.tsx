@@ -2,10 +2,10 @@
 
 import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { usePathname, useSearchParams } from "next/navigation";
-import { Building2, MessageSquareShare, ShieldCheck, Users2 } from "lucide-react";
+import { Building2, CreditCard, MessageSquareShare, ShieldCheck, Users2 } from "lucide-react";
 
-import { BankAccountManager } from "@/components/settings/BankAccountManager";
 import { BusinessSettings } from "@/components/settings/BusinessSettings";
+import { InvoicePaymentMethodSettings } from "@/components/settings/InvoicePaymentMethodSettings";
 import { MetaCapiManager } from "@/components/settings/MetaCapiManager";
 import { ShortlinkManager } from "@/components/settings/ShortlinkManager";
 import { TeamSettings } from "@/components/settings/TeamSettings";
@@ -13,7 +13,7 @@ import { WhatsAppConnectionSettings } from "@/components/settings/WhatsAppConnec
 import { SettingsHeaderActionContext } from "@/components/settings/settings-header-actions";
 import { dismissNotify, notifyLoading } from "@/lib/ui/notify";
 
-const SETTINGS_TAB_VALUES = ["business", "team", "whatsapp", "shortlinks"] as const;
+const SETTINGS_TAB_VALUES = ["business", "payment", "team", "whatsapp", "shortlinks"] as const;
 type SettingsTabValue = (typeof SETTINGS_TAB_VALUES)[number];
 
 function isSettingsTabValue(value: string): value is SettingsTabValue {
@@ -26,6 +26,7 @@ function normalizeInitialTab(value: string): SettingsTabValue {
 
 const SETTINGS_TABS: Array<{ id: SettingsTabValue; label: string }> = [
   { id: "business", label: "Business" },
+  { id: "payment", label: "Payment" },
   { id: "team", label: "Team" },
   { id: "whatsapp", label: "WhatsApp" },
   { id: "shortlinks", label: "Shortlinks + Meta CAPI" }
@@ -43,8 +44,14 @@ const SETTINGS_TAB_META: Record<
   business: {
     icon: Building2,
     title: "Business Settings",
-    description: "Kelola identitas bisnis, invoice defaults, dan rekening operasional dalam satu tempat.",
+    description: "Kelola identitas bisnis dan default informasi perusahaan.",
     badge: "Core"
+  },
+  payment: {
+    icon: CreditCard,
+    title: "Payment Methods",
+    description: "Kelola metode pembayaran invoice, biaya gateway, dan rekening bank transfer bisnis.",
+    badge: "Billing"
   },
   team: {
     icon: Users2,
@@ -76,7 +83,9 @@ export function SettingsWorkspace({
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const safeInitialTab =
-    !canAccessBusinessSettings && normalizeInitialTab(initialTab) === "business" ? "team" : normalizeInitialTab(initialTab);
+    !canAccessBusinessSettings && (normalizeInitialTab(initialTab) === "business" || normalizeInitialTab(initialTab) === "payment")
+      ? "team"
+      : normalizeInitialTab(initialTab);
   const [activeTab, setActiveTab] = useState<SettingsTabValue>(safeInitialTab);
   const [headerActions, setHeaderActions] = useState<Record<string, ReactNode>>({});
   const tabLoadingToastIdRef = useRef<string | number | null>(null);
@@ -131,7 +140,7 @@ export function SettingsWorkspace({
 
   useEffect(() => {
     const tabFromQuery = searchParams.get("tab");
-    if (!canAccessBusinessSettings && tabFromQuery === "business") {
+    if (!canAccessBusinessSettings && (tabFromQuery === "business" || tabFromQuery === "payment")) {
       setActiveTab("team");
       return;
     }
@@ -141,7 +150,7 @@ export function SettingsWorkspace({
   }, [activeTab, canAccessBusinessSettings, searchParams]);
 
   function handleTabChange(nextTab: SettingsTabValue) {
-    if (!canAccessBusinessSettings && nextTab === "business") {
+    if (!canAccessBusinessSettings && (nextTab === "business" || nextTab === "payment")) {
       return;
     }
     if (nextTab === activeTab) {
@@ -167,7 +176,7 @@ export function SettingsWorkspace({
             <p className="mt-1 text-xs leading-5 text-muted-foreground">Pilih area pengaturan yang ingin Anda kelola.</p>
           </div>
           <nav className="inbox-scroll flex gap-2 overflow-x-auto pb-1 xl:min-h-0 xl:flex-1 xl:flex-col xl:overflow-y-auto xl:overflow-x-hidden" aria-label="Settings navigation">
-            {SETTINGS_TABS.filter((tab) => canAccessBusinessSettings || tab.id !== "business").map((tab) => {
+            {SETTINGS_TABS.filter((tab) => canAccessBusinessSettings || (tab.id !== "business" && tab.id !== "payment")).map((tab) => {
               const meta = SETTINGS_TAB_META[tab.id];
               const Icon = meta.icon;
               const isActive = activeTab === tab.id;
@@ -227,7 +236,11 @@ export function SettingsWorkspace({
               {activeTab === "business" ? (
                 <div className="space-y-8 px-2 pb-4">
                   <BusinessSettings />
-                  <BankAccountManager />
+                </div>
+              ) : null}
+              {activeTab === "payment" ? (
+                <div className="space-y-8 px-2 pb-4">
+                  <InvoicePaymentMethodSettings />
                 </div>
               ) : null}
               {activeTab === "team" ? (

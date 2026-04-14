@@ -27,6 +27,7 @@ type CreateInvoiceRequest = {
   orgId?: unknown;
   customerId?: unknown;
   conversationId?: unknown;
+  customerDisplayNameSnapshot?: unknown;
   kind?: unknown;
   currency?: unknown;
   notes?: unknown;
@@ -164,7 +165,11 @@ export async function POST(request: NextRequest) {
 
   const milestonesInput = parseMilestones(body.milestones);
   if (milestonesInput && milestonesInput.length === 0 && body.milestones !== undefined) {
-    return errorResponse(400, "INVALID_MILESTONES", "milestones must be a non-empty array when provided.");
+    return errorResponse(
+      400,
+      "INVALID_MILESTONES",
+      "milestones must be a non-empty array when provided."
+    );
   }
 
   const normalizedItems = itemsInput.map((item) => ({
@@ -179,7 +184,11 @@ export async function POST(request: NextRequest) {
   }));
 
   if (normalizedItems.some((item) => !item.name.trim() || !item.qty || !item.priceCents)) {
-    return errorResponse(400, "INVALID_INVOICE_ITEM", "Each item must include name, qty, and priceCents.");
+    return errorResponse(
+      400,
+      "INVALID_INVOICE_ITEM",
+      "Each item must include name, qty, and priceCents."
+    );
   }
 
   const normalizedMilestones =
@@ -189,8 +198,15 @@ export async function POST(request: NextRequest) {
       dueDate: parseDate(milestone.dueDate)
     })) ?? undefined;
 
-  if (normalizedMilestones && normalizedMilestones.some((milestone) => !milestone.type || !milestone.amountCents)) {
-    return errorResponse(400, "INVALID_MILESTONE", "Each milestone must include valid type and amountCents.");
+  if (
+    normalizedMilestones &&
+    normalizedMilestones.some((milestone) => !milestone.type || !milestone.amountCents)
+  ) {
+    return errorResponse(
+      400,
+      "INVALID_MILESTONE",
+      "Each milestone must include valid type and amountCents."
+    );
   }
 
   try {
@@ -203,6 +219,10 @@ export async function POST(request: NextRequest) {
       orgId,
       customerId: typeof body.customerId === "string" ? body.customerId : "",
       conversationId: typeof body.conversationId === "string" ? body.conversationId : undefined,
+      customerDisplayNameSnapshot:
+        typeof body.customerDisplayNameSnapshot === "string"
+          ? body.customerDisplayNameSnapshot
+          : undefined,
       kind,
       currency: typeof body.currency === "string" ? body.currency : undefined,
       notes: typeof body.notes === "string" ? body.notes : undefined,

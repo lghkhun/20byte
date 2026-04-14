@@ -20,6 +20,18 @@ import {
 } from "@/server/services/invoice/invoiceUtils";
 import { ServiceError } from "@/server/services/serviceError";
 
+function isCustomerNameSnapshotUnsupported(error: unknown): boolean {
+  if (!(error instanceof Error)) {
+    return false;
+  }
+  const message = error.message;
+  return (
+    message.includes("Unknown argument `customerDisplayNameSnapshot`") ||
+    message.includes("Unknown field `customerDisplayNameSnapshot`") ||
+    message.includes("Unknown column 'customerDisplayNameSnapshot'")
+  );
+}
+
 export async function loadDraftCustomerContext(params: {
   orgId: string;
   customerId: string;
@@ -54,7 +66,11 @@ export async function loadDraftCustomerContext(params: {
     });
 
     if (!conversation) {
-      throw new ServiceError(404, "CONVERSATION_NOT_FOUND", "Conversation does not exist for this customer.");
+      throw new ServiceError(
+        404,
+        "CONVERSATION_NOT_FOUND",
+        "Conversation does not exist for this customer."
+      );
     }
   }
 
@@ -102,6 +118,7 @@ export async function createDraftInvoiceWithRetry(params: {
   orgId: string;
   customerId: string;
   conversationId?: string;
+  customerDisplayNameSnapshot?: string;
   actorUserId: string;
   kind: CreateDraftInvoiceInput["kind"];
   currency: string;
@@ -122,6 +139,7 @@ export async function createDraftInvoiceWithRetry(params: {
 }): Promise<InvoiceDraftResult> {
   let created: InvoiceDraftResult | null = null;
   let attempt = 0;
+  let includeCustomerNameSnapshot = Boolean(params.customerDisplayNameSnapshot);
 
   while (attempt < 3 && !created) {
     attempt += 1;
@@ -135,6 +153,11 @@ export async function createDraftInvoiceWithRetry(params: {
             orgId: params.orgId,
             customerId: params.customerId,
             conversationId: params.conversationId ?? null,
+            ...(includeCustomerNameSnapshot
+              ? {
+                  customerDisplayNameSnapshot: params.customerDisplayNameSnapshot ?? null
+                }
+              : {}),
             invoiceNo,
             kind: params.kind,
             status: InvoiceStatus.DRAFT,
@@ -190,6 +213,11 @@ export async function createDraftInvoiceWithRetry(params: {
         });
       });
     } catch (error) {
+      if (includeCustomerNameSnapshot && isCustomerNameSnapshotUnsupported(error)) {
+        includeCustomerNameSnapshot = false;
+        attempt = 0;
+        continue;
+      }
       if (isPrismaUniqueError(error) && attempt < 3) {
         continue;
       }
@@ -199,7 +227,11 @@ export async function createDraftInvoiceWithRetry(params: {
   }
 
   if (!created) {
-    throw new ServiceError(500, "INVOICE_NUMBER_RESERVATION_FAILED", "Failed to reserve unique invoice number.");
+    throw new ServiceError(
+      500,
+      "INVOICE_NUMBER_RESERVATION_FAILED",
+      "Failed to reserve unique invoice number."
+    );
   }
 
   return created;
@@ -209,6 +241,7 @@ export async function generateDraftPdfAndPersist(params: {
   orgId: string;
   created: InvoiceDraftResult;
   customer: { displayName: string | null; phoneE164: string };
+  customerDisplayNameSnapshot?: string;
   currency: string;
   grossSubtotalCents: number;
   lineDiscountCents: number;
@@ -227,7 +260,7 @@ export async function generateDraftPdfAndPersist(params: {
     invoiceId: params.created.id,
     invoiceNo: params.created.invoiceNo,
     status: params.created.status,
-    customerName: params.customer.displayName,
+    customerName: params.customerDisplayNameSnapshot ?? params.customer.displayName,
     customerPhoneE164: params.customer.phoneE164,
     currency: params.currency,
     grossSubtotalCents: params.grossSubtotalCents,

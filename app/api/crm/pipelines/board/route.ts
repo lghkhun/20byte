@@ -56,12 +56,14 @@ function buildCacheKey(input: {
   activityFrom: string;
   activityTo: string;
   cardLimit: number | undefined;
+  chatScope: string;
 }): string {
   return [
     input.userId,
     input.orgId,
     input.pipelineId || "__default__",
     input.status || "OPEN",
+    input.chatScope || "ALL",
     input.assigneeUserId || "ALL",
     input.activityFrom || "__none__",
     input.activityTo || "__none__",
@@ -101,16 +103,21 @@ export async function GET(request: NextRequest) {
   const assigneeUserId = request.nextUrl.searchParams.get("assigneeUserId") ?? "ALL";
   const activityFrom = request.nextUrl.searchParams.get("activityFrom") ?? "";
   const activityTo = request.nextUrl.searchParams.get("activityTo") ?? "";
+  const chatScope = request.nextUrl.searchParams.get("chatScope") ?? "ALL";
   const cardLimit = parsePositiveInt(request.nextUrl.searchParams.get("cardLimit"));
   const fresh = request.nextUrl.searchParams.get("fresh") === "1";
 
   try {
-    const orgId = await resolvePrimaryOrganizationIdForUser(auth.session.userId, request.nextUrl.searchParams.get("orgId") ?? "");
+    const orgId = await resolvePrimaryOrganizationIdForUser(
+      auth.session.userId,
+      request.nextUrl.searchParams.get("orgId") ?? ""
+    );
     const cacheKey = buildCacheKey({
       userId: auth.session.userId,
       orgId,
       pipelineId,
       status,
+      chatScope,
       assigneeUserId,
       activityFrom,
       activityTo,
@@ -120,7 +127,11 @@ export async function GET(request: NextRequest) {
     if (!fresh) {
       const cached = crmBoardCache.get(cacheKey);
       if (cached && cached.expiresAt > Date.now()) {
-        return withServerTiming(NextResponse.json(cached.payload, { status: 200 }), startedAt, "HIT");
+        return withServerTiming(
+          NextResponse.json(cached.payload, { status: 200 }),
+          startedAt,
+          "HIT"
+        );
       }
       const inflight = crmBoardInflight.get(cacheKey);
       if (inflight) {
@@ -135,6 +146,7 @@ export async function GET(request: NextRequest) {
         orgId,
         pipelineId,
         status,
+        chatScope,
         assigneeUserId,
         activityFrom,
         activityTo,
@@ -170,6 +182,9 @@ export async function GET(request: NextRequest) {
     if (error instanceof ServiceError) {
       return withServerTiming(errorResponse(error.status, error.code, error.message), startedAt);
     }
-    return withServerTiming(errorResponse(500, "CRM_PIPELINE_BOARD_FAILED", "Failed to load CRM pipeline board."), startedAt);
+    return withServerTiming(
+      errorResponse(500, "CRM_PIPELINE_BOARD_FAILED", "Failed to load CRM pipeline board."),
+      startedAt
+    );
   }
 }

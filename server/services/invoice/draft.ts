@@ -29,10 +29,25 @@ import {
 } from "@/server/services/invoice/invoiceUtils";
 import { ServiceError } from "@/server/services/serviceError";
 
-export async function createDraftInvoice(input: CreateDraftInvoiceInput): Promise<InvoiceDraftResult> {
+function isCustomerNameSnapshotUnsupported(error: unknown): boolean {
+  if (!(error instanceof Error)) {
+    return false;
+  }
+  const message = error.message;
+  return (
+    message.includes("Unknown argument `customerDisplayNameSnapshot`") ||
+    message.includes("Unknown field `customerDisplayNameSnapshot`") ||
+    message.includes("Unknown column 'customerDisplayNameSnapshot'")
+  );
+}
+
+export async function createDraftInvoice(
+  input: CreateDraftInvoiceInput
+): Promise<InvoiceDraftResult> {
   const orgId = normalize(input.orgId);
   const customerId = normalize(input.customerId);
   const conversationId = normalizeConversationId(input.conversationId);
+  const customerDisplayNameSnapshot = normalizeOptional(input.customerDisplayNameSnapshot);
   const currency = normalizeCurrency(input.currency);
   const notes = normalizeOptional(input.notes);
   const terms = normalizeOptional(input.terms);
@@ -70,6 +85,7 @@ export async function createDraftInvoice(input: CreateDraftInvoiceInput): Promis
     orgId,
     customerId,
     conversationId: conversationId ?? undefined,
+    customerDisplayNameSnapshot,
     actorUserId: input.actorUserId,
     kind: input.kind,
     currency,
@@ -100,6 +116,7 @@ export async function createDraftInvoice(input: CreateDraftInvoiceInput): Promis
     invoiceDiscountValue,
     invoiceDiscountCents,
     taxCents,
+    customerDisplayNameSnapshot,
     notes,
     terms,
     dueDate: input.dueDate ?? undefined,
@@ -129,7 +146,9 @@ export async function createDraftInvoice(input: CreateDraftInvoiceInput): Promis
   return created;
 }
 
-export async function editInvoiceItems(input: EditInvoiceItemsInput): Promise<InvoiceItemsEditResult> {
+export async function editInvoiceItems(
+  input: EditInvoiceItemsInput
+): Promise<InvoiceItemsEditResult> {
   const orgId = normalize(input.orgId);
   const invoiceId = normalize(input.invoiceId);
   if (!orgId) {
@@ -165,6 +184,7 @@ export async function editInvoiceItems(input: EditInvoiceItemsInput): Promise<In
 
   const normalizedItems = normalizeItems(input.items);
   const normalizedInvoiceDiscount = normalizeInvoiceDiscount(input.invoiceDiscount);
+  const customerDisplayNameSnapshot = normalizeOptional(input.customerDisplayNameSnapshot);
   const notes = normalizeOptional(input.notes);
   const terms = normalizeOptional(input.terms);
   const totals = computeInvoiceTotals(normalizedItems, normalizedInvoiceDiscount);
@@ -172,97 +192,113 @@ export async function editInvoiceItems(input: EditInvoiceItemsInput): Promise<In
   const totalCents = totals.totalCents;
   const normalizedMilestones = normalizeMilestones(invoice.kind, totalCents, input.milestones);
 
-  const updated = await prisma.$transaction(async (tx) => {
-    await tx.invoiceItem.deleteMany({
-      where: {
-        orgId,
-        invoiceId: invoice.id
-      }
-    });
-
-    await tx.paymentMilestone.deleteMany({
-      where: {
-        orgId,
-        invoiceId: invoice.id
-      }
-    });
-
-    const invoiceInTx = await tx.invoice.findFirst({
-      where: {
-        id: invoice.id,
-        orgId
-      },
-      select: {
-        id: true
-      }
-    });
-
-    if (!invoiceInTx) {
-      throw new ServiceError(404, "INVOICE_NOT_FOUND", "Invoice does not exist.");
-    }
-
-    await tx.invoice.update({
-      where: {
-        id: invoiceInTx.id
-      },
-      data: {
-        subtotalCents,
-        totalCents,
-        grossSubtotalCents: totals.grossSubtotalCents,
-        lineDiscountCents: totals.lineDiscountCents,
-        invoiceDiscountType: normalizedInvoiceDiscount.type,
-        invoiceDiscountValue: normalizedInvoiceDiscount.value,
-        invoiceDiscountCents: totals.invoiceDiscountCents,
-        taxCents: totals.taxCents,
-        notes: notes ?? null,
-        terms: terms ?? null,
-        items: {
-          create: normalizedItems.map((item) => ({
-            ...item,
-            orgId
-          }))
-        },
-        milestones: {
-          create: normalizedMilestones.map((milestone) => ({
-            ...milestone,
-            orgId
-          }))
+  const runDraftUpdate = async (includeSnapshot: boolean) =>
+    prisma.$transaction(async (tx) => {
+      await tx.invoiceItem.deleteMany({
+        where: {
+          orgId,
+          invoiceId: invoice.id
         }
-      }
-    });
+      });
 
-    const refreshed = await tx.invoice.findFirst({
-      where: {
-        id: invoice.id,
-        orgId
-      },
-      select: {
-        id: true,
-        invoiceNo: true,
-        subtotalCents: true,
-        totalCents: true,
-        milestones: {
-          select: {
-            id: true,
-            type: true,
-            amountCents: true,
-            dueDate: true,
-            status: true
-          },
-          orderBy: {
-            type: "asc"
-          }
+      await tx.paymentMilestone.deleteMany({
+        where: {
+          orgId,
+          invoiceId: invoice.id
+        }
+      });
+
+      const invoiceInTx = await tx.invoice.findFirst({
+        where: {
+          id: invoice.id,
+          orgId
         },
-        updatedAt: true
+        select: {
+          id: true
+        }
+      });
+
+      if (!invoiceInTx) {
+        throw new ServiceError(404, "INVOICE_NOT_FOUND", "Invoice does not exist.");
       }
+
+      await tx.invoice.update({
+        where: {
+          id: invoiceInTx.id
+        },
+        data: {
+          subtotalCents,
+          totalCents,
+          grossSubtotalCents: totals.grossSubtotalCents,
+          lineDiscountCents: totals.lineDiscountCents,
+          invoiceDiscountType: normalizedInvoiceDiscount.type,
+          invoiceDiscountValue: normalizedInvoiceDiscount.value,
+          invoiceDiscountCents: totals.invoiceDiscountCents,
+          taxCents: totals.taxCents,
+          ...(includeSnapshot
+            ? {
+                customerDisplayNameSnapshot: customerDisplayNameSnapshot ?? null
+              }
+            : {}),
+          notes: notes ?? null,
+          terms: terms ?? null,
+          items: {
+            create: normalizedItems.map((item) => ({
+              ...item,
+              orgId
+            }))
+          },
+          milestones: {
+            create: normalizedMilestones.map((milestone) => ({
+              ...milestone,
+              orgId
+            }))
+          }
+        }
+      });
+
+      const refreshed = await tx.invoice.findFirst({
+        where: {
+          id: invoice.id,
+          orgId
+        },
+        select: {
+          id: true,
+          invoiceNo: true,
+          subtotalCents: true,
+          totalCents: true,
+          milestones: {
+            select: {
+              id: true,
+              type: true,
+              amountCents: true,
+              dueDate: true,
+              status: true
+            },
+            orderBy: {
+              type: "asc"
+            }
+          },
+          updatedAt: true
+        }
+      });
+
+      if (!refreshed) {
+        throw new ServiceError(404, "INVOICE_NOT_FOUND", "Invoice does not exist.");
+      }
+
+      return refreshed;
     });
 
-    if (!refreshed) {
-      throw new ServiceError(404, "INVOICE_NOT_FOUND", "Invoice does not exist.");
+  let updated: InvoiceItemsEditResult;
+  try {
+    updated = await runDraftUpdate(Boolean(customerDisplayNameSnapshot));
+  } catch (error) {
+    if (!customerDisplayNameSnapshot || !isCustomerNameSnapshotUnsupported(error)) {
+      throw error;
     }
-
-    return refreshed;
-  });
+    updated = await runDraftUpdate(false);
+  }
 
   await writeAuditLogSafe({
     orgId,
@@ -319,7 +355,11 @@ export async function deleteDraftInvoice(input: {
   }
 
   if (invoice.status !== InvoiceStatus.DRAFT && invoice.status !== InvoiceStatus.VOID) {
-    throw new ServiceError(400, "INVOICE_NOT_DELETABLE", "Only draft or void invoices can be deleted.");
+    throw new ServiceError(
+      400,
+      "INVOICE_NOT_DELETABLE",
+      "Only draft or void invoices can be deleted."
+    );
   }
 
   await prisma.$transaction(async (tx) => {

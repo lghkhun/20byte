@@ -3,7 +3,7 @@
 import Image from "next/image";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { AlertTriangle, FileText, LayoutDashboard, Link2, MessageCircle, Shield, Users, Workflow } from "lucide-react";
+import { AlertTriangle, FileText, LayoutDashboard, Link2, MessageCircle, Shield, Users, Wallet, Workflow } from "lucide-react";
 import QRCode from "qrcode";
 import { useEffect, useMemo, useRef, useState } from "react";
 
@@ -89,6 +89,14 @@ type BillingCheckoutPayload = {
   };
 };
 
+type WalletSummaryPayload = {
+  data?: {
+    summary?: {
+      walletBalanceCents?: number;
+    };
+  };
+};
+
 function formatIdr(cents: number): string {
   return new Intl.NumberFormat("id-ID", {
     style: "currency",
@@ -167,6 +175,8 @@ export function AppSidebar({ user, ownerOnboardingStatus = null }: AppSidebarPro
   const [checkoutNowMs, setCheckoutNowMs] = useState(() => Date.now());
   const [isCommunityDialogOpen, setIsCommunityDialogOpen] = useState(false);
   const [communityQrDataUrl, setCommunityQrDataUrl] = useState<string | null>(null);
+  const [walletBalanceCents, setWalletBalanceCents] = useState<number | null>(null);
+  const [isWalletLoading, setIsWalletLoading] = useState(false);
   const loadingToastIdRef = useRef<string | number | null>(null);
   const billingReminderCacheRef = useRef<{ checkedAt: number; message: string | null } | null>(null);
 
@@ -228,6 +238,51 @@ export function AppSidebar({ user, ownerOnboardingStatus = null }: AppSidebarPro
 
   const isOwnerRole = user?.primaryOrgRole === "OWNER";
   const isQrisPayment = (checkoutPaymentMethod ?? "").toLowerCase() === "qris";
+
+  useEffect(() => {
+    if (!user || !isOwnerRole) {
+      setWalletBalanceCents(null);
+      setIsWalletLoading(false);
+      return;
+    }
+
+    let active = true;
+
+    async function loadWalletSummary() {
+      if (active) {
+        setIsWalletLoading(true);
+      }
+      try {
+        const payload = await fetchJsonCached<WalletSummaryPayload>("/api/wallet/summary", {
+          ttlMs: 15_000,
+          init: { cache: "no-store" }
+        });
+        if (!active) {
+          return;
+        }
+        setWalletBalanceCents(payload?.data?.summary?.walletBalanceCents ?? 0);
+      } catch {
+        if (!active) {
+          return;
+        }
+        setWalletBalanceCents(0);
+      } finally {
+        if (active) {
+          setIsWalletLoading(false);
+        }
+      }
+    }
+
+    void loadWalletSummary();
+    const intervalId = window.setInterval(() => {
+      void loadWalletSummary();
+    }, 60_000);
+
+    return () => {
+      active = false;
+      window.clearInterval(intervalId);
+    };
+  }, [isOwnerRole, user]);
 
   useEffect(() => {
     setPendingPath(null);
@@ -433,6 +488,35 @@ export function AppSidebar({ user, ownerOnboardingStatus = null }: AppSidebarPro
         </SidebarMenu>
       </SidebarHeader>
       <SidebarContent>
+        {isOwnerRole ? (
+          <div className="mx-3 mb-2 group-data-[collapsible=icon]:hidden">
+            <Link
+              href="/finance"
+              prefetch={false}
+              onMouseEnter={() => router.prefetch("/finance")}
+              onFocus={() => router.prefetch("/finance")}
+              onClick={() => {
+                if (pathname === "/finance") {
+                  return;
+                }
+                setPendingPath("/finance");
+                if (loadingToastIdRef.current !== null) {
+                  dismissNotify(loadingToastIdRef.current);
+                }
+                loadingToastIdRef.current = notifyLoading("Sedang memuat halaman...");
+              }}
+              className="block rounded-md border border-emerald-300 bg-emerald-50 px-3 py-2 text-left transition hover:border-emerald-400 hover:bg-emerald-100/70"
+            >
+              <p className="flex items-center gap-1 text-[11px] font-medium text-emerald-700">
+                <Wallet className="h-3.5 w-3.5" />
+                E-Payment Balance
+              </p>
+              <p className="mt-0.5 text-lg font-bold leading-none text-emerald-800">
+                {isWalletLoading ? "Memuat..." : formatIdr(walletBalanceCents ?? 0)}
+              </p>
+            </Link>
+          </div>
+        ) : null}
         <NavMain
           currentPath={pathname}
           pendingPath={pendingPath}

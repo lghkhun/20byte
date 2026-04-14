@@ -19,7 +19,9 @@ function errorResponse(status: number, code: string, message: string) {
   );
 }
 
-function parseBankAccountsJson(raw: string): Array<{ bankName: string; accountNumber: string; accountHolder: string }> {
+function parseBankAccountsJson(
+  raw: string
+): Array<{ bankName: string; accountNumber: string; accountHolder: string }> {
   if (!raw) {
     return [];
   }
@@ -39,7 +41,11 @@ function parseBankAccountsJson(raw: string): Array<{ bankName: string; accountNu
         const bankName = (row as { bankName?: unknown }).bankName;
         const accountNumber = (row as { accountNumber?: unknown }).accountNumber;
         const accountHolder = (row as { accountHolder?: unknown }).accountHolder;
-        if (typeof bankName !== "string" || typeof accountNumber !== "string" || typeof accountHolder !== "string") {
+        if (
+          typeof bankName !== "string" ||
+          typeof accountNumber !== "string" ||
+          typeof accountHolder !== "string"
+        ) {
           return null;
         }
 
@@ -49,7 +55,10 @@ function parseBankAccountsJson(raw: string): Array<{ bankName: string; accountNu
           accountHolder: accountHolder.trim()
         };
       })
-      .filter((row): row is { bankName: string; accountNumber: string; accountHolder: string } => row !== null);
+      .filter(
+        (row): row is { bankName: string; accountNumber: string; accountHolder: string } =>
+          row !== null
+      );
   } catch {
     return [];
   }
@@ -57,7 +66,7 @@ function parseBankAccountsJson(raw: string): Array<{ bankName: string; accountNu
 
 export async function GET(
   request: NextRequest,
-  context: { params: Promise<{invoiceId: string;}> }
+  context: { params: Promise<{ invoiceId: string }> }
 ) {
   const auth = requireApiSession(request);
   if (auth.response) {
@@ -71,76 +80,95 @@ export async function GET(
     );
     await requireInvoiceAccess(auth.session.userId, orgId);
 
-    const invoice = await prisma.invoice.findFirst({
-      where: {
-        id: (await context.params).invoiceId,
-        orgId
-      },
-      select: {
-        id: true,
-        invoiceNo: true,
-        publicToken: true,
-        status: true,
-        kind: true,
-        currency: true,
-        subtotalCents: true,
-        grossSubtotalCents: true,
-        lineDiscountCents: true,
-        invoiceDiscountType: true,
-        invoiceDiscountValue: true,
-        invoiceDiscountCents: true,
-        taxCents: true,
-        totalCents: true,
-        dueDate: true,
-        notes: true,
-        terms: true,
-        createdAt: true,
-        updatedAt: true,
-        conversationId: true,
-        customerId: true,
-        bankAccountsJson: true,
-        customer: {
-          select: {
-            displayName: true,
-            phoneE164: true
-          }
+    const runFetch = async (includeSnapshot: boolean) =>
+      prisma.invoice.findFirst({
+        where: {
+          id: (await context.params).invoiceId,
+          orgId
         },
-        items: {
-          orderBy: {
-            id: "asc"
+        select: {
+          id: true,
+          invoiceNo: true,
+          publicToken: true,
+          status: true,
+          kind: true,
+          currency: true,
+          subtotalCents: true,
+          grossSubtotalCents: true,
+          lineDiscountCents: true,
+          invoiceDiscountType: true,
+          invoiceDiscountValue: true,
+          invoiceDiscountCents: true,
+          taxCents: true,
+          totalCents: true,
+          dueDate: true,
+          notes: true,
+          terms: true,
+          createdAt: true,
+          updatedAt: true,
+          conversationId: true,
+          customerId: true,
+          ...(includeSnapshot ? { customerDisplayNameSnapshot: true } : {}),
+          bankAccountsJson: true,
+          customer: {
+            select: {
+              displayName: true,
+              phoneE164: true
+            }
           },
-          select: {
-            id: true,
-            name: true,
-            description: true,
-            qty: true,
-            unit: true,
-            priceCents: true,
-            subtotalCents: true,
-            discountType: true,
-            discountValue: true,
-            discountCents: true,
-            taxLabel: true,
-            taxRateBps: true,
-            taxCents: true,
-            amountCents: true
-          }
-        },
-        milestones: {
-          orderBy: {
-            type: "asc"
+          items: {
+            orderBy: {
+              id: "asc"
+            },
+            select: {
+              id: true,
+              name: true,
+              description: true,
+              qty: true,
+              unit: true,
+              priceCents: true,
+              subtotalCents: true,
+              discountType: true,
+              discountValue: true,
+              discountCents: true,
+              taxLabel: true,
+              taxRateBps: true,
+              taxCents: true,
+              amountCents: true
+            }
           },
-          select: {
-            id: true,
-            type: true,
-            amountCents: true,
-            dueDate: true,
-            status: true,
-            paidAt: true
+          milestones: {
+            orderBy: {
+              type: "asc"
+            },
+            select: {
+              id: true,
+              type: true,
+              amountCents: true,
+              dueDate: true,
+              status: true,
+              paidAt: true
+            }
           }
         }
+      });
+
+    let includeSnapshot = true;
+    let invoice: Awaited<ReturnType<typeof runFetch>> | null = null;
+    try {
+      invoice = await runFetch(true);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "";
+      const snapshotUnsupported =
+        message.includes("Unknown field `customerDisplayNameSnapshot`") ||
+        message.includes("Unknown argument `customerDisplayNameSnapshot`") ||
+        message.includes("Unknown column 'customerDisplayNameSnapshot'");
+      if (!snapshotUnsupported) {
+        throw error;
       }
-    });
+      includeSnapshot = false;
+      invoice = await runFetch(false);
+    }
 
     if (!invoice) {
       return errorResponse(404, "INVOICE_NOT_FOUND", "Invoice does not exist.");
@@ -151,7 +179,11 @@ export async function GET(
         data: {
           invoice: {
             ...invoice,
-            customerName: invoice.customer.displayName,
+            customerName:
+              (includeSnapshot
+                ? (invoice as { customerDisplayNameSnapshot?: string | null })
+                    .customerDisplayNameSnapshot
+                : null) ?? invoice.customer.displayName,
             customerPhoneE164: invoice.customer.phoneE164,
             bankAccounts: parseBankAccountsJson(invoice.bankAccountsJson)
           }
@@ -171,7 +203,7 @@ export async function GET(
 
 export async function DELETE(
   request: NextRequest,
-  context: { params: Promise<{invoiceId: string;}> }
+  context: { params: Promise<{ invoiceId: string }> }
 ) {
   const auth = requireApiSession(request);
   if (auth.response) {
