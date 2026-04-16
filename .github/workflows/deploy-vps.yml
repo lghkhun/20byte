@@ -22,7 +22,7 @@ jobs:
           chmod 600 ~/.ssh/id_ed25519
           ssh-keyscan -H -p "${VPS_PORT:-22}" "$VPS_HOST" >> ~/.ssh/known_hosts
 
-      - name: Deploy On VPS
+      - name: Deploy On VPS (resumable over SSH)
         env:
           VPS_HOST: ${{ secrets.VPS_HOST }}
           VPS_PORT: ${{ secrets.VPS_PORT }}
@@ -30,9 +30,63 @@ jobs:
           VPS_PATH: /srv/20byte
         run: |
           set -eu
-          ssh -p "${VPS_PORT:-22}" "$VPS_USER@$VPS_HOST" "
+
+          SSH_OPTS="-p ${VPS_PORT:-22} -o ServerAliveInterval=20 -o ServerAliveCountMax=6 -o TCPKeepAlive=yes -o ConnectTimeout=15"
+          REMOTE="$VPS_USER@$VPS_HOST"
+          RUN_ID="${GITHUB_RUN_ID:-manual}-${GITHUB_RUN_ATTEMPT:-1}"
+          PID_FILE="/tmp/20byte-deploy-${RUN_ID}.pid"
+          LOG_FILE="/tmp/20byte-deploy-${RUN_ID}.log"
+
+          # Jalankan deploy di background agar aman jika sesi SSH terputus.
+          ssh $SSH_OPTS "$REMOTE" "
             set -eu
             cd '$VPS_PATH'
             chmod +x scripts/deploy.sh scripts/bootstrap-vps.sh scripts/docker-entrypoint.sh
-            ./scripts/deploy.sh
+            rm -f '$PID_FILE' '$LOG_FILE'
+            nohup sh -lc './scripts/deploy.sh' > '$LOG_FILE' 2>&1 &
+            echo \$! > '$PID_FILE'
+            echo '[deploy] started pid='\"\$(cat '$PID_FILE')\"' log=$LOG_FILE'
           "
+
+          # Monitor deploy dengan reconnect loop.
+          timeout_seconds=3600
+          poll_interval=10
+          started_at=$(date +%s)
+
+          while true; do
+            now=$(date +%s)
+            elapsed=$((now - started_at))
+            if [ "$elapsed" -ge "$timeout_seconds" ]; then
+              echo "[deploy] timeout after ${timeout_seconds}s"
+              ssh $SSH_OPTS "$REMOTE" "test -f '$LOG_FILE' && tail -n 120 '$LOG_FILE' || true" || true
+              exit 1
+            fi
+
+            if ssh $SSH_OPTS "$REMOTE" "
+              set -eu
+              test -f '$PID_FILE'
+              pid=\$(cat '$PID_FILE')
+              if kill -0 \"\$pid\" 2>/dev/null; then
+                test -f '$LOG_FILE' && tail -n 30 '$LOG_FILE' || true
+                exit 10
+              fi
+
+              test -f '$LOG_FILE' && tail -n 120 '$LOG_FILE' || true
+              # Jika process sudah mati, pakai marker dari log untuk sukses/gagal.
+              if grep -Fq '[deploy] active production color is now' '$LOG_FILE'; then
+                exit 0
+              fi
+              exit 1
+            "; then
+              echo "[deploy] finished successfully"
+              break
+            else
+              rc=$?
+              if [ "$rc" -eq 10 ]; then
+                echo "[deploy] still running (${elapsed}s), continue monitoring..."
+              else
+                echo "[deploy] monitor ssh/check failed with code $rc, retrying..."
+              fi
+              sleep "$poll_interval"
+            fi
+          done
