@@ -1,0 +1,26 @@
+{
+  "id": "endpoints/endpoints-schedules",
+  "title": "Schedules",
+  "description": "POST /schedules",
+  "source": "@site/docs/endpoints/schedules.md",
+  "sourceDirName": "endpoints",
+  "slug": "/endpoints/endpoints-schedules",
+  "permalink": "/endpoints/endpoints-schedules",
+  "draft": false,
+  "unlisted": false,
+  "tags": [],
+  "version": "current",
+  "frontMatter": {
+    "id": "endpoints-schedules",
+    "title": "Schedules"
+  },
+  "sidebar": "apiSidebar",
+  "previous": {
+    "title": "Device",
+    "permalink": "/endpoints/endpoints-device"
+  },
+  "next": {
+    "title": "Webhook",
+    "permalink": "/endpoints/endpoints-webhook"
+  }
+}

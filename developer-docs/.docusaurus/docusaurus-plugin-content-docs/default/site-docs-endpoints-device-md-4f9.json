@@ -1,0 +1,26 @@
+{
+  "id": "endpoints/endpoints-device",
+  "title": "Device",
+  "description": "GET /device/info",
+  "source": "@site/docs/endpoints/device.md",
+  "sourceDirName": "endpoints",
+  "slug": "/endpoints/endpoints-device",
+  "permalink": "/endpoints/endpoints-device",
+  "draft": false,
+  "unlisted": false,
+  "tags": [],
+  "version": "current",
+  "frontMatter": {
+    "id": "endpoints-device",
+    "title": "Device"
+  },
+  "sidebar": "apiSidebar",
+  "previous": {
+    "title": "Groups",
+    "permalink": "/endpoints/endpoints-groups"
+  },
+  "next": {
+    "title": "Schedules",
+    "permalink": "/endpoints/endpoints-schedules"
+  }
+}

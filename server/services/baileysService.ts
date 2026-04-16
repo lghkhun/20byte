@@ -1776,6 +1776,184 @@ export async function ensureBaileysConnectedForOrg(orgId: string): Promise<void>
   await ensureConnectedSocketForOrg(orgId);
 }
 
+export async function getBaileysQrStatusForOrg(orgIdInput: string): Promise<{
+  orgId: string;
+  connectionStatus: BaileysConnectionStatus;
+  qrCode: string | null;
+  qrCodeExpiresAt: Date | null;
+  connected: boolean;
+}> {
+  const orgId = normalize(orgIdInput);
+  if (!orgId) {
+    throw new ServiceError(400, "MISSING_ORG_ID", "orgId is required.");
+  }
+
+  const connectedAccount = await getConnectedAccount(orgId);
+  const entry = getSessionEntry(orgId);
+  return {
+    orgId,
+    connectionStatus: entry.status,
+    qrCode: entry.qrCode,
+    qrCodeExpiresAt: entry.qrCodeExpiresAt,
+    connected: Boolean(connectedAccount)
+  };
+}
+
+export async function startBaileysQrSessionForOrg(orgIdInput: string): Promise<{
+  orgId: string;
+  connectionStatus: BaileysConnectionStatus;
+  qrCode: string;
+  expiresInSeconds: number;
+}> {
+  const orgId = normalize(orgIdInput);
+  if (!orgId) {
+    throw new ServiceError(400, "MISSING_ORG_ID", "orgId is required.");
+  }
+
+  const connectedAccount = await getConnectedAccount(orgId);
+  if (connectedAccount) {
+    const entry = getSessionEntry(orgId);
+    if (entry.status === "CONNECTED") {
+      return {
+        orgId,
+        connectionStatus: entry.status,
+        qrCode: "ALREADY_CONNECTED",
+        expiresInSeconds: 0
+      };
+    }
+  }
+
+  await resetBaileysLinkState(orgId);
+  await ensureBaileysSocket(orgId, true);
+  const entry = getSessionEntry(orgId);
+
+  const deadline = Date.now() + BAILEYS_QR_GENERATION_TIMEOUT_MS;
+  while (Date.now() < deadline) {
+    if (entry.qrCode) {
+      return {
+        orgId,
+        connectionStatus: entry.status,
+        qrCode: entry.qrCode,
+        expiresInSeconds: Math.max(
+          1,
+          Math.floor(((entry.qrCodeExpiresAt?.getTime() ?? Date.now() + BAILEYS_QR_TTL_MS) - Date.now()) / 1000)
+        )
+      };
+    }
+
+    if (entry.status === "ERROR" && entry.lastError) {
+      throw new ServiceError(500, "BAILEYS_QR_FAILED", entry.lastError);
+    }
+
+    await new Promise((resolve) => setTimeout(resolve, 250));
+  }
+
+  throw new ServiceError(
+    504,
+    "BAILEYS_QR_TIMEOUT",
+    entry.lastError ? `QR code was not generated in time. ${entry.lastError}` : "QR code was not generated in time. Please retry."
+  );
+}
+
+export async function disconnectBaileysSessionForOrg(orgIdInput: string): Promise<void> {
+  const orgId = normalize(orgIdInput);
+  if (!orgId) {
+    throw new ServiceError(400, "MISSING_ORG_ID", "orgId is required.");
+  }
+
+  const entry = getSessionEntry(orgId);
+  entry.allowReconnect = false;
+  clearReconnectTimer(entry);
+  entry.reconnectAttempts = 0;
+  if (entry.socket) {
+    try {
+      entry.socket.end(undefined);
+    } catch {
+      // ignore
+    }
+  }
+
+  entry.socket = null;
+  entry.status = "DISCONNECTED";
+  entry.lastError = null;
+  entry.qrCode = null;
+  entry.qrCodeExpiresAt = null;
+  entry.pairingCode = null;
+  entry.pairingCodeExpiresAt = null;
+
+  await clearConnectedAccount(orgId);
+  await clearRuntimeFiles(orgId);
+}
+
+export async function checkBaileysContactNumber(input: { orgId: string; phoneE164: string }): Promise<{
+  orgId: string;
+  phoneE164: string;
+  jid: string;
+  exists: boolean;
+}> {
+  const orgId = normalize(input.orgId);
+  const phoneE164 = normalizePossibleE164(input.phoneE164);
+  if (!orgId || !phoneE164) {
+    throw new ServiceError(400, "INVALID_CONTACT_CHECK_INPUT", "orgId and valid phone number are required.");
+  }
+
+  const socket = await ensureConnectedSocketForOrg(orgId);
+  const jid = toJid(phoneE164);
+  const result = await socket.onWhatsApp(jid);
+  const exists = Boolean(Array.isArray(result) && result[0]?.exists);
+  return {
+    orgId,
+    phoneE164,
+    jid,
+    exists
+  };
+}
+
+export async function listBaileysGroupsForOrg(orgIdInput: string): Promise<Array<{
+  id: string;
+  subject: string;
+  owner: string | null;
+  participantCount: number;
+}>> {
+  const orgId = normalize(orgIdInput);
+  if (!orgId) {
+    throw new ServiceError(400, "MISSING_ORG_ID", "orgId is required.");
+  }
+
+  const socket = await ensureConnectedSocketForOrg(orgId);
+  const groups = await socket.groupFetchAllParticipating();
+  return Object.values(groups).map((group) => ({
+    id: group.id,
+    subject: normalize(group.subject) || group.id,
+    owner: normalize(group.owner) || null,
+    participantCount: Array.isArray(group.participants) ? group.participants.length : 0
+  }));
+}
+
+export async function listBaileysGroupMembersForOrg(input: {
+  orgId: string;
+  groupId: string;
+}): Promise<Array<{ id: string; isAdmin: boolean; isSuperAdmin: boolean }>> {
+  const orgId = normalize(input.orgId);
+  const groupId = normalize(input.groupId);
+  if (!orgId || !groupId) {
+    throw new ServiceError(400, "INVALID_GROUP_INPUT", "orgId and groupId are required.");
+  }
+
+  const socket = await ensureConnectedSocketForOrg(orgId);
+  const groups = await socket.groupFetchAllParticipating();
+  const group = groups[groupId];
+  if (!group) {
+    throw new ServiceError(404, "GROUP_NOT_FOUND", "Group not found.");
+  }
+
+  return (group.participants ?? []).map((participant) => ({
+    id: participant.id,
+    isAdmin: participant.admin === "admin",
+    isSuperAdmin: participant.admin === "superadmin"
+  }));
+}
+
 export async function getBaileysAccountReport(actorUserId: string, orgId: string): Promise<BaileysAccountReport> {
   const normalizedOrgId = normalize(orgId);
   if (!normalizedOrgId) {

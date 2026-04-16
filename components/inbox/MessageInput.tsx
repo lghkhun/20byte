@@ -2,13 +2,25 @@
 
 import { type FormEvent, type KeyboardEvent, useEffect, useRef, useState } from "react";
 import EmojiPicker, { EmojiStyle, Theme } from "emoji-picker-react";
-import { Paperclip, Smile } from "lucide-react";
+import { CalendarDays, CalendarIcon, Paperclip, Smile } from "lucide-react";
 
 import { ImageAttachmentEditorModal } from "@/components/inbox/input/ImageAttachmentEditorModal";
 import { VideoAttachmentEditorModal } from "@/components/inbox/input/VideoAttachmentEditorModal";
 import { isAllowedAttachmentType } from "@/components/inbox/input/utils";
 import { dismissNotify, notifyError, notifyLoading } from "@/lib/ui/notify";
 import { Button } from "@/components/ui/button";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger
+} from "@/components/ui/dropdown-menu";
+import { Input } from "@/components/ui/input";
+import { Calendar } from "@/components/ui/calendar";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { useTheme } from "next-themes";
 
 type MessageInputProps = {
@@ -19,7 +31,10 @@ type MessageInputProps = {
   replyTarget?: { id: string; text: string; author?: string | null } | null;
   onClearReplyTarget?: () => void;
   onTextValueChange: (nextValue: string) => void;
-  onSendText: (text: string, options?: { replyToMessageId?: string | null; replyPreviewText?: string | null }) => Promise<void>;
+  onSendText: (
+    text: string,
+    options?: { replyToMessageId?: string | null; replyPreviewText?: string | null; scheduleAt?: string | null }
+  ) => Promise<{ scheduledDueAt?: string | null } | void>;
   onSendAttachment: (attachment: {
     file: File;
     fileName: string;
@@ -51,6 +66,13 @@ export function MessageInput({
   const [attachmentError, setAttachmentError] = useState<string | null>(null);
   const [isSendingAttachment, setIsSendingAttachment] = useState(false);
   const [isEmojiOpen, setIsEmojiOpen] = useState(false);
+  const [isScheduleMenuOpen, setIsScheduleMenuOpen] = useState(false);
+  const [isCustomScheduleOpen, setIsCustomScheduleOpen] = useState(false);
+  const [isCustomDatePopoverOpen, setIsCustomDatePopoverOpen] = useState(false);
+  const [customScheduleDate, setCustomScheduleDate] = useState<Date | undefined>(undefined);
+  const [customScheduleHour, setCustomScheduleHour] = useState("09");
+  const [customScheduleMinute, setCustomScheduleMinute] = useState("00");
+  const [isScheduling, setIsScheduling] = useState(false);
   const [isImageEditorOpen, setIsImageEditorOpen] = useState(false);
   const [isVideoEditorOpen, setIsVideoEditorOpen] = useState(false);
   const [attachmentText, setAttachmentText] = useState("");
@@ -174,9 +196,84 @@ export function MessageInput({
     }
   }
 
+  function formatCustomSchedulePreview(date: Date | undefined, hour: string, minute: string): string {
+    if (!date) {
+      return "Pilih tanggal";
+    }
+
+    const next = new Date(date);
+    next.setHours(Number(hour), Number(minute), 0, 0);
+    return new Intl.DateTimeFormat("id-ID", {
+      day: "2-digit",
+      month: "long",
+      year: "numeric",
+      hour: "2-digit",
+      minute: "2-digit"
+    }).format(next);
+  }
+
+  function resolvePresetSchedule(preset: "tomorrow_08" | "tomorrow_13" | "next_monday_08"): Date {
+    const now = new Date();
+    if (preset === "tomorrow_08" || preset === "tomorrow_13") {
+      const target = new Date(now);
+      target.setDate(target.getDate() + 1);
+      target.setHours(preset === "tomorrow_08" ? 8 : 13, 0, 0, 0);
+      return target;
+    }
+
+    const currentDay = now.getDay(); // 0 = Minggu, 1 = Senin
+    const daysUntilMonday = ((8 - currentDay) % 7) || 7;
+    const nextMonday = new Date(now);
+    nextMonday.setDate(nextMonday.getDate() + daysUntilMonday);
+    nextMonday.setHours(8, 0, 0, 0);
+    return nextMonday;
+  }
+
+  async function submitScheduledText(scheduleAtIso: string) {
+    const payload = textValue.trim();
+    if (!payload || disabled || isScheduling) {
+      return;
+    }
+
+    setIsScheduling(true);
+    onTextValueChange("");
+    try {
+      await onSendText(payload, {
+        replyToMessageId: replyTarget?.id ?? null,
+        replyPreviewText: replyTarget?.text ?? null,
+        scheduleAt: scheduleAtIso
+      });
+      onTextValueChange("");
+      onClearReplyTarget?.();
+      requestAnimationFrame(() => {
+        inputRef.current?.focus();
+      });
+    } catch {
+      notifyError("Gagal menjadwalkan pesan. Coba lagi.");
+      onTextValueChange(payload);
+    } finally {
+      setIsScheduling(false);
+    }
+  }
+
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     await submitText();
+  }
+
+  function resizeComposerTextarea() {
+    const textarea = inputRef.current;
+    if (!textarea) {
+      return;
+    }
+
+    textarea.style.height = "auto";
+    const computed = window.getComputedStyle(textarea);
+    const lineHeight = Number.parseFloat(computed.lineHeight) || 20;
+    const maxHeight = lineHeight * 6;
+    const nextHeight = Math.min(textarea.scrollHeight, maxHeight);
+    textarea.style.height = `${nextHeight}px`;
+    textarea.style.overflowY = textarea.scrollHeight > maxHeight ? "auto" : "hidden";
   }
 
   function handleKeyDown(event: KeyboardEvent<HTMLTextAreaElement>) {
@@ -195,6 +292,10 @@ export function MessageInput({
     event.preventDefault();
     void submitText();
   }
+
+  useEffect(() => {
+    resizeComposerTextarea();
+  }, [textValue]);
 
   return (
     <form
@@ -220,7 +321,10 @@ export function MessageInput({
         <textarea
           ref={inputRef}
           value={textValue}
-          onChange={(event) => onTextValueChange(event.target.value)}
+          onChange={(event) => {
+            onTextValueChange(event.target.value);
+            resizeComposerTextarea();
+          }}
           onKeyDown={handleKeyDown}
           onPaste={(event) => {
             const items = Array.from(event.clipboardData?.items ?? []);
@@ -238,9 +342,63 @@ export function MessageInput({
           placeholder="Ketik pesan..."
           disabled={disabled}
           rows={1}
-          className="max-h-40 min-h-8 flex-1 resize-none border-0 bg-transparent px-0 py-0 text-sm shadow-none placeholder:text-muted-foreground/80 focus-visible:outline-none"
+          className="min-h-8 flex-1 resize-none border-0 bg-transparent px-0 py-0 text-sm shadow-none placeholder:text-muted-foreground/80 focus-visible:outline-none"
         />
         <div className="flex items-center gap-1">
+          <DropdownMenu open={isScheduleMenuOpen} onOpenChange={setIsScheduleMenuOpen}>
+            <DropdownMenuTrigger asChild>
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                className="h-8 w-8 rounded-md text-muted-foreground"
+                title="Jadwalkan pengiriman"
+                disabled={disabled || !textValue.trim() || isScheduling}
+              >
+                <CalendarDays className="h-4 w-4" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-[250px]">
+              <DropdownMenuLabel>Jadwalkan pengiriman</DropdownMenuLabel>
+              <DropdownMenuItem
+                onSelect={() => {
+                  void submitScheduledText(resolvePresetSchedule("tomorrow_08").toISOString());
+                }}
+              >
+                Besok pukul 08.00
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                onSelect={() => {
+                  void submitScheduledText(resolvePresetSchedule("tomorrow_13").toISOString());
+                }}
+              >
+                Besok pukul 13.00
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                onSelect={() => {
+                  void submitScheduledText(resolvePresetSchedule("next_monday_08").toISOString());
+                }}
+              >
+                Senin berikutnya pukul 08.00
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem
+                onSelect={() => {
+                  const fallback = new Date();
+                  fallback.setMinutes(fallback.getMinutes() + 30);
+                  fallback.setSeconds(0, 0);
+                  const roundedMinute = fallback.getMinutes() >= 30 ? 30 : 0;
+                  fallback.setMinutes(roundedMinute, 0, 0);
+                  setCustomScheduleDate(fallback);
+                  setCustomScheduleHour(String(fallback.getHours()).padStart(2, "0"));
+                  setCustomScheduleMinute(String(fallback.getMinutes()).padStart(2, "0"));
+                  setIsCustomScheduleOpen(true);
+                }}
+              >
+                Pilih waktu kustom
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
           <Button
             ref={emojiButtonRef}
             type="button"
@@ -344,6 +502,132 @@ export function MessageInput({
           });
         }}
       />
+
+      <Dialog open={isCustomScheduleOpen} onOpenChange={setIsCustomScheduleOpen}>
+        <DialogContent className="sm:max-w-[420px]">
+          <DialogHeader>
+            <DialogTitle>Jadwalkan pengiriman</DialogTitle>
+            <DialogDescription>Pilih tanggal & jam kirim pesan.</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <Popover open={isCustomDatePopoverOpen} onOpenChange={setIsCustomDatePopoverOpen}>
+              <PopoverTrigger asChild>
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="h-11 w-full justify-between rounded-xl border-border text-left font-normal"
+                >
+                  <span className="truncate">{formatCustomSchedulePreview(customScheduleDate, customScheduleHour, customScheduleMinute)}</span>
+                  <CalendarIcon className="h-4 w-4 shrink-0 opacity-70" />
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent align="start" className="w-auto p-0">
+                <Calendar
+                  mode="single"
+                  selected={customScheduleDate}
+                  onSelect={(date) => {
+                    setCustomScheduleDate(date);
+                    setIsCustomDatePopoverOpen(false);
+                  }}
+                  disabled={(date) => {
+                    const today = new Date();
+                    today.setHours(0, 0, 0, 0);
+                    return date < today;
+                  }}
+                  initialFocus
+                />
+              </PopoverContent>
+            </Popover>
+
+            <div className="grid grid-cols-2 gap-2">
+              <div className="space-y-1">
+                <p className="text-xs text-muted-foreground">Jam</p>
+                <Input
+                  type="number"
+                  min={0}
+                  max={23}
+                  value={customScheduleHour}
+                  onChange={(event) => {
+                    const raw = event.target.value.replace(/\D/g, "").slice(0, 2);
+                    if (!raw) {
+                      setCustomScheduleHour("");
+                      return;
+                    }
+                    const value = Math.max(0, Math.min(23, Number(raw)));
+                    setCustomScheduleHour(String(value).padStart(2, "0"));
+                  }}
+                  className="h-10 rounded-lg"
+                  placeholder="08"
+                />
+              </div>
+              <div className="space-y-1">
+                <p className="text-xs text-muted-foreground">Menit</p>
+                <Input
+                  type="number"
+                  min={0}
+                  max={59}
+                  value={customScheduleMinute}
+                  onChange={(event) => {
+                    const raw = event.target.value.replace(/\D/g, "").slice(0, 2);
+                    if (!raw) {
+                      setCustomScheduleMinute("");
+                      return;
+                    }
+                    const value = Math.max(0, Math.min(59, Number(raw)));
+                    setCustomScheduleMinute(String(value).padStart(2, "0"));
+                  }}
+                  className="h-10 rounded-lg"
+                  placeholder="00"
+                />
+              </div>
+            </div>
+            <div className="flex justify-end gap-2">
+              <Button type="button" variant="ghost" onClick={() => setIsCustomScheduleOpen(false)}>
+                Batal
+              </Button>
+              <Button
+                type="button"
+                onClick={() => {
+                  if (!customScheduleDate) {
+                    notifyError("Tanggal kirim wajib dipilih.");
+                    return;
+                  }
+                  if (customScheduleHour === "" || customScheduleMinute === "") {
+                    notifyError("Jam dan menit wajib diisi.");
+                    return;
+                  }
+                  const hour = Number(customScheduleHour);
+                  const minute = Number(customScheduleMinute);
+                  if (!Number.isInteger(hour) || hour < 0 || hour > 23) {
+                    notifyError("Jam harus di antara 00-23.");
+                    return;
+                  }
+                  if (!Number.isInteger(minute) || minute < 0 || minute > 59) {
+                    notifyError("Menit harus di antara 00-59.");
+                    return;
+                  }
+
+                  const parsed = new Date(customScheduleDate);
+                  parsed.setHours(hour, minute, 0, 0);
+                  if (Number.isNaN(parsed.getTime())) {
+                    notifyError("Format waktu tidak valid.");
+                    return;
+                  }
+                  if (parsed.getTime() <= Date.now()) {
+                    notifyError("Waktu kirim harus lebih dari waktu sekarang.");
+                    return;
+                  }
+                  setIsCustomScheduleOpen(false);
+                  void submitScheduledText(parsed.toISOString());
+                }}
+                disabled={!customScheduleDate || customScheduleHour === "" || customScheduleMinute === "" || isScheduling}
+              >
+                {isScheduling ? "Menjadwalkan..." : "Jadwalkan"}
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
     </form>
   );
 }

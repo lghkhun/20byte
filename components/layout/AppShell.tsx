@@ -88,7 +88,8 @@ const publicRoutes = new Set([
   "/set-password",
   "/privacy",
   "/terms",
-  "/faq"
+  "/faq",
+  "/developers/whatsapp-api"
 ]);
 
 export function AppShell({ user, ownerOnboardingStatus = null, children }: AppShellProps) {
@@ -97,7 +98,8 @@ export function AppShell({ user, ownerOnboardingStatus = null, children }: AppSh
   const lastLockStateRef = useRef<{ checkedAt: number; isLocked: boolean } | null>(null);
 
   const isPublicInvoiceRoute = pathname.startsWith("/i/");
-  const isPublicRoute = publicRoutes.has(pathname) || isPublicInvoiceRoute;
+  const isPublicDeveloperRoute = pathname.startsWith("/developers/");
+  const isPublicRoute = publicRoutes.has(pathname) || isPublicInvoiceRoute || isPublicDeveloperRoute;
 
   useEffect(() => {
     if (!user || isPublicRoute) {

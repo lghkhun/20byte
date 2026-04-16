@@ -108,6 +108,11 @@ export type SendMessageResponse = {
       deliveryStatus?: "SENT" | "DELIVERED" | "READ" | null;
       sendError?: string | null;
     };
+    schedule?: {
+      scheduleId: string;
+      status: string;
+      dueAt: string;
+    };
   };
   error?: {
     code?: string;

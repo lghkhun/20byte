@@ -144,28 +144,20 @@ export function FinanceWorkspace() {
   const [balanceCents, setBalanceCents] = useState(0);
   const [topups, setTopups] = useState<NonNullable<WalletTopupResponse["data"]>["topups"]>([]);
   const [withdrawals, setWithdrawals] = useState<NonNullable<WithdrawResponse["data"]>["requests"]>([]);
-  const [showTopupDialog, setShowTopupDialog] = useState(false);
   const [showWithdrawDialog, setShowWithdrawDialog] = useState(false);
-  const [showPaymentInfoDialog, setShowPaymentInfoDialog] = useState(false);
   
-  const [isTopupSubmitting, setIsTopupSubmitting] = useState(false);
   const [isWithdrawSubmitting, setIsWithdrawSubmitting] = useState(false);
   
-  const [topupAmount, setTopupAmount] = useState("100000");
-  const [topupMethod, setTopupMethod] = useState("qris");
-  
-  const [withdrawAmount, setWithdrawAmount] = useState("50000");
+  const [withdrawAmount, setWithdrawAmount] = useState("");
   const [withdrawBankName, setWithdrawBankName] = useState("");
   const [withdrawAccountNumber, setWithdrawAccountNumber] = useState("");
   const [withdrawAccountHolder, setWithdrawAccountHolder] = useState("");
   
-  const [createdPaymentDetails, setCreatedPaymentDetails] = useState<{
-    paymentMethod: string;
-    paymentNumber: string;
-    expiredAt: string | null;
-    totalAmountCents: number;
-  } | null>(null);
-  const [topupQrDataUrl, setTopupQrDataUrl] = useState<string | null>(null);
+  useEffect(() => {
+    if (showWithdrawDialog) {
+      setWithdrawAmount(balanceCents.toString());
+    }
+  }, [showWithdrawDialog, balanceCents]);
   const [nowMs, setNowMs] = useState(Date.now());
 
   const loadData = useCallback(async () => {
@@ -221,32 +213,6 @@ export function FinanceWorkspace() {
     };
   }, [loadData]);
 
-  useEffect(() => {
-    let canceled = false;
-    async function generateQr(number: string) {
-       try {
-         const url = await QRCode.toDataURL(number, { width: 320, margin: 1 });
-         if (!canceled) setTopupQrDataUrl(url);
-       } catch {
-         if (!canceled) setTopupQrDataUrl(null);
-       }
-    }
-
-    if (createdPaymentDetails?.paymentMethod.toLowerCase() === "qris" && createdPaymentDetails.paymentNumber) {
-      void generateQr(createdPaymentDetails.paymentNumber);
-    } else {
-      setTopupQrDataUrl(null);
-    }
-
-    return () => { canceled = true };
-  }, [createdPaymentDetails]);
-
-  useEffect(() => {
-    if (!showPaymentInfoDialog) return;
-    const t = setInterval(() => setNowMs(Date.now()), 1000);
-    return () => clearInterval(t);
-  }, [showPaymentInfoDialog]);
-
   const pendingSettlementCents = useMemo(
     () =>
       (topups ?? [])
@@ -299,51 +265,6 @@ export function FinanceWorkspace() {
     return rows;
   }, [topups, withdrawals]);
 
-  async function handleCreateTopup() {
-    const amountCents = Number(topupAmount);
-    if (!Number.isFinite(amountCents) || amountCents <= 0) {
-      notifyError("Nominal topup tidak valid.");
-      return;
-    }
-
-    const toastId = notifyLoading("Membuat request topup...");
-    setIsTopupSubmitting(true);
-    try {
-      const response = await fetch("/api/wallet/topups", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ amountCents, paymentMethod: topupMethod })
-      });
-
-      const payload = (await response.json().catch(() => null)) as WalletTopupResponse | null;
-      if (!response.ok || !payload?.data?.topup) {
-        throw new Error(payload?.error?.message ?? "Gagal membuat topup.");
-      }
-
-      dismissNotify(toastId);
-      notifySuccess("Topup berhasil dibuat.");
-      setShowTopupDialog(false);
-      
-      const charge = payload.data.topup;
-      if (charge.paymentNumber) {
-         setCreatedPaymentDetails({
-           paymentMethod: charge.paymentMethod,
-           paymentNumber: charge.paymentNumber,
-           totalAmountCents: charge.customerPayableCents,
-           expiredAt: charge.expiresAt
-         });
-         setShowPaymentInfoDialog(true);
-      }
-      
-      await loadData();
-    } catch (submitError) {
-      dismissNotify(toastId);
-      notifyError(submitError instanceof Error ? submitError.message : "Gagal membuat topup.");
-    } finally {
-      setIsTopupSubmitting(false);
-    }
-  }
-
   async function handleCreateWithdraw() {
     const amountCents = Number(withdrawAmount);
     if (!Number.isFinite(amountCents) || amountCents <= 0) {
@@ -394,110 +315,124 @@ export function FinanceWorkspace() {
 
   return (
     <div className="w-full flex-1 overflow-auto p-4 md:p-6 lg:p-8">
-      <div className="space-y-5">
-        <header className="rounded-2xl border border-border/70 bg-card p-5 shadow-sm">
-          <h1 className="text-2xl font-bold tracking-tight text-foreground">Finance</h1>
-          <p className="mt-1 text-sm text-muted-foreground">Kelola saldo e-payment, topup, withdraw, dan riwayat transaksi.</p>
+      <div className="space-y-6 max-w-6xl mx-auto">
+        <header className="rounded-[28px] border border-border/70 bg-gradient-to-br from-card to-card/90 p-6 shadow-[0_2px_10px_-4px_rgba(0,0,0,0.02)] relative overflow-hidden group">
+          <div className="absolute inset-0 bg-grid-black/[0.02] dark:bg-grid-white/[0.02] [mask-image:linear-gradient(to_bottom_right,white,transparent)]" />
+          <div className="flex items-center gap-4 relative z-10">
+            <div className="flex h-14 w-14 items-center justify-center rounded-2xl border border-emerald-500/20 bg-emerald-500/10 text-emerald-600 shadow-sm">
+              <Wallet className="h-7 w-7" />
+            </div>
+            <div>
+              <h1 className="text-2xl font-bold tracking-tight text-foreground">Finance</h1>
+              <p className="mt-1.5 text-sm font-medium text-muted-foreground/80">Kelola saldo e-payment, withdraw, dan riwayat transaksi.</p>
+            </div>
+          </div>
         </header>
 
         {isLoading ? (
           <div className="grid gap-4 xl:grid-cols-2">
-            <Skeleton className="h-[200px] w-full rounded-2xl" />
-            <Skeleton className="h-[200px] w-full rounded-2xl" />
-            <Skeleton className="h-[120px] w-full rounded-2xl xl:col-span-2" />
+            <Skeleton className="h-[200px] w-full rounded-3xl" />
+            <Skeleton className="h-[200px] w-full rounded-3xl" />
+            <Skeleton className="h-[120px] w-full rounded-3xl xl:col-span-2" />
           </div>
         ) : null}
 
         {!isLoading ? (
           <>
-            <section className="grid gap-4 xl:grid-cols-2">
-              <article className="rounded-2xl border border-emerald-500/20 bg-gradient-to-br from-emerald-500/5 to-emerald-500/10 p-5 shadow-sm">
-                <p className="text-sm font-semibold text-emerald-800">Saldo E-Payment</p>
-                <p className="mt-1 text-4xl font-black tracking-tight text-emerald-950">{formatIdr(balanceCents)}</p>
+            <section className="grid gap-5 xl:grid-cols-2">
+              <article className="rounded-[28px] border border-emerald-500/30 bg-gradient-to-br from-emerald-500/10 to-emerald-500/5 p-6 shadow-sm relative overflow-hidden">
+                <div className="absolute -right-10 -top-10 h-40 w-40 rounded-full bg-emerald-500/10 blur-3xl lg:block hidden" />
+                <div className="relative z-10 flex flex-col h-full">
+                  <div>
+                    <p className="text-xs font-bold uppercase tracking-[0.24em] text-emerald-800 dark:text-emerald-400">Saldo E-Payment</p>
+                    <p className="mt-2 text-4xl sm:text-5xl font-black tracking-tight text-emerald-950 dark:text-emerald-50">{formatIdr(balanceCents)}</p>
 
-                <div className="mt-4 rounded-xl border border-emerald-500/20 bg-white/60 backdrop-blur-md px-4 py-3 text-sm">
-                  <div className="flex items-center justify-between">
-                    <span className="text-emerald-700 font-medium">Pending settlement</span>
-                    <span className="font-bold text-emerald-900">{formatIdr(pendingSettlementCents)}</span>
+                    <div className="mt-5 rounded-2xl border border-emerald-500/20 bg-white/60 dark:bg-black/20 backdrop-blur-md px-5 py-3.5 shadow-sm">
+                      <div className="flex items-center justify-between">
+                        <span className="text-sm font-semibold text-emerald-700 dark:text-emerald-300">Pending settlement</span>
+                        <span className="text-sm font-bold text-emerald-900 dark:text-emerald-100">{formatIdr(pendingSettlementCents)}</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="mt-auto pt-6 flex gap-3">
+                    <Button type="button" className="h-12 w-full sm:w-auto rounded-xl bg-emerald-600 hover:bg-emerald-700 font-bold text-white shadow-[0_8px_20px_-6px_rgba(16,185,129,0.3)] transition-all px-6" onClick={() => setShowWithdrawDialog(true)}>
+                      <ArrowDownToLine className="mr-2.5 h-5 w-5" />
+                      Tarik Saldo
+                    </Button>
                   </div>
                 </div>
-
-                <div className="mt-4 grid gap-3 sm:grid-cols-2">
-                  <Button type="button" variant="outline" className="border-emerald-500/30 bg-white text-emerald-800 hover:bg-emerald-50" onClick={() => setShowWithdrawDialog(true)}>
-                    <ArrowDownToLine className="mr-2 h-4 w-4" />
-                    Tarik Saldo
-                  </Button>
-                  <Button type="button" className="bg-emerald-500 hover:bg-emerald-600 text-white shadow-[0_4px_14px_0_rgba(16,185,129,0.39)]" onClick={() => setShowTopupDialog(true)}>
-                    <Plus className="mr-2 h-4 w-4" />
-                    Tambah Saldo
-                  </Button>
-                </div>
               </article>
 
-              <article className="rounded-2xl border border-border/70 bg-card p-5 shadow-sm">
-                <p className="text-sm text-muted-foreground">Saldo Bank Transfer</p>
-                <p className="mt-1 text-4xl font-black tracking-tight text-foreground">{formatIdr(0)}</p>
-                <div className="mt-4 rounded-xl border border-border/70 bg-background/70 px-4 py-3 text-sm text-muted-foreground">
-                  <p>• Dana bank transfer manual tetap masuk ke rekening bisnis Anda.</p>
-                  <p>• Saldo e-payment dipakai untuk biaya gateway yang ditanggung merchant.</p>
+              <article className="rounded-[28px] border border-border/70 bg-gradient-to-br from-card to-card/90 p-6 shadow-sm relative overflow-hidden flex flex-col justify-between">
+                <div className="absolute -right-10 -bottom-10 h-40 w-40 rounded-full bg-primary/5 blur-3xl lg:block hidden" />
+                <div className="relative z-10">
+                  <p className="text-xs font-bold uppercase tracking-[0.24em] text-muted-foreground/80">Saldo Bank Transfer</p>
+                  <p className="mt-2 text-4xl sm:text-5xl font-black tracking-tight text-foreground">{formatIdr(0)}</p>
+                </div>
+                <div className="mt-6 rounded-2xl border border-border/60 bg-background/50 px-5 py-4 text-[13.5px] font-medium leading-relaxed text-muted-foreground shadow-sm relative z-10">
+                  <p className="flex items-start gap-2.5"><span className="text-primary mt-px">•</span> <span>Dana bank transfer manual tetap masuk ke rekening bisnis Anda.</span></p>
+                  <p className="flex items-start gap-2.5 mt-2"><span className="text-primary mt-px">•</span> <span>Saldo e-payment dipakai untuk biaya gateway yang ditanggung merchant.</span></p>
                 </div>
               </article>
             </section>
 
-            <section className="grid gap-4 md:grid-cols-3">
-              <article className="rounded-2xl border border-border/70 bg-card p-5 shadow-sm">
-                <p className="text-sm text-muted-foreground">Total Saldo Ditarik</p>
-                <p className="mt-2 text-3xl font-black tracking-tight text-foreground">{formatIdr(totalWithdrawnCents)}</p>
+            <section className="grid gap-5 md:grid-cols-3">
+              <article className="rounded-[28px] border border-border/70 bg-gradient-to-br from-card to-card/90 p-6 shadow-sm relative overflow-hidden">
+                <p className="text-[11px] font-bold uppercase tracking-[0.22em] text-muted-foreground/80 relative z-10">Total Saldo Ditarik</p>
+                <p className="mt-3 text-3xl font-black tracking-tight text-foreground relative z-10">{formatIdr(totalWithdrawnCents)}</p>
               </article>
-              <article className="rounded-2xl border border-border/70 bg-card p-5 shadow-sm">
-                <p className="text-sm text-muted-foreground">Dalam Proses</p>
-                <p className="mt-2 text-3xl font-black tracking-tight text-foreground">{formatIdr(inProcessWithdrawCents)}</p>
+              <article className="rounded-[28px] border border-border/70 bg-gradient-to-br from-card to-card/90 p-6 shadow-sm relative overflow-hidden">
+                <p className="text-[11px] font-bold uppercase tracking-[0.22em] text-muted-foreground/80 relative z-10">Dalam Proses</p>
+                <p className="mt-3 text-3xl font-black tracking-tight text-foreground relative z-10">{formatIdr(inProcessWithdrawCents)}</p>
               </article>
-              <article className="rounded-2xl border border-border/70 bg-card p-5 shadow-sm">
-                <p className="text-sm text-muted-foreground">Total Disbursement</p>
-                <p className="mt-2 text-3xl font-black tracking-tight text-foreground">{formatIdr(totalWithdrawnCents)}</p>
+              <article className="rounded-[28px] border border-border/70 bg-gradient-to-br from-card to-card/90 p-6 shadow-sm relative overflow-hidden">
+                <p className="text-[11px] font-bold uppercase tracking-[0.22em] text-muted-foreground/80 relative z-10">Total Disbursement</p>
+                <p className="mt-3 text-3xl font-black tracking-tight text-foreground relative z-10">{formatIdr(totalWithdrawnCents)}</p>
               </article>
             </section>
 
-            <section className="overflow-hidden rounded-2xl border border-border/70 bg-card shadow-sm">
-              <header className="border-b border-border/70 bg-muted/20 px-5 py-4">
-                <p className="flex items-center gap-2 text-xl font-bold tracking-tight text-foreground">
-                  <Wallet className="h-5 w-5 text-emerald-500" />
-                  Riwayat Transaksi
-                </p>
-                <p className="text-sm text-muted-foreground pt-1">Daftar transaksi e-payment terbaru.</p>
+            <section className="overflow-hidden rounded-[28px] border border-border/70 bg-card shadow-sm mt-8">
+              <header className="border-b border-border/60 bg-gradient-to-r from-muted/30 to-transparent px-6 py-5 flex flex-col md:flex-row md:items-center justify-between gap-3">
+                <div>
+                  <p className="flex items-center gap-2.5 text-[18px] font-bold tracking-tight text-foreground">
+                    <Wallet className="h-5 w-5 text-emerald-500" />
+                    Riwayat Transaksi
+                  </p>
+                  <p className="text-[13px] font-medium text-muted-foreground pt-1.5">Daftar transaksi e-payment terbaru.</p>
+                </div>
               </header>
               <div className="overflow-x-auto">
                 <table className="min-w-full text-sm">
-                  <thead className="bg-muted/40">
-                    <tr className="text-left text-muted-foreground">
-                      <th className="px-5 py-3 font-semibold">Settlement Status & Time</th>
-                      <th className="px-5 py-3 font-semibold">Reference ID</th>
-                      <th className="px-5 py-3 font-semibold">Type</th>
-                      <th className="px-5 py-3 font-semibold">Channel</th>
-                      <th className="px-5 py-3 font-semibold text-right">Amount</th>
+                  <thead className="bg-muted/30">
+                    <tr className="text-left">
+                      <th className="px-6 py-4 text-[12px] font-bold uppercase tracking-wider text-muted-foreground">Settlement Status & Waktu</th>
+                      <th className="px-6 py-4 text-[12px] font-bold uppercase tracking-wider text-muted-foreground">Reference ID</th>
+                      <th className="px-6 py-4 text-[12px] font-bold uppercase tracking-wider text-muted-foreground">Type</th>
+                      <th className="px-6 py-4 text-[12px] font-bold uppercase tracking-wider text-muted-foreground">Channel</th>
+                      <th className="px-6 py-4 text-[12px] font-bold uppercase tracking-wider text-muted-foreground text-right">Amount</th>
                     </tr>
                   </thead>
                   <tbody>
                     {historyRows.map((row) => (
-                      <tr key={row.id} className="border-t border-border/60 transition hover:bg-muted/20">
-                        <td className="px-5 py-3">
-                          <p className="font-semibold text-foreground">{row.status}</p>
-                          <p className="text-xs text-muted-foreground">{formatDate(row.createdAt)}</p>
+                      <tr key={row.id} className="border-t border-border/50 transition-colors hover:bg-muted/20">
+                        <td className="px-6 py-4">
+                          <p className="font-bold text-foreground text-[14px]">{row.status}</p>
+                          <p className="text-[12px] font-medium text-muted-foreground mt-0.5">{formatDate(row.createdAt)}</p>
                         </td>
-                        <td className="px-5 py-3 text-xs text-muted-foreground">{row.detail}</td>
-                        <td className="px-5 py-3 font-semibold text-foreground">
-                           <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold ${row.type === 'TOPUP' ? 'bg-emerald-100 text-emerald-700' : 'bg-rose-100 text-rose-700'}`}>
+                        <td className="px-6 py-4 text-[13px] font-medium text-muted-foreground">{row.detail}</td>
+                        <td className="px-6 py-4">
+                           <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-[11px] font-black uppercase tracking-wider ${row.type === 'TOPUP' ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400' : 'bg-rose-500/10 text-rose-600 dark:text-rose-400'}`}>
                              {row.type}
                            </span>
                         </td>
-                        <td className="px-5 py-3">{row.channel}</td>
-                        <td className="px-5 py-3 font-semibold text-foreground text-right">{formatIdr(row.amountCents)}</td>
+                        <td className="px-6 py-4 text-[14px] font-medium text-foreground">{row.channel}</td>
+                        <td className="px-6 py-4 font-bold text-foreground text-[15px] text-right">{formatIdr(row.amountCents)}</td>
                       </tr>
                     ))}
                     {historyRows.length === 0 ? (
                       <tr>
-                        <td colSpan={5} className="px-5 py-8 text-center text-sm text-muted-foreground">
+                        <td colSpan={5} className="px-6 py-12 text-center text-[14px] font-medium text-muted-foreground">
                           Tidak ada data transaksi.
                         </td>
                       </tr>
@@ -514,154 +449,78 @@ export function FinanceWorkspace() {
         ) : null}
       </div>
 
-      <Dialog open={showTopupDialog} onOpenChange={setShowTopupDialog}>
-        <DialogContent className="max-w-[480px] p-0 border-border/60 rounded-[24px] overflow-hidden">
-          <div className="bg-white">
-            <DialogHeader className="border-b border-border/50 px-6 py-6 bg-muted/20">
-              <DialogTitle className="text-2xl font-bold tracking-tight text-emerald-900">Tambah Saldo</DialogTitle>
-              <DialogDescription className="text-[15px] font-medium text-emerald-700/80 mt-1">
-                Topup saldo e-payment untuk biaya transaksi.
+      <Dialog open={showWithdrawDialog} onOpenChange={setShowWithdrawDialog}>
+        <DialogContent className="sm:max-w-[480px] p-0 border-border/60 rounded-[32px] overflow-hidden shadow-2xl">
+          <div className="bg-background">
+            <DialogHeader className="border-b border-border/50 px-8 py-7 bg-gradient-to-br from-muted/30 to-transparent">
+              <DialogTitle className="flex items-center gap-3 text-[22px] font-bold tracking-tight text-foreground">
+                <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-emerald-500/10 text-emerald-600 border border-emerald-500/20">
+                  <ArrowDownToLine className="h-5 w-5" />
+                </div>
+                Tarik Saldo
+              </DialogTitle>
+              <DialogDescription className="text-[14px] font-medium text-muted-foreground mt-2 leading-relaxed">
+                Withdraw saldo e-payment ke rekening bisnis Anda.
               </DialogDescription>
             </DialogHeader>
-            <div className="px-6 py-6 space-y-5">
-              <label className="block space-y-2">
-                <span className="text-sm font-semibold text-slate-700">Nominal Topup</span>
-                <div className="relative">
-                  <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-4 font-medium text-slate-400">Rp</div>
-                  <Input
-                    value={topupAmount}
-                    onChange={(event) => setTopupAmount(event.target.value)}
-                    placeholder="Contoh: 100000"
-                    type="number"
-                    min={0}
-                    className="h-12 w-full rounded-xl border-slate-200 bg-slate-50/50 pl-11 pr-4 text-[15px] shadow-sm transition-all focus-visible:border-emerald-500/40 focus-visible:bg-white focus-visible:ring-4 focus-visible:ring-emerald-500/10"
-                  />
-                </div>
-              </label>
-              <label className="block space-y-2">
-                <span className="text-sm font-semibold text-slate-700">Metode Pembayaran</span>
-                <select
-                  value={topupMethod}
-                  onChange={(event) => setTopupMethod(event.target.value)}
-                  className="w-full h-12 rounded-xl border border-slate-200 bg-slate-50/50 px-4 text-[15px] shadow-sm transition-all focus-visible:outline-none focus-visible:border-emerald-500/40 focus-visible:bg-white focus-visible:ring-4 focus-visible:ring-emerald-500/10"
-                >
-                  <option value="qris">QRIS</option>
-                  <option value="bni_va">BNI VA</option>
-                  <option value="bri_va">BRI VA</option>
-                </select>
-              </label>
-              
-              <div className="pt-2">
-                <Button type="button" className="w-full h-12 rounded-full bg-emerald-500 hover:bg-emerald-600 text-white font-bold text-[15px] shadow-[0_8px_20px_-6px_rgba(16,185,129,0.3)] transition-all" onClick={() => void handleCreateTopup()} disabled={isTopupSubmitting}>
-                  Buat Topup
-                </Button>
+            <div className="px-8 py-7 space-y-6">
+              <div className="rounded-2xl border border-emerald-500/20 bg-emerald-500/5 px-5 py-4 flex items-center justify-between col-span-full">
+                <span className="text-[13px] font-semibold text-emerald-800 dark:text-emerald-400">Saldo yang dapat ditarik</span>
+                <span className="text-[18px] font-bold text-emerald-900 dark:text-emerald-100">{formatIdr(balanceCents)}</span>
               </div>
-            </div>
-          </div>
-        </DialogContent>
-      </Dialog>
-      
-      <Dialog open={showPaymentInfoDialog} onOpenChange={setShowPaymentInfoDialog}>
-        <DialogContent className="sm:max-w-[420px] p-6 rounded-[28px] gap-0 border-emerald-500/20 shadow-2xl">
-          <DialogHeader className="space-y-1.5 pb-2">
-            <DialogTitle className="text-[20px] font-bold text-slate-800 text-center">Scan Pembayaran</DialogTitle>
-            <DialogDescription className="text-[13px] font-medium leading-relaxed text-slate-500 text-center">
-              Segera selesaikan pembayaran sesuai instruksi.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="py-2">
-            <div className="flex flex-col items-center pb-6 pt-4">
-              {createdPaymentDetails?.paymentMethod.toLowerCase() === "qris" ? (
-                 <div className="flex items-center justify-center rounded-[24px] border border-emerald-100 bg-emerald-50 p-4 shadow-lg shadow-emerald-500/5">
-                   {topupQrDataUrl ? <Image src={topupQrDataUrl} alt="QR pembayaran" width={280} height={280} unoptimized className="object-contain rounded-xl" /> : <div className="h-[280px] w-[280px] bg-emerald-100/50 animate-pulse rounded-xl" />}
-                 </div>
-              ) : (
-                <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-6 w-full text-center shadow-lg shadow-emerald-500/5">
-                   <p className="text-[13px] font-bold text-emerald-800 uppercase tracking-wider mb-2">Virtual Account</p>
-                   <p className="text-2xl font-black tracking-tight text-emerald-950">{createdPaymentDetails?.paymentNumber}</p>
-                </div>
-              )}
-            </div>
 
-            <div className="rounded-2xl border border-slate-100 bg-slate-50/80 px-5 py-4 space-y-2.5">
-               <div className="flex items-center justify-between">
-                 <span className="text-[13px] font-semibold text-slate-500">Total Tagihan:</span>
-                 <span className="text-[15px] font-bold tracking-tight text-emerald-700">{formatIdr(createdPaymentDetails?.totalAmountCents ?? 0)}</span>
-               </div>
-               <div className="flex items-center justify-between">
-                 <span className="text-[13px] font-semibold text-slate-500">Metode:</span>
-                 <span className="text-[13px] font-bold text-slate-800">{normalizeMethod(createdPaymentDetails?.paymentMethod ?? "")}</span>
-               </div>
-               {createdPaymentDetails?.expiredAt ? (
-                 <div className="flex items-center justify-between border-t border-slate-200/60 pt-2.5 mt-2.5">
-                   <span className="text-[13px] font-semibold text-slate-500">Sisa waktu:</span>
-                   <span className="text-[13px] font-bold text-rose-500 bg-rose-50 px-2 py-0.5 rounded-md">{formatCountdown(createdPaymentDetails.expiredAt, nowMs)}</span>
-                 </div>
-               ) : null}
-            </div>
-            
-            <div className="mt-5">
-              <Button type="button" variant="outline" className="w-full h-12 rounded-full border-slate-200 hover:bg-slate-50 text-slate-600 font-semibold text-[15px]" onClick={() => { setShowPaymentInfoDialog(false); void loadData(); }}>
-                Tutup Peringatan
-              </Button>
-            </div>
-          </div>
-        </DialogContent>
-      </Dialog>
-
-      <Dialog open={showWithdrawDialog} onOpenChange={setShowWithdrawDialog}>
-        <DialogContent className="max-w-[480px] p-0 border-border/60 rounded-[24px] overflow-hidden">
-          <div className="bg-white">
-            <DialogHeader className="border-b border-border/50 px-6 py-6 bg-muted/20">
-              <DialogTitle className="text-2xl font-bold tracking-tight text-slate-800">Tarik Saldo</DialogTitle>
-              <DialogDescription className="text-[15px] font-medium text-slate-500 mt-1">Withdraw saldo e-payment ke rekening bisnis Anda.</DialogDescription>
-            </DialogHeader>
-            <div className="px-6 py-6 space-y-4">
-              <label className="block space-y-2">
-                <span className="text-sm font-semibold text-slate-700">Nominal Tarik Saldo</span>
+              <label className="block space-y-2.5">
+                <span className="text-[12px] font-bold uppercase tracking-[0.1em] text-muted-foreground">Nominal Penarikan</span>
                 <div className="relative">
-                  <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-4 font-medium text-slate-400">Rp</div>
+                  <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-4 font-semibold text-foreground/50">Rp</div>
                   <Input
                     value={withdrawAmount}
                     onChange={(event) => setWithdrawAmount(event.target.value)}
                     placeholder="Contoh: 50000"
                     type="number"
                     min={0}
-                    className="h-12 w-full rounded-xl border-slate-200 bg-slate-50/50 pl-11 pr-4 text-[15px] shadow-sm transition-all focus-visible:border-sky-500/40 focus-visible:bg-white focus-visible:ring-4 focus-visible:ring-sky-500/10"
+                    max={balanceCents}
+                    className="h-14 w-full rounded-2xl border-border/60 bg-background pl-12 pr-4 text-[16px] font-medium shadow-sm transition-all focus-visible:border-emerald-500/40 focus-visible:ring-4 focus-visible:ring-emerald-500/10"
                   />
                 </div>
               </label>
-              <label className="block space-y-2">
-                 <span className="text-sm font-semibold text-slate-700">Nama Bank</span>
-                 <Input
-                   value={withdrawBankName}
-                   onChange={(event) => setWithdrawBankName(event.target.value)}
-                   placeholder="Contoh: BCA"
-                   className="h-12 rounded-xl border-slate-200 bg-slate-50/50 px-4 text-[15px] shadow-sm focus-visible:border-sky-500/40 focus-visible:bg-white focus-visible:ring-4 focus-visible:ring-sky-500/10"
-                 />
-              </label>
-              <label className="block space-y-2">
-                 <span className="text-sm font-semibold text-slate-700">Nomor Rekening</span>
-                 <Input
-                   value={withdrawAccountNumber}
-                   onChange={(event) => setWithdrawAccountNumber(event.target.value)}
-                   placeholder="Nomor rekening tujuan"
-                   className="h-12 rounded-xl border-slate-200 bg-slate-50/50 px-4 text-[15px] shadow-sm focus-visible:border-sky-500/40 focus-visible:bg-white focus-visible:ring-4 focus-visible:ring-sky-500/10"
-                 />
-              </label>
-              <label className="block space-y-2">
-                 <span className="text-sm font-semibold text-slate-700">Atas Nama</span>
+
+              <div className="grid grid-cols-2 gap-4">
+                 <label className="block space-y-2.5">
+                    <span className="text-[12px] font-bold uppercase tracking-[0.1em] text-muted-foreground">Nama Bank</span>
+                    <Input
+                      value={withdrawBankName}
+                      onChange={(event) => setWithdrawBankName(event.target.value)}
+                      placeholder="Contoh: BCA"
+                      className="h-12 w-full rounded-2xl border-border/60 bg-background px-4 text-[14px] font-medium shadow-sm transition-all focus-visible:border-emerald-500/40 focus-visible:ring-4 focus-visible:ring-emerald-500/10"
+                    />
+                 </label>
+                 <label className="block space-y-2.5">
+                    <span className="text-[12px] font-bold uppercase tracking-[0.1em] text-muted-foreground">Nomor Rekening</span>
+                    <Input
+                      value={withdrawAccountNumber}
+                      onChange={(event) => setWithdrawAccountNumber(event.target.value)}
+                      placeholder="Nomor rekening tujuan"
+                      type="number"
+                      className="h-12 w-full rounded-2xl border-border/60 bg-background px-4 text-[14px] font-medium shadow-sm transition-all focus-visible:border-emerald-500/40 focus-visible:ring-4 focus-visible:ring-emerald-500/10"
+                    />
+                 </label>
+              </div>
+
+              <label className="block space-y-2.5">
+                 <span className="text-[12px] font-bold uppercase tracking-[0.1em] text-muted-foreground">Atas Nama</span>
                  <Input
                    value={withdrawAccountHolder}
                    onChange={(event) => setWithdrawAccountHolder(event.target.value)}
                    placeholder="Nama pemilik rekening"
-                   className="h-12 rounded-xl border-slate-200 bg-slate-50/50 px-4 text-[15px] shadow-sm focus-visible:border-sky-500/40 focus-visible:bg-white focus-visible:ring-4 focus-visible:ring-sky-500/10"
+                   className="h-12 w-full rounded-2xl border-border/60 bg-background px-4 text-[14px] font-medium shadow-sm transition-all focus-visible:border-emerald-500/40 focus-visible:ring-4 focus-visible:ring-emerald-500/10"
                  />
               </label>
-              <div className="pt-2">
+
+              <div className="pt-4">
                 <Button
                   type="button"
-                  className="w-full h-12 rounded-full bg-emerald-500 hover:bg-emerald-600 font-bold text-white shadow-[0_8px_20px_-6px_rgba(16,185,129,0.3)] transition-all text-[15px]"
+                  className="w-full h-14 rounded-2xl bg-emerald-600 hover:bg-emerald-700 font-bold text-white shadow-[0_8px_20px_-6px_rgba(16,185,129,0.3)] transition-all text-[16px]"
                   onClick={() => void handleCreateWithdraw()}
                   disabled={isWithdrawSubmitting}
                 >

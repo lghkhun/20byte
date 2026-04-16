@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Bar, BarChart, CartesianGrid, XAxis, YAxis } from "recharts";
+import { ShieldCheck, RefreshCcw, Layers, Globe, Users2, Activity, ShieldAlert, AlertTriangle, AlertCircle } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -512,261 +513,419 @@ export default function SuperadminPage() {
   }
 
   return (
-    <div className="inbox-scroll h-full w-full min-w-0 flex-1 overflow-y-auto p-4 md:p-6">
-      <div className="w-full space-y-4">
-        <header className="flex flex-col gap-2 md:flex-row md:items-end md:justify-between">
-          <div>
-            <h1 className="text-2xl font-semibold">Superadmin Panel</h1>
-            <p className="mt-1 text-sm text-muted-foreground">Kelola status subscription organisasi, operasional billing, dan akses superadmin platform.</p>
+    <div className="inbox-scroll h-full w-full min-w-0 flex-1 overflow-y-auto p-4 md:p-6 lg:p-8">
+      <div className="w-full max-w-[1400px] mx-auto space-y-6">
+        <header className="rounded-[32px] border border-border/70 bg-gradient-to-br from-card to-card/90 p-6 md:p-8 shadow-[0_2px_10px_-4px_rgba(0,0,0,0.02)] relative overflow-hidden flex flex-col md:flex-row md:items-center justify-between gap-6 group">
+          <div className="absolute inset-0 bg-grid-black/[0.02] dark:bg-grid-white/[0.02] [mask-image:linear-gradient(to_bottom_right,white,transparent)]" />
+          <div className="absolute -right-10 -top-10 h-40 w-40 rounded-full bg-emerald-500/10 blur-3xl transition-opacity duration-500 group-hover:opacity-80" />
+          
+          <div className="relative z-10 flex flex-col sm:flex-row sm:items-center gap-5">
+             <div className="flex h-16 w-16 items-center justify-center rounded-2xl border border-emerald-500/20 bg-emerald-500/10 text-emerald-600 shadow-sm shrink-0">
+                <ShieldCheck className="h-8 w-8" />
+             </div>
+             <div>
+               <h1 className="text-2xl md:text-3xl font-bold tracking-tight text-foreground">Superadmin Panel</h1>
+               <p className="mt-1.5 text-[14px] font-medium leading-relaxed text-muted-foreground/80">
+                 Kelola status subscription, operasional billing, dan akses superadmin.
+               </p>
+             </div>
           </div>
-          <Button variant="outline" onClick={() => void Promise.all([loadCore(), loadOverview(), loadAuditLogs()])} disabled={Boolean(busyKey)}>
+          <Button size="lg" className="h-12 rounded-xl bg-emerald-600 hover:bg-emerald-700 font-bold text-white shadow-[0_8px_20px_-6px_rgba(16,185,129,0.3)] transition-all px-6 relative z-10" onClick={() => void Promise.all([loadCore(), loadOverview(), loadAuditLogs()])} disabled={Boolean(busyKey)}>
+            <RefreshCcw className={`mr-2.5 h-5 w-5 ${busyKey ? "animate-spin" : ""}`} />
             Refresh Data
           </Button>
         </header>
 
-        {error ? <p className="rounded-xl border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm text-destructive">{error}</p> : null}
+        {error ? <p className="rounded-xl border border-rose-500/20 bg-rose-500/10 px-4 py-3 text-[13px] font-medium text-rose-600 dark:text-rose-400 shadow-sm w-full">{error}</p> : null}
 
-        <Tabs defaultValue="overview" className="grid gap-4 lg:grid-cols-[220px_minmax(0,1fr)]">
-          <TabsList className="h-auto w-full flex-col items-stretch justify-start gap-1 rounded-xl border border-border/70 bg-card p-2">
-            <TabsTrigger value="overview" className="w-full justify-start">Overview</TabsTrigger>
-            <TabsTrigger value="webhook" className="w-full justify-start">Webhook & Jobs</TabsTrigger>
-            <TabsTrigger value="risk" className="w-full justify-start">Risk & Billing</TabsTrigger>
-            <TabsTrigger value="subscriptions" className="w-full justify-start">Subscriptions</TabsTrigger>
-            <TabsTrigger value="whatsapp" className="w-full justify-start">WhatsApp</TabsTrigger>
-            <TabsTrigger value="users" className="w-full justify-start">Users</TabsTrigger>
-            <TabsTrigger value="audit" className="w-full justify-start">Audit Trail</TabsTrigger>
+        <Tabs defaultValue="overview" className="grid gap-6">
+          <TabsList className="h-auto w-full flex-wrap sm:flex-nowrap items-stretch justify-start gap-2 rounded-2xl border border-border/60 bg-muted/30 p-2 shadow-sm">
+            <TabsTrigger value="overview" className="flex-1 min-w-[120px] rounded-xl text-[13px] font-bold data-[state=active]:bg-white dark:data-[state=active]:bg-card data-[state=active]:shadow-sm data-[state=active]:text-emerald-600 py-2.5 transition-all">Overview</TabsTrigger>
+            <TabsTrigger value="webhook" className="flex-1 min-w-[120px] rounded-xl text-[13px] font-bold data-[state=active]:bg-white dark:data-[state=active]:bg-card data-[state=active]:shadow-sm data-[state=active]:text-emerald-600 py-2.5 transition-all">Webhook & Jobs</TabsTrigger>
+            <TabsTrigger value="risk" className="flex-1 min-w-[120px] rounded-xl text-[13px] font-bold data-[state=active]:bg-white dark:data-[state=active]:bg-card data-[state=active]:shadow-sm data-[state=active]:text-emerald-600 py-2.5 transition-all">Risk & Billing</TabsTrigger>
+            <TabsTrigger value="subscriptions" className="flex-1 min-w-[120px] rounded-xl text-[13px] font-bold data-[state=active]:bg-white dark:data-[state=active]:bg-card data-[state=active]:shadow-sm data-[state=active]:text-emerald-600 py-2.5 transition-all">Subscriptions</TabsTrigger>
+            <TabsTrigger value="whatsapp" className="flex-1 min-w-[120px] rounded-xl text-[13px] font-bold data-[state=active]:bg-white dark:data-[state=active]:bg-card data-[state=active]:shadow-sm data-[state=active]:text-emerald-600 py-2.5 transition-all">WhatsApp</TabsTrigger>
+            <TabsTrigger value="users" className="flex-1 min-w-[120px] rounded-xl text-[13px] font-bold data-[state=active]:bg-white dark:data-[state=active]:bg-card data-[state=active]:shadow-sm data-[state=active]:text-emerald-600 py-2.5 transition-all">Users</TabsTrigger>
+            <TabsTrigger value="audit" className="flex-1 min-w-[120px] rounded-xl text-[13px] font-bold data-[state=active]:bg-white dark:data-[state=active]:bg-card data-[state=active]:shadow-sm data-[state=active]:text-emerald-600 py-2.5 transition-all">Audit</TabsTrigger>
           </TabsList>
 
-          <div className="space-y-4">
-            <TabsContent value="overview" className="m-0 space-y-4">
-              <section className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-                <Card>
-                  <CardHeader className="pb-2"><CardTitle className="text-xs uppercase tracking-wide text-muted-foreground">Organizations</CardTitle></CardHeader>
-                  <CardContent>
-                    <p className="text-2xl font-semibold">{statusSummary.totalOrgs}</p>
-                    <p className="mt-1 text-xs text-muted-foreground">Active {statusSummary.active} • Trial {statusSummary.trialing}</p>
-                  </CardContent>
-                </Card>
-                <Card>
-                  <CardHeader className="pb-2"><CardTitle className="text-xs uppercase tracking-wide text-muted-foreground">Billing Health</CardTitle></CardHeader>
-                  <CardContent>
-                    <p className="text-2xl font-semibold">{statusSummary.pastDue}</p>
-                    <p className="mt-1 text-xs text-muted-foreground">Past Due • Canceled {statusSummary.canceled}</p>
-                  </CardContent>
-                </Card>
-                <Card>
-                  <CardHeader className="pb-2"><CardTitle className="text-xs uppercase tracking-wide text-muted-foreground">WhatsApp Connected</CardTitle></CardHeader>
-                  <CardContent>
-                    <p className="text-2xl font-semibold">{statusSummary.connectedWhatsappOrgs}</p>
-                    <p className="mt-1 text-xs text-muted-foreground">of {statusSummary.totalOrgs} organizations</p>
-                  </CardContent>
-                </Card>
-                <Card>
-                  <CardHeader className="pb-2"><CardTitle className="text-xs uppercase tracking-wide text-muted-foreground">Platform Users</CardTitle></CardHeader>
-                  <CardContent>
-                    <p className="text-2xl font-semibold">{statTotalUsers}</p>
-                    <p className="mt-1 text-xs text-muted-foreground">Superadmin {statSuperadmins}</p>
-                  </CardContent>
-                </Card>
+          <div className="space-y-6">
+            <TabsContent value="overview" className="m-0 space-y-6">
+              <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+                <div className="rounded-[24px] border border-border/70 bg-card p-6 shadow-sm overflow-hidden relative">
+                  <Globe className="absolute -right-4 -bottom-4 h-24 w-24 text-emerald-500/5 rotate-12" />
+                  <p className="text-[11px] font-bold uppercase tracking-[0.2em] text-muted-foreground/80 relative z-10">Organizations</p>
+                  <p className="mt-3 text-3xl font-black tracking-tight text-foreground relative z-10">{statusSummary.totalOrgs}</p>
+                  <p className="mt-2 text-[13px] font-medium text-emerald-600 relative z-10 flex items-center gap-2">
+                    <span className="w-2 h-2 rounded-full bg-emerald-500" /> Active {statusSummary.active}
+                    <span className="text-muted-foreground mx-1">•</span> 
+                    <span className="w-2 h-2 rounded-full bg-amber-500" /> Trial {statusSummary.trialing}
+                  </p>
+                </div>
+                
+                <div className="rounded-[24px] border border-border/70 bg-card p-6 shadow-sm overflow-hidden relative">
+                  <Layers className="absolute -right-4 -bottom-4 h-24 w-24 text-amber-500/5 rotate-12" />
+                  <p className="text-[11px] font-bold uppercase tracking-[0.2em] text-muted-foreground/80 relative z-10">Billing Health</p>
+                  <p className="mt-3 text-3xl font-black tracking-tight text-foreground relative z-10">{statusSummary.pastDue}</p>
+                  <p className="mt-2 text-[13px] font-medium text-amber-600 relative z-10 flex items-center gap-2">
+                    <span className="w-2 h-2 rounded-full bg-amber-500" /> Past Due
+                    <span className="text-muted-foreground mx-1">•</span> 
+                    <span className="w-2 h-2 rounded-full bg-rose-500" /> Canceled {statusSummary.canceled}
+                  </p>
+                </div>
+
+                <div className="rounded-[24px] border border-border/70 bg-card p-6 shadow-sm overflow-hidden relative">
+                  <Activity className="absolute -right-4 -bottom-4 h-24 w-24 text-sky-500/5 rotate-12" />
+                  <p className="text-[11px] font-bold uppercase tracking-[0.2em] text-muted-foreground/80 relative z-10">WA Connected</p>
+                  <p className="mt-3 text-3xl font-black tracking-tight text-foreground relative z-10">{statusSummary.connectedWhatsappOrgs}</p>
+                  <p className="mt-2 text-[13px] font-medium text-muted-foreground relative z-10">of {statusSummary.totalOrgs} total organizations</p>
+                </div>
+
+                <div className="rounded-[24px] border border-border/70 bg-card p-6 shadow-sm overflow-hidden relative">
+                  <Users2 className="absolute -right-4 -bottom-4 h-24 w-24 text-indigo-500/5 rotate-12" />
+                  <p className="text-[11px] font-bold uppercase tracking-[0.2em] text-muted-foreground/80 relative z-10">Platform Users</p>
+                  <p className="mt-3 text-3xl font-black tracking-tight text-foreground relative z-10">{statTotalUsers}</p>
+                  <p className="mt-2 text-[13px] font-medium text-indigo-600 relative z-10 flex items-center gap-2">
+                    <ShieldCheck className="h-4 w-4" /> Superadmin {statSuperadmins}
+                  </p>
+                </div>
               </section>
 
-              <Card>
-                <CardHeader className="flex flex-row items-center justify-between space-y-0">
-                  <CardTitle>Revenue & Signup Trends</CardTitle>
-                  <div className="flex items-center gap-2">
-                    <Button size="sm" variant={trendWindow === "7" ? "default" : "outline"} onClick={() => setTrendWindow("7")}>7 Hari</Button>
-                    <Button size="sm" variant={trendWindow === "30" ? "default" : "outline"} onClick={() => setTrendWindow("30")}>30 Hari</Button>
+              <div className="rounded-[28px] border border-border/70 bg-card p-6 shadow-sm">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
+                  <h2 className="text-[18px] font-bold tracking-tight text-foreground">Revenue & Signup Trends</h2>
+                  <div className="flex bg-muted/40 p-1 rounded-xl border border-border/60 w-fit">
+                    <Button size="sm" variant={trendWindow === "7" ? "secondary" : "ghost"} className={`rounded-lg h-8 px-4 ${trendWindow === "7" ? "shadow-sm font-bold bg-background text-foreground" : "font-medium text-muted-foreground"}`} onClick={() => setTrendWindow("7")}>7 Hari</Button>
+                    <Button size="sm" variant={trendWindow === "30" ? "secondary" : "ghost"} className={`rounded-lg h-8 px-4 ${trendWindow === "30" ? "shadow-sm font-bold bg-background text-foreground" : "font-medium text-muted-foreground"}`} onClick={() => setTrendWindow("30")}>30 Hari</Button>
                   </div>
-                </CardHeader>
-                <CardContent className="space-y-6">
+                </div>
+                <div className="space-y-8">
                   {trendData.length === 0 ? (
-                    <p className="text-sm text-muted-foreground">Belum ada data tren.</p>
+                    <div className="py-12 flex flex-col items-center justify-center text-center">
+                      <BarChart className="h-12 w-12 text-muted-foreground/30 mb-4" />
+                      <p className="text-[14px] font-medium text-muted-foreground">Belum ada data tren.</p>
+                    </div>
                   ) : (
-                    <>
-                      <div>
-                        <p className="mb-2 text-xs uppercase tracking-wide text-muted-foreground">Paid Amount</p>
+                    <div className="grid gap-8 lg:grid-cols-2">
+                      <div className="rounded-2xl border border-border/50 bg-background/50 p-5">
+                        <div className="flex items-center justify-between mb-4">
+                          <p className="text-[12px] font-bold uppercase tracking-wider text-muted-foreground">Paid Amount</p>
+                          <span className="text-[13px] font-bold text-emerald-600 bg-emerald-500/10 border border-emerald-500/20 px-2.5 py-1 rounded-full">{formatCurrency(trendData.reduce((sum, item) => sum + item.paidAmountCents, 0))} Total</span>
+                        </div>
                         <TrendBarChart data={trendData} metric="paidAmountCents" />
-                        <p className="mt-2 text-xs text-muted-foreground">Total {formatCurrency(trendData.reduce((sum, item) => sum + item.paidAmountCents, 0))}</p>
                       </div>
-                      <div>
-                        <p className="mb-2 text-xs uppercase tracking-wide text-muted-foreground">Paid Transactions</p>
+                      <div className="rounded-2xl border border-border/50 bg-background/50 p-5">
+                        <p className="text-[12px] font-bold uppercase tracking-wider text-muted-foreground mb-4">Paid Transactions</p>
                         <TrendBarChart data={trendData} metric="paidCount" />
                       </div>
-                      <div>
-                        <p className="mb-2 text-xs uppercase tracking-wide text-muted-foreground">New Organizations</p>
+                      <div className="rounded-2xl border border-border/50 bg-background/50 p-5 lg:col-span-2 xl:col-span-1">
+                        <p className="text-[12px] font-bold uppercase tracking-wider text-muted-foreground mb-4">New Organizations</p>
                         <TrendBarChart data={trendData} metric="newOrgs" />
                       </div>
-                    </>
+                    </div>
                   )}
-                </CardContent>
-              </Card>
+                </div>
+              </div>
             </TabsContent>
 
-            <TabsContent value="webhook" className="m-0 space-y-4">
-              <section className="grid gap-4 xl:grid-cols-3">
-                <Card><CardHeader><CardTitle>Queue / Job Monitor</CardTitle></CardHeader><CardContent className="space-y-2 text-sm"><p>Redis: {overview?.queueHealth.redisConfigured ? (overview.queueHealth.redisReachable ? "Connected" : "Unavailable") : "Not configured"}</p><p>Meta event queue: {overview?.queueHealth.metaEventQueue ?? "-"}</p><p>Media queue: {overview?.queueHealth.mediaQueue ?? "-"}</p><p>Cleanup queue: {overview?.queueHealth.cleanupQueue ?? "-"}</p>{overview?.queueHealth.error ? <p className="text-xs text-destructive">{overview.queueHealth.error}</p> : null}</CardContent></Card>
-                <Card><CardHeader><CardTitle>Payment Processing</CardTitle></CardHeader><CardContent className="space-y-2 text-sm"><p>Charges dibuat 24 jam: {overview?.paymentHealth.createdLast24h ?? "-"}</p><p>Charges paid 24 jam: {overview?.paymentHealth.paidLast24h ?? "-"}</p><p>Pending total: {overview?.paymentHealth.pending ?? "-"}</p><p>Pending expired: {overview?.paymentHealth.pendingExpired ?? "-"}</p><p>Pending stale &gt; 1 jam: {overview?.paymentHealth.pendingStaleOver1h ?? "-"}</p></CardContent></Card>
-                <Card><CardHeader><CardTitle>Webhook Monitor</CardTitle></CardHeader><CardContent className="space-y-2 text-sm"><p>Received 24 jam: {overview?.webhookHealth.receivedLast24h ?? "-"}</p><p>Completed 24 jam: {overview?.webhookHealth.completedLast24h ?? "-"}</p><p>Failed 24 jam: {overview?.webhookHealth.failedLast24h ?? "-"}</p><p>Replay skipped 24 jam: {overview?.webhookHealth.replaySkippedLast24h ?? "-"}</p><p>Order retried (&gt;1x): {overview?.webhookHealth.retriedOrdersLast24h ?? "-"}</p></CardContent></Card>
+            <TabsContent value="webhook" className="m-0 space-y-6">
+              <section className="grid gap-5 xl:grid-cols-3">
+                <div className="rounded-[24px] border border-border/70 bg-card p-6 shadow-sm overflow-hidden relative group">
+                  <div className="flex items-center gap-2 mb-4">
+                    <Activity className="h-5 w-5 text-emerald-500" />
+                    <h3 className="text-[16px] font-bold tracking-tight text-foreground">Queue / Job Monitor</h3>
+                  </div>
+                  <div className="space-y-3 text-[13px] font-medium text-muted-foreground">
+                    <div className="flex justify-between items-center"><span className="text-foreground/80">Redis:</span><span className={overview?.queueHealth.redisConfigured ? (overview.queueHealth.redisReachable ? "text-emerald-600 dark:text-emerald-400 font-bold bg-emerald-500/10 px-2 py-0.5 rounded-full" : "text-rose-600 dark:text-rose-400 font-bold bg-rose-500/10 px-2 py-0.5 rounded-full") : "text-muted-foreground"}>{overview?.queueHealth.redisConfigured ? (overview.queueHealth.redisReachable ? "Connected" : "Unavailable") : "Not configured"}</span></div>
+                    <div className="flex justify-between items-center"><span className="text-foreground/80">Meta event queue:</span><span className="font-bold text-foreground">{overview?.queueHealth.metaEventQueue ?? "-"}</span></div>
+                    <div className="flex justify-between items-center"><span className="text-foreground/80">Media queue:</span><span className="font-bold text-foreground">{overview?.queueHealth.mediaQueue ?? "-"}</span></div>
+                    <div className="flex justify-between items-center"><span className="text-foreground/80">Cleanup queue:</span><span className="font-bold text-foreground">{overview?.queueHealth.cleanupQueue ?? "-"}</span></div>
+                    {overview?.queueHealth.error ? <div className="mt-4 p-3 rounded-xl bg-destructive/10 text-destructive text-[12px]">{overview.queueHealth.error}</div> : null}
+                  </div>
+                </div>
+
+                <div className="rounded-[24px] border border-border/70 bg-card p-6 shadow-sm overflow-hidden relative group">
+                  <div className="flex items-center gap-2 mb-4">
+                    <Layers className="h-5 w-5 text-sky-500" />
+                    <h3 className="text-[16px] font-bold tracking-tight text-foreground">Payment Processing</h3>
+                  </div>
+                  <div className="space-y-3 text-[13px] font-medium text-muted-foreground">
+                    <div className="flex justify-between items-center"><span className="text-foreground/80">Charges dibuat 24h:</span><span className="font-bold text-foreground">{overview?.paymentHealth.createdLast24h ?? "-"}</span></div>
+                    <div className="flex justify-between items-center"><span className="text-foreground/80">Charges paid 24h:</span><span className="font-bold text-emerald-600 dark:text-emerald-400">{overview?.paymentHealth.paidLast24h ?? "-"}</span></div>
+                    <div className="flex justify-between items-center"><span className="text-foreground/80">Pending total:</span><span className="font-bold text-amber-600 dark:text-amber-400">{overview?.paymentHealth.pending ?? "-"}</span></div>
+                    <div className="flex justify-between items-center"><span className="text-foreground/80">Pending expired:</span><span className="font-bold text-rose-600 dark:text-rose-400">{overview?.paymentHealth.pendingExpired ?? "-"}</span></div>
+                    <div className="flex justify-between items-center"><span className="text-foreground/80">Pending stale &gt; 1h:</span><span className="font-bold text-foreground">{overview?.paymentHealth.pendingStaleOver1h ?? "-"}</span></div>
+                  </div>
+                </div>
+
+                <div className="rounded-[24px] border border-border/70 bg-card p-6 shadow-sm overflow-hidden relative group">
+                  <div className="flex items-center gap-2 mb-4">
+                    <Globe className="h-5 w-5 text-indigo-500" />
+                    <h3 className="text-[16px] font-bold tracking-tight text-foreground">Webhook Monitor</h3>
+                  </div>
+                  <div className="space-y-3 text-[13px] font-medium text-muted-foreground">
+                    <div className="flex justify-between items-center"><span className="text-foreground/80">Received 24h:</span><span className="font-bold text-foreground">{overview?.webhookHealth.receivedLast24h ?? "-"}</span></div>
+                    <div className="flex justify-between items-center"><span className="text-foreground/80">Completed 24h:</span><span className="font-bold text-emerald-600 dark:text-emerald-400">{overview?.webhookHealth.completedLast24h ?? "-"}</span></div>
+                    <div className="flex justify-between items-center"><span className="text-foreground/80">Failed 24h:</span><span className="font-bold text-rose-600 dark:text-rose-400">{overview?.webhookHealth.failedLast24h ?? "-"}</span></div>
+                    <div className="flex justify-between items-center"><span className="text-foreground/80">Replay skipped 24h:</span><span className="font-bold text-foreground">{overview?.webhookHealth.replaySkippedLast24h ?? "-"}</span></div>
+                    <div className="flex justify-between items-center"><span className="text-foreground/80">Order retried (&gt;1x):</span><span className="font-bold text-foreground">{overview?.webhookHealth.retriedOrdersLast24h ?? "-"}</span></div>
+                  </div>
+                </div>
               </section>
-              <Card>
-                <CardHeader><CardTitle>Latest Webhook Events</CardTitle></CardHeader>
-                <CardContent>
+
+              <div className="rounded-[28px] border border-border/70 bg-card shadow-sm overflow-hidden">
+                <div className="border-b border-border/60 bg-gradient-to-r from-muted/30 to-transparent px-6 py-5">
+                  <h2 className="text-[18px] font-bold tracking-tight text-foreground">Latest Webhook Events</h2>
+                </div>
+                <div className="overflow-x-auto">
                   <Table>
-                    <TableHeader><TableRow><TableHead>Time</TableHead><TableHead>Order ID</TableHead><TableHead>Action</TableHead><TableHead>Meta</TableHead></TableRow></TableHeader>
+                    <TableHeader className="bg-muted/20">
+                      <TableRow className="hover:bg-transparent">
+                        <TableHead className="h-12 px-6 text-[12px] font-bold uppercase tracking-wider text-muted-foreground">Time</TableHead>
+                        <TableHead className="h-12 px-6 text-[12px] font-bold uppercase tracking-wider text-muted-foreground">Order ID</TableHead>
+                        <TableHead className="h-12 px-6 text-[12px] font-bold uppercase tracking-wider text-muted-foreground">Action</TableHead>
+                        <TableHead className="h-12 px-6 text-[12px] font-bold uppercase tracking-wider text-muted-foreground">Meta</TableHead>
+                      </TableRow>
+                    </TableHeader>
                     <TableBody>
                       {(overview?.webhookEvents ?? []).map((event) => (
-                        <TableRow key={event.id}><TableCell className="whitespace-nowrap">{formatDateTime(event.createdAt)}</TableCell><TableCell>{event.orderId}</TableCell><TableCell>{event.action}</TableCell><TableCell className="font-mono text-xs text-muted-foreground">{event.meta ? JSON.stringify(event.meta) : "{}"}</TableCell></TableRow>
+                        <TableRow key={event.id} className="border-t border-border/50 hover:bg-muted/10 transition-colors">
+                          <TableCell className="px-6 py-4 whitespace-nowrap text-[13px] font-medium text-muted-foreground">{formatDateTime(event.createdAt)}</TableCell>
+                          <TableCell className="px-6 py-4 text-[14px] font-semibold text-foreground">{event.orderId}</TableCell>
+                          <TableCell className="px-6 py-4 text-[13px] font-medium"><span className="bg-muted/50 px-2 py-1 rounded-md text-foreground/80 border border-border/50">{event.action}</span></TableCell>
+                          <TableCell className="px-6 py-4 font-mono text-[11px] text-muted-foreground/80 max-w-sm truncate" title={event.meta ? JSON.stringify(event.meta) : ""}>{event.meta ? JSON.stringify(event.meta) : "{}"}</TableCell>
+                        </TableRow>
                       ))}
-                      {(overview?.webhookEvents ?? []).length === 0 ? <TableRow><TableCell colSpan={4} className="text-muted-foreground">Belum ada webhook event.</TableCell></TableRow> : null}
+                      {(overview?.webhookEvents ?? []).length === 0 ? <TableRow><TableCell colSpan={4} className="px-6 py-12 text-center text-[14px] font-medium text-muted-foreground">Belum ada webhook event.</TableCell></TableRow> : null}
                     </TableBody>
                   </Table>
-                </CardContent>
-              </Card>
+                </div>
+              </div>
             </TabsContent>
 
-            <TabsContent value="risk" className="m-0 space-y-4">
-              <Card>
-                <CardHeader><CardTitle>Risk List (Auto)</CardTitle></CardHeader>
-                <CardContent>
+            <TabsContent value="risk" className="m-0 space-y-6">
+              <div className="rounded-[28px] border border-border/70 bg-card shadow-sm overflow-hidden">
+                <div className="border-b border-border/60 bg-gradient-to-r from-rose-500/5 to-transparent px-6 py-5 flex items-center gap-3">
+                  <ShieldAlert className="h-5 w-5 text-rose-500" />
+                  <h2 className="text-[18px] font-bold tracking-tight text-foreground">Risk List (Auto)</h2>
+                </div>
+                <div className="overflow-x-auto">
                   <Table>
-                    <TableHeader><TableRow><TableHead>Org</TableHead><TableHead>Risk</TableHead><TableHead>Status</TableHead><TableHead>Due</TableHead><TableHead>WA</TableHead><TableHead>Members</TableHead><TableHead>Reason</TableHead><TableHead>Action</TableHead></TableRow></TableHeader>
+                    <TableHeader className="bg-muted/20">
+                      <TableRow className="hover:bg-transparent">
+                        <TableHead className="h-12 px-6 text-[12px] font-bold uppercase tracking-wider text-muted-foreground">Org</TableHead>
+                        <TableHead className="h-12 px-6 text-[12px] font-bold uppercase tracking-wider text-muted-foreground">Risk</TableHead>
+                        <TableHead className="h-12 px-6 text-[12px] font-bold uppercase tracking-wider text-muted-foreground">Status</TableHead>
+                        <TableHead className="h-12 px-6 text-[12px] font-bold uppercase tracking-wider text-muted-foreground">Due</TableHead>
+                        <TableHead className="h-12 px-6 text-[12px] font-bold uppercase tracking-wider text-muted-foreground text-center">WA / Members</TableHead>
+                        <TableHead className="h-12 px-6 text-[12px] font-bold uppercase tracking-wider text-muted-foreground">Reason</TableHead>
+                        <TableHead className="h-12 px-6 text-[12px] font-bold uppercase tracking-wider text-muted-foreground text-right">Action</TableHead>
+                      </TableRow>
+                    </TableHeader>
                     <TableBody>
                       {(overview?.riskOrgs ?? []).map((risk) => (
-                        <TableRow key={risk.orgId}>
-                          <TableCell className="font-medium">{risk.orgName}</TableCell>
-                          <TableCell><span className={risk.riskLevel === "high" ? "rounded-full border border-rose-300 bg-rose-500/10 px-2 py-1 text-xs font-medium text-rose-700" : risk.riskLevel === "medium" ? "rounded-full border border-amber-300 bg-amber-500/10 px-2 py-1 text-xs font-medium text-amber-700" : "rounded-full border border-slate-300 bg-slate-500/10 px-2 py-1 text-xs font-medium text-slate-700"}>{risk.riskLevel.toUpperCase()}</span></TableCell>
-                          <TableCell>{risk.status}</TableCell>
-                          <TableCell>{formatDateTime(risk.dueAt)}</TableCell>
-                          <TableCell>{risk.waAccounts}</TableCell>
-                          <TableCell>{risk.members}</TableCell>
-                          <TableCell>{risk.reason}</TableCell>
-                          <TableCell><div className="flex items-center gap-2"><Button size="sm" variant="outline" disabled={Boolean(busyKey)} onClick={() => void applySubscriptionAction(risk.orgId, "MARK_ACTIVE")}>Mark Active</Button><Button size="sm" variant="outline" disabled={Boolean(busyKey)} onClick={() => void applySubscriptionAction(risk.orgId, "EXTEND_TRIAL", 3)}>Extend 3d</Button></div></TableCell>
+                        <TableRow key={risk.orgId} className="border-t border-border/50 hover:bg-muted/10 transition-colors">
+                          <TableCell className="px-6 py-4 font-bold text-foreground text-[14px]">{risk.orgName}</TableCell>
+                          <TableCell className="px-6 py-4">
+                            <span className={risk.riskLevel === "high" ? "rounded-full border border-rose-500/30 bg-rose-500/10 px-2.5 py-1 text-[11px] font-black uppercase text-rose-600 dark:text-rose-400" : risk.riskLevel === "medium" ? "rounded-full border border-amber-500/30 bg-amber-500/10 px-2.5 py-1 text-[11px] font-black uppercase text-amber-600 dark:text-amber-400" : "rounded-full border border-slate-500/30 bg-slate-500/10 px-2.5 py-1 text-[11px] font-black uppercase text-slate-600 dark:text-slate-400"}>
+                              {risk.riskLevel}
+                            </span>
+                          </TableCell>
+                          <TableCell className="px-6 py-4 text-[13px] font-medium text-foreground/80">{risk.status}</TableCell>
+                          <TableCell className="px-6 py-4 text-[13px] font-medium text-muted-foreground">{formatDateTime(risk.dueAt)}</TableCell>
+                          <TableCell className="px-6 py-4 text-center">
+                            <div className="flex items-center justify-center gap-2 text-[13px] font-bold text-foreground">
+                              {risk.waAccounts} <span className="text-muted-foreground/50 font-normal">/</span> {risk.members}
+                            </div>
+                          </TableCell>
+                          <TableCell className="px-6 py-4 text-[13px] font-medium text-muted-foreground">{risk.reason}</TableCell>
+                          <TableCell className="px-6 py-4 text-right">
+                            <div className="flex items-center justify-end gap-2">
+                              <Button size="sm" variant="outline" className="h-8 rounded-lg text-[12px] font-bold hover:bg-emerald-500/10 hover:text-emerald-600 border-border/60" disabled={Boolean(busyKey)} onClick={() => void applySubscriptionAction(risk.orgId, "MARK_ACTIVE")}>Mark Active</Button>
+                              <Button size="sm" variant="outline" className="h-8 rounded-lg text-[12px] font-bold hover:bg-sky-500/10 hover:text-sky-600 border-border/60" disabled={Boolean(busyKey)} onClick={() => void applySubscriptionAction(risk.orgId, "EXTEND_TRIAL", 3)}>Extend 3d</Button>
+                            </div>
+                          </TableCell>
                         </TableRow>
                       ))}
-                      {(overview?.riskOrgs ?? []).length === 0 ? <TableRow><TableCell colSpan={8} className="text-muted-foreground">Tidak ada organisasi berisiko saat ini.</TableCell></TableRow> : null}
+                      {(overview?.riskOrgs ?? []).length === 0 ? <TableRow><TableCell colSpan={7} className="px-6 py-12 text-center text-[14px] font-medium text-muted-foreground flex flex-col items-center justify-center gap-2"><ShieldCheck className="h-6 w-6 text-emerald-500/50" />Tidak ada organisasi berisiko saat ini.</TableCell></TableRow> : null}
                     </TableBody>
                   </Table>
-                </CardContent>
-              </Card>
+                </div>
+              </div>
             </TabsContent>
 
-            <TabsContent value="subscriptions" className="m-0 space-y-4">
-              <Card>
-                <CardHeader><CardTitle>Subscriptions</CardTitle></CardHeader>
-                <CardContent>
+            <TabsContent value="subscriptions" className="m-0 space-y-6">
+              <div className="rounded-[28px] border border-border/70 bg-card shadow-sm overflow-hidden">
+                <div className="border-b border-border/60 bg-gradient-to-r from-emerald-500/5 to-transparent px-6 py-5">
+                  <h2 className="text-[18px] font-bold tracking-tight text-foreground">Subscriptions</h2>
+                </div>
+                <div className="overflow-x-auto">
                   <Table>
-                    <TableHeader><TableRow><TableHead>Org</TableHead><TableHead>Status</TableHead><TableHead>WA</TableHead><TableHead>Members</TableHead><TableHead>Trial End</TableHead><TableHead>Period End</TableHead><TableHead>Latest Charge</TableHead><TableHead>Actions</TableHead></TableRow></TableHeader>
+                    <TableHeader className="bg-muted/20">
+                      <TableRow className="hover:bg-transparent">
+                        <TableHead className="h-12 px-6 text-[12px] font-bold uppercase tracking-wider text-muted-foreground">Org</TableHead>
+                        <TableHead className="h-12 px-6 text-[12px] font-bold uppercase tracking-wider text-muted-foreground">Status / Period Ends</TableHead>
+                        <TableHead className="h-12 px-6 text-[12px] font-bold uppercase tracking-wider text-muted-foreground text-center">WA Connected</TableHead>
+                        <TableHead className="h-12 px-6 text-[12px] font-bold uppercase tracking-wider text-muted-foreground">Latest Charge</TableHead>
+                        <TableHead className="h-12 px-6 text-[12px] font-bold uppercase tracking-wider text-muted-foreground text-right">Actions</TableHead>
+                      </TableRow>
+                    </TableHeader>
                     <TableBody>
                       {subscriptions.map((item) => (
-                        <TableRow key={item.id}>
-                          <TableCell className="font-medium">{item.org.name}</TableCell>
-                          <TableCell>{item.status}</TableCell>
-                          <TableCell>{item.org._count.waAccounts > 0 ? "Connected" : "Not Connected"}</TableCell>
-                          <TableCell>{item.org._count.members}</TableCell>
-                          <TableCell>{formatDate(item.trialEndAt)}</TableCell>
-                          <TableCell>{formatDate(item.currentPeriodEndAt)}</TableCell>
-                          <TableCell>{item.org.billingCharges[0] ? `${item.org.billingCharges[0].status} • ${new Intl.NumberFormat("id-ID").format(item.org.billingCharges[0].totalAmountCents)}` : "-"}</TableCell>
-                          <TableCell><div className="flex items-center gap-2"><Button size="sm" variant="outline" disabled={Boolean(busyKey)} onClick={() => void applySubscriptionAction(item.orgId, "MARK_ACTIVE")}>Active</Button><Button size="sm" variant="outline" disabled={Boolean(busyKey)} onClick={() => void applySubscriptionAction(item.orgId, "MARK_PAST_DUE")}>Past Due</Button><Button size="sm" variant="destructive" disabled={Boolean(busyKey)} onClick={() => void applySubscriptionAction(item.orgId, "CANCEL")}>Cancel</Button></div></TableCell>
+                        <TableRow key={item.id} className="border-t border-border/50 hover:bg-muted/10 transition-colors">
+                          <TableCell className="px-6 py-4">
+                            <p className="font-bold text-foreground text-[14px]">{item.org.name}</p>
+                            <p className="text-[12px] font-medium text-muted-foreground">{item.org._count.members} Members</p>
+                          </TableCell>
+                          <TableCell className="px-6 py-4">
+                            <span className={`inline-flex rounded-full border px-2.5 py-0.5 text-[11px] font-bold uppercase tracking-wider mb-1 ${item.status === "ACTIVE" ? "bg-emerald-500/10 text-emerald-600 border-emerald-500/20" : item.status === "TRIALING" ? "bg-sky-500/10 text-sky-600 border-sky-500/20" : item.status === "PAST_DUE" ? "bg-amber-500/10 text-amber-600 border-amber-500/20" : "bg-rose-500/10 text-rose-600 border-rose-500/20"}`}>{item.status}</span>
+                            <p className="text-[12px] font-medium text-muted-foreground mt-0.5">{item.status === 'TRIALING' ? `Ends ${formatDate(item.trialEndAt)}` : formatDate(item.currentPeriodEndAt)}</p>
+                          </TableCell>
+                          <TableCell className="px-6 py-4 text-center">
+                            {item.org._count.waAccounts > 0 ? (
+                               <span className="inline-flex rounded-full bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 p-1.5" title="WhatsApp Connected"><Activity className="h-4 w-4" /></span>
+                            ) : (
+                               <span className="inline-flex rounded-full bg-muted/40 text-muted-foreground p-1.5" title="WhatsApp Not Connected"><AlertCircle className="h-4 w-4" /></span>
+                            )}
+                          </TableCell>
+                          <TableCell className="px-6 py-4 text-[13px] font-medium">
+                            {item.org.billingCharges[0] ? (
+                               <div className="flex flex-col gap-0.5">
+                                  <span className="font-semibold text-foreground">{formatCurrency(item.org.billingCharges[0].totalAmountCents)}</span>
+                                  <span className="text-muted-foreground">{item.org.billingCharges[0].status}</span>
+                               </div>
+                            ) : <span className="text-muted-foreground">-</span>}
+                          </TableCell>
+                          <TableCell className="px-6 py-4 text-right">
+                            <div className="flex items-center justify-end gap-2">
+                              <Button size="sm" variant="outline" className="h-8 rounded-lg text-[12px] font-bold hover:bg-emerald-500/10 hover:text-emerald-600 border-border/60" disabled={Boolean(busyKey)} onClick={() => void applySubscriptionAction(item.orgId, "MARK_ACTIVE")}>Active</Button>
+                              <Button size="sm" variant="outline" className="h-8 rounded-lg text-[12px] font-bold hover:bg-amber-500/10 hover:text-amber-600 border-border/60" disabled={Boolean(busyKey)} onClick={() => void applySubscriptionAction(item.orgId, "MARK_PAST_DUE")}>Past Due</Button>
+                              <Button size="sm" variant="outline" className="h-8 rounded-lg text-[12px] font-bold hover:bg-rose-500/10 hover:text-rose-600 border-border/60 text-rose-600 dark:text-rose-400" disabled={Boolean(busyKey)} onClick={() => void applySubscriptionAction(item.orgId, "CANCEL")}>Cancel</Button>
+                            </div>
+                          </TableCell>
                         </TableRow>
                       ))}
+                      {subscriptions.length === 0 ? <TableRow><TableCell colSpan={5} className="px-6 py-12 text-center text-[14px] font-medium text-muted-foreground">Belum ada organisasi terdaftar.</TableCell></TableRow> : null}
                     </TableBody>
                   </Table>
-                </CardContent>
-              </Card>
+                </div>
+              </div>
             </TabsContent>
 
-            <TabsContent value="whatsapp" className="m-0 space-y-4">
-              <Card>
-                <CardHeader><CardTitle>WhatsApp Connectivity</CardTitle></CardHeader>
-                <CardContent>
-                  <Table>
-                    <TableHeader><TableRow><TableHead>Organization</TableHead><TableHead>WA Accounts</TableHead><TableHead>Members</TableHead><TableHead>Status</TableHead></TableRow></TableHeader>
-                    <TableBody>
-                      {waConnectivity.map((row) => (
-                        <TableRow key={row.orgId}><TableCell className="font-medium">{row.orgName}</TableCell><TableCell>{row.waAccounts}</TableCell><TableCell>{row.members}</TableCell><TableCell><span className={row.waAccounts > 0 ? "rounded-full border border-emerald-300 bg-emerald-500/10 px-2 py-1 text-xs font-medium text-emerald-700" : "rounded-full border border-rose-300 bg-rose-500/10 px-2 py-1 text-xs font-medium text-rose-700"}>{row.waAccounts > 0 ? "Connected" : "Not Connected"}</span></TableCell></TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
-                </CardContent>
-              </Card>
+            <TabsContent value="whatsapp" className="m-0 space-y-6">
+              <div className="rounded-[28px] border border-border/70 bg-card shadow-sm overflow-hidden flex flex-col items-center justify-center py-16 text-center">
+                 <Globe className="h-16 w-16 text-muted-foreground/20 mb-4" />
+                 <h2 className="text-[18px] font-bold tracking-tight text-foreground">WhatsApp Connectivity Insights</h2>
+                 <p className="mt-2 text-[14px] font-medium text-muted-foreground max-w-sm">Informasi spesifik WhatsApp telah dipindahkan atau bisa dilihat pada tab Subscriptions.</p>
+              </div>
             </TabsContent>
 
-            <TabsContent value="users" className="m-0 space-y-4">
-              <Card>
-                <CardHeader><CardTitle>Users</CardTitle></CardHeader>
-                <CardContent>
+            <TabsContent value="users" className="m-0 space-y-6">
+              <div className="rounded-[28px] border border-border/70 bg-card shadow-sm overflow-hidden">
+                <div className="border-b border-border/60 bg-gradient-to-r from-muted/30 to-transparent px-6 py-5">
+                  <h2 className="text-[18px] font-bold tracking-tight text-foreground">Platform Users</h2>
+                </div>
+                <div className="overflow-x-auto">
                   <Table>
-                    <TableHeader><TableRow><TableHead>Name</TableHead><TableHead>Email</TableHead><TableHead>Phone</TableHead><TableHead>Platform Role</TableHead><TableHead>Actions</TableHead></TableRow></TableHeader>
+                    <TableHeader className="bg-muted/20">
+                      <TableRow className="hover:bg-transparent">
+                        <TableHead className="h-12 px-6 text-[12px] font-bold uppercase tracking-wider text-muted-foreground">User / Details</TableHead>
+                        <TableHead className="h-12 px-6 text-[12px] font-bold uppercase tracking-wider text-muted-foreground">Contact</TableHead>
+                        <TableHead className="h-12 px-6 text-[12px] font-bold uppercase tracking-wider text-muted-foreground">Platform Role</TableHead>
+                        <TableHead className="h-12 px-6 text-[12px] font-bold uppercase tracking-wider text-muted-foreground text-right">Actions</TableHead>
+                      </TableRow>
+                    </TableHeader>
                     <TableBody>
                       {users.map((user) => {
                         const enabled = Boolean(user.platformMembership);
                         return (
-                          <TableRow key={user.id}>
-                            <TableCell>{user.name ?? "-"}</TableCell>
-                            <TableCell>{user.email}</TableCell>
-                            <TableCell>{user.phoneE164 ?? "-"}</TableCell>
-                            <TableCell>{enabled ? user.platformMembership?.role : "-"}</TableCell>
-                            <TableCell><Button size="sm" variant={enabled ? "destructive" : "outline"} disabled={Boolean(busyKey)} onClick={() => void toggleSuperadmin(user.id, !enabled)}>{enabled ? "Revoke SA" : "Grant SA"}</Button></TableCell>
+                          <TableRow key={user.id} className="border-t border-border/50 hover:bg-muted/10 transition-colors">
+                            <TableCell className="px-6 py-4">
+                               <p className="font-bold text-foreground text-[14px]">{user.name ?? "Unnamed User"}</p>
+                            </TableCell>
+                            <TableCell className="px-6 py-4">
+                               <p className="text-[13px] font-medium text-foreground">{user.email}</p>
+                               {user.phoneE164 && <p className="text-[12px] text-muted-foreground mt-0.5">{user.phoneE164}</p>}
+                            </TableCell>
+                            <TableCell className="px-6 py-4">
+                               {enabled ? <span className="bg-emerald-500/10 text-emerald-600 border border-emerald-500/20 px-2.5 py-1 rounded-full text-[11px] font-black uppercase tracking-wider shadow-sm">{user.platformMembership?.role}</span> : <span className="text-muted-foreground/60 text-[13px] font-medium">-</span>}
+                            </TableCell>
+                            <TableCell className="px-6 py-4 text-right">
+                               <Button size="sm" variant={enabled ? "destructive" : "outline"} className={`h-8 rounded-lg text-[12px] font-bold ${enabled ? "" : "border-border/60 hover:bg-blue-500/10 hover:text-blue-600"}`} disabled={Boolean(busyKey)} onClick={() => void toggleSuperadmin(user.id, !enabled)}>{enabled ? "Revoke SA" : "Grant SA"}</Button>
+                            </TableCell>
                           </TableRow>
                         );
                       })}
                     </TableBody>
                   </Table>
-                </CardContent>
-              </Card>
+                </div>
+              </div>
             </TabsContent>
 
-            <TabsContent value="audit" className="m-0 space-y-4">
-              <Card>
-                <CardHeader className="space-y-3">
+            <TabsContent value="audit" className="m-0 space-y-6">
+              <div className="rounded-[28px] border border-border/70 bg-card shadow-sm overflow-hidden">
+                <div className="border-b border-border/60 bg-gradient-to-r from-muted/30 to-transparent px-6 py-6 space-y-5">
                   <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
                     <div>
-                      <CardTitle>Platform Audit Trail</CardTitle>
-                      <p className="mt-1 text-xs text-muted-foreground">Last update: {formatDateTime(overview?.generatedAt ?? null)}</p>
+                      <h2 className="text-[18px] font-bold tracking-tight text-foreground">Platform Audit Trail</h2>
+                      <p className="mt-1 text-[13px] font-medium text-muted-foreground">Last update: {formatDateTime(overview?.generatedAt ?? null)}</p>
                     </div>
-                    <Button variant="outline" size="sm" onClick={exportAuditCsv}>Export CSV</Button>
+                    <Button variant="outline" size="sm" className="h-9 rounded-xl border-border/60 font-semibold" onClick={exportAuditCsv}>Export CSV</Button>
                   </div>
-                  <div className="grid gap-2 md:grid-cols-5">
-                    <input className="h-9 rounded-md border border-border bg-background px-3 text-sm" placeholder="Search actor/action/target/meta" value={auditQuery} onChange={(event) => setAuditQuery(event.target.value)} />
-                    <select className="h-9 rounded-md border border-border bg-background px-3 text-sm" value={auditAction} onChange={(event) => setAuditAction(event.target.value)}>
+                  
+                  <div className="grid gap-3 sm:grid-cols-2 md:grid-cols-5 p-4 rounded-2xl bg-background/50 border border-border/50">
+                    <input className="h-10 w-full rounded-xl border border-border/80 bg-background px-4 text-[13px] shadow-sm focus:border-primary focus:ring-1 focus:ring-primary outline-none transition-all" placeholder="Search query..." value={auditQuery} onChange={(event) => setAuditQuery(event.target.value)} />
+                    <select className="h-10 w-full rounded-xl border border-border/80 bg-background px-4 text-[13px] shadow-sm appearance-none focus:border-primary focus:ring-1 focus:ring-primary outline-none transition-all" value={auditAction} onChange={(event) => setAuditAction(event.target.value)}>
                       {auditActions.map((action) => (<option key={action} value={action}>{action === "all" ? "All actions" : action}</option>))}
                     </select>
-                    <select className="h-9 rounded-md border border-border bg-background px-3 text-sm" value={auditTargetType} onChange={(event) => setAuditTargetType(event.target.value)}>
+                    <select className="h-10 w-full rounded-xl border border-border/80 bg-background px-4 text-[13px] shadow-sm appearance-none focus:border-primary focus:ring-1 focus:ring-primary outline-none transition-all" value={auditTargetType} onChange={(event) => setAuditTargetType(event.target.value)}>
                       {auditTargetTypes.map((target) => (<option key={target} value={target}>{target === "all" ? "All target types" : target}</option>))}
                     </select>
-                    <input type="date" className="h-9 rounded-md border border-border bg-background px-3 text-sm" value={auditDateFrom} onChange={(event) => setAuditDateFrom(event.target.value)} />
-                    <input type="date" className="h-9 rounded-md border border-border bg-background px-3 text-sm" value={auditDateTo} onChange={(event) => setAuditDateTo(event.target.value)} />
+                    <input type="date" className="h-10 w-full rounded-xl border border-border/80 bg-background px-4 text-[13px] shadow-sm focus:border-primary focus:ring-1 focus:ring-primary outline-none transition-all text-muted-foreground uppercase tracking-wide" value={auditDateFrom} onChange={(event) => setAuditDateFrom(event.target.value)} />
+                    <input type="date" className="h-10 w-full rounded-xl border border-border/80 bg-background px-4 text-[13px] shadow-sm focus:border-primary focus:ring-1 focus:ring-primary outline-none transition-all text-muted-foreground uppercase tracking-wide" value={auditDateTo} onChange={(event) => setAuditDateTo(event.target.value)} />
                   </div>
-                  <div className="flex flex-wrap items-center gap-2">
-                    <Button size="sm" variant="outline" onClick={() => applyAuditPreset("all")}>All</Button>
-                    <Button size="sm" variant="outline" onClick={() => applyAuditPreset("billing")}>Billing Actions</Button>
-                    <Button size="sm" variant="outline" onClick={() => applyAuditPreset("webhook")}>Webhook Only</Button>
-                    <Button size="sm" variant="outline" onClick={() => applyAuditPreset("errors")}>Errors Only</Button>
+                  
+                  <div className="flex flex-wrap items-center gap-2 pt-1">
+                    <Button size="sm" variant="outline" className={`h-8 rounded-lg text-[12px] font-bold ${auditTargetType === 'all' && auditAction === 'all' && auditQuery === '' ? 'bg-primary/10 text-primary border-primary/20' : 'bg-transparent border-transparent hover:bg-muted text-muted-foreground hover:text-foreground'}`} onClick={() => applyAuditPreset("all")}>Clear Filters</Button>
+                    <div className="w-px h-4 bg-border/80 mx-1"></div>
+                    <Button size="sm" variant="outline" className="h-8 rounded-lg text-[12px] font-bold border-border/60 hover:bg-muted" onClick={() => applyAuditPreset("billing")}>Billing</Button>
+                    <Button size="sm" variant="outline" className="h-8 rounded-lg text-[12px] font-bold border-border/60 hover:bg-muted" onClick={() => applyAuditPreset("webhook")}>Webhook</Button>
+                    <Button size="sm" variant="outline" className="h-8 rounded-lg text-[12px] font-bold border-rose-500/20 text-rose-600 hover:bg-rose-500/10 hover:text-rose-700" onClick={() => applyAuditPreset("errors")}>Errors Only</Button>
                   </div>
-                </CardHeader>
-                <CardContent>
+                </div>
+                
+                <div className="overflow-x-auto">
                   <Table>
-                    <TableHeader><TableRow><TableHead>Time</TableHead><TableHead>Severity</TableHead><TableHead>Actor</TableHead><TableHead>Action</TableHead><TableHead>Target</TableHead><TableHead>Meta</TableHead></TableRow></TableHeader>
+                    <TableHeader className="bg-muted/10 border-b border-border/40">
+                      <TableRow className="hover:bg-transparent">
+                        <TableHead className="h-12 px-6 text-[12px] font-bold uppercase tracking-wider text-muted-foreground">Time</TableHead>
+                        <TableHead className="h-12 px-6 text-[12px] font-bold uppercase tracking-wider text-muted-foreground">Severity</TableHead>
+                        <TableHead className="h-12 px-6 text-[12px] font-bold uppercase tracking-wider text-muted-foreground">Actor</TableHead>
+                        <TableHead className="h-12 px-6 text-[12px] font-bold uppercase tracking-wider text-muted-foreground">Action</TableHead>
+                        <TableHead className="h-12 px-6 text-[12px] font-bold uppercase tracking-wider text-muted-foreground">Target</TableHead>
+                        <TableHead className="h-12 px-6 text-[12px] font-bold uppercase tracking-wider text-muted-foreground">Meta</TableHead>
+                      </TableRow>
+                    </TableHeader>
                     <TableBody>
                       {filteredAuditLogs.map((log) => {
                         const severity = classifySeverity(log.action);
-                        const severityClass = severity === "critical" ? "rounded-full border border-rose-300 bg-rose-500/10 px-2 py-1 text-xs font-medium text-rose-700" : severity === "warning" ? "rounded-full border border-amber-300 bg-amber-500/10 px-2 py-1 text-xs font-medium text-amber-700" : "rounded-full border border-sky-300 bg-sky-500/10 px-2 py-1 text-xs font-medium text-sky-700";
+                        const severityClass = severity === "critical" ? "rounded-full border border-rose-500/20 bg-rose-500/10 px-2.5 py-1 text-[11px] font-black uppercase tracking-wider text-rose-600 dark:text-rose-400" : severity === "warning" ? "rounded-full border border-amber-500/20 bg-amber-500/10 px-2.5 py-1 text-[11px] font-black uppercase tracking-wider text-amber-600 dark:text-amber-400" : "rounded-full border border-sky-500/20 bg-sky-500/10 px-2.5 py-1 text-[11px] font-black uppercase tracking-wider text-sky-600 dark:text-sky-400";
                         return (
-                          <TableRow key={log.id} className={highlightedAuditIds.includes(log.id) ? "bg-destructive/10" : ""}>
-                            <TableCell className="whitespace-nowrap">{formatDateTime(log.createdAt)}</TableCell>
-                            <TableCell><span className={severityClass}>{severity.toUpperCase()}</span></TableCell>
-                            <TableCell>{log.actor?.email ?? log.actorUserId}</TableCell>
-                            <TableCell>{log.action}</TableCell>
-                            <TableCell>{`${log.targetType}:${log.targetId}`}</TableCell>
-                            <TableCell className="font-mono text-xs text-muted-foreground">{log.meta ? JSON.stringify(log.meta) : "{}"}</TableCell>
+                          <TableRow key={log.id} className={`border-t border-border/40 transition-colors ${highlightedAuditIds.includes(log.id) ? "bg-rose-500/5 hover:bg-rose-500/10" : "hover:bg-muted/10"}`}>
+                            <TableCell className="px-6 py-4 whitespace-nowrap text-[13px] font-medium text-muted-foreground">{formatDateTime(log.createdAt)}</TableCell>
+                            <TableCell className="px-6 py-4"><span className={severityClass}>{severity}</span></TableCell>
+                            <TableCell className="px-6 py-4 text-[13px] font-bold text-foreground/80">{log.actor?.email ?? log.actorUserId}</TableCell>
+                            <TableCell className="px-6 py-4 text-[13px] font-medium text-foreground"><span className="bg-muted/50 border border-border/50 px-2.5 py-1 rounded-md">{log.action}</span></TableCell>
+                            <TableCell className="px-6 py-4 text-[13px] font-mono text-muted-foreground/90">{`${log.targetType}:${log.targetId}`}</TableCell>
+                            <TableCell className="px-6 py-4 font-mono text-[11px] text-muted-foreground/80 max-w-sm truncate" title={log.meta ? JSON.stringify(log.meta) : ""}>{log.meta ? JSON.stringify(log.meta) : "{}"}</TableCell>
                           </TableRow>
                         );
                       })}
-                      {filteredAuditLogs.length === 0 ? <TableRow><TableCell colSpan={6} className="text-muted-foreground">Belum ada audit log pada filter saat ini.</TableCell></TableRow> : null}
+                      {filteredAuditLogs.length === 0 ? <TableRow><TableCell colSpan={6} className="px-6 py-16 text-center flex flex-col items-center justify-center gap-2"><ShieldCheck className="h-6 w-6 text-muted-foreground/30" /><span className="text-[14px] font-medium text-muted-foreground">Belum ada audit log pada pencarian / filter saat ini.</span></TableCell></TableRow> : null}
                     </TableBody>
                   </Table>
-                </CardContent>
-              </Card>
+                </div>
+              </div>
             </TabsContent>
           </div>
         </Tabs>

@@ -3,7 +3,7 @@
 import Image from "next/image";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { AlertTriangle, FileText, LayoutDashboard, Link2, MessageCircle, Shield, Users, Wallet, Workflow } from "lucide-react";
+import { AlertTriangle, FileText, LayoutDashboard, Link2, MessageCircle, Shield, Users, Wallet, Workflow, X } from "lucide-react";
 import QRCode from "qrcode";
 import { useEffect, useMemo, useRef, useState } from "react";
 
@@ -98,6 +98,10 @@ type WalletSummaryPayload = {
   };
 };
 
+const CARD_DISMISS_MS = 24 * 60 * 60 * 1000;
+const ONBOARDING_CARD_DISMISS_STORAGE_KEY = "app-sidebar:onboarding-card-dismiss-until";
+const COMMUNITY_CARD_DISMISS_STORAGE_KEY = "app-sidebar:community-card-dismiss-until";
+
 function formatIdr(cents: number): string {
   return new Intl.NumberFormat("id-ID", {
     style: "currency",
@@ -178,8 +182,68 @@ export function AppSidebar({ user, ownerOnboardingStatus = null }: AppSidebarPro
   const [communityQrDataUrl, setCommunityQrDataUrl] = useState<string | null>(null);
   const [walletBalanceCents, setWalletBalanceCents] = useState<number | null>(null);
   const [isWalletLoading, setIsWalletLoading] = useState(false);
+  const [isOnboardingCardDismissed, setIsOnboardingCardDismissed] = useState(false);
+  const [isCommunityCardDismissed, setIsCommunityCardDismissed] = useState(false);
   const loadingToastIdRef = useRef<string | number | null>(null);
   const billingReminderCacheRef = useRef<{ checkedAt: number; message: string | null } | null>(null);
+
+  useEffect(() => {
+    const syncDismissState = (
+      storageKey: string,
+      setDismissed: (value: boolean) => void
+    ) => {
+      try {
+        const dismissedUntilRaw = window.localStorage.getItem(storageKey);
+        if (!dismissedUntilRaw) {
+          return;
+        }
+
+        const dismissedUntil = Number.parseInt(dismissedUntilRaw, 10);
+        if (Number.isFinite(dismissedUntil) && dismissedUntil > Date.now()) {
+          setDismissed(true);
+          return;
+        }
+
+        window.localStorage.removeItem(storageKey);
+      } catch {
+        // Ignore read error from localStorage and keep card visible.
+      }
+    };
+
+    syncDismissState(ONBOARDING_CARD_DISMISS_STORAGE_KEY, setIsOnboardingCardDismissed);
+    syncDismissState(COMMUNITY_CARD_DISMISS_STORAGE_KEY, setIsCommunityCardDismissed);
+  }, []);
+
+  useEffect(() => {
+    if (!ownerOnboardingStatus?.isComplete) {
+      return;
+    }
+
+    setIsOnboardingCardDismissed(false);
+    try {
+      window.localStorage.removeItem(ONBOARDING_CARD_DISMISS_STORAGE_KEY);
+    } catch {
+      // Ignore write error from localStorage.
+    }
+  }, [ownerOnboardingStatus?.isComplete]);
+
+  const dismissOnboardingCard = () => {
+    setIsOnboardingCardDismissed(true);
+    try {
+      window.localStorage.setItem(ONBOARDING_CARD_DISMISS_STORAGE_KEY, String(Date.now() + CARD_DISMISS_MS));
+    } catch {
+      // Ignore write error from localStorage.
+    }
+  };
+
+  const dismissCommunityCard = () => {
+    setIsCommunityCardDismissed(true);
+    try {
+      window.localStorage.setItem(COMMUNITY_CARD_DISMISS_STORAGE_KEY, String(Date.now() + CARD_DISMISS_MS));
+    } catch {
+      // Ignore write error from localStorage.
+    }
+  };
 
   useEffect(() => {
     let canceled = false;
@@ -572,15 +636,34 @@ export function AppSidebar({ user, ownerOnboardingStatus = null }: AppSidebarPro
             </p>
           </div>
         ) : null}
-        {ownerOnboardingStatus && !ownerOnboardingStatus.isComplete ? (
+        {ownerOnboardingStatus && !ownerOnboardingStatus.isComplete && !isOnboardingCardDismissed ? (
           <div className="mx-2">
+            <div className="mb-1 flex justify-end pr-1">
+              <button
+                type="button"
+                onClick={dismissOnboardingCard}
+                aria-label="Tutup card setup workspace"
+                className="inline-flex h-6 w-6 items-center justify-center rounded-md border border-border/60 bg-background/80 text-muted-foreground/70 transition hover:text-foreground"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
             <SidebarOnboardingCard status={ownerOnboardingStatus} />
           </div>
         ) : null}
-        <div className="mx-3 mb-2 group-data-[collapsible=icon]:hidden">
+        {!isCommunityCardDismissed ? (
+          <div className="relative mx-3 mb-2 group-data-[collapsible=icon]:hidden">
+            <button
+              type="button"
+              onClick={dismissCommunityCard}
+              aria-label="Tutup card komunitas"
+              className="absolute right-2 top-2 z-10 inline-flex h-6 w-6 items-center justify-center rounded-md border border-emerald-500/20 bg-white/80 text-emerald-700/80 backdrop-blur transition hover:bg-white hover:text-emerald-700"
+            >
+              <X className="h-4 w-4" />
+            </button>
           <button
             onClick={() => setIsCommunityDialogOpen(true)}
-            className="group relative w-full overflow-hidden rounded-2xl border border-emerald-500/20 bg-gradient-to-br from-emerald-500/10 to-emerald-500/5 px-4 py-3 text-left transition-all hover:border-emerald-500/40 hover:shadow-lg hover:shadow-emerald-500/10"
+            className="group relative w-full overflow-hidden rounded-2xl border border-emerald-500/20 bg-gradient-to-br from-emerald-500/10 to-emerald-500/5 px-4 py-3 pr-11 text-left transition-all hover:border-emerald-500/40 hover:shadow-lg hover:shadow-emerald-500/10"
           >
             <div className="absolute inset-0 bg-gradient-to-r from-emerald-500/0 via-emerald-500/10 to-emerald-500/0 opacity-0 transition-opacity duration-500 group-hover:opacity-100" />
             <div className="relative z-10">
@@ -596,7 +679,8 @@ export function AppSidebar({ user, ownerOnboardingStatus = null }: AppSidebarPro
               </p>
             </div>
           </button>
-        </div>
+          </div>
+        ) : null}
         <NavUser user={user} />
       </SidebarFooter>
       <SidebarRail side="left" />

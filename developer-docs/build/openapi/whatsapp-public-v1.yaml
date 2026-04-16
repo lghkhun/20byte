@@ -1,0 +1,103 @@
+openapi: 3.0.3
+info:
+  title: 20byte WhatsApp Public API v1
+  version: 1.0.0
+  description: Public API for external integration with 20byte WhatsApp services.
+servers:
+  - url: https://20byte.com/api/public/v1/whatsapp
+security:
+  - bearerAuth: []
+paths:
+  /messages/send:
+    post:
+      summary: Send text message
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [to, text]
+              properties:
+                to:
+                  type: string
+                text:
+                  type: string
+      responses:
+        "200":
+          description: OK
+  /messages/send-media-url:
+    post:
+      summary: Send media by URL
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [to, mediaUrl]
+              properties:
+                to:
+                  type: string
+                mediaUrl:
+                  type: string
+                caption:
+                  type: string
+      responses:
+        "200":
+          description: OK
+  /schedules:
+    post:
+      summary: Create schedule
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [to, text, dueAt]
+              properties:
+                to:
+                  type: string
+                text:
+                  type: string
+                dueAt:
+                  type: string
+                  format: date-time
+      responses:
+        "201":
+          description: Created
+  /webhook:
+    get:
+      summary: Get webhook config
+      responses:
+        "200":
+          description: OK
+    put:
+      summary: Set webhook config
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                url:
+                  type: string
+                enabled:
+                  type: boolean
+                eventFilters:
+                  type: array
+                  items:
+                    type: string
+                regenerateSecret:
+                  type: boolean
+      responses:
+        "200":
+          description: OK
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: API Key

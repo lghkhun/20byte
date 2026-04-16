@@ -18,10 +18,15 @@ curl http://127.0.0.1:3001/api/health
 
 ## Command Harian Saat Development
 ```bash
-npm run db:migrate
+npm run db:migrate:vps
 npm run db:push
 npm run db:studio
 ```
+
+## Catatan Tunnel (wajib)
+- `tunnel:vps` sekarang pakai forward eksplisit:
+  - `127.0.0.1:3307 -> VPS 127.0.0.1:3307` (MySQL)
+  - `127.0.0.1:6379 -> VPS 127.0.0.1:6379` (Redis)
 
 ## Selesai Development Local
 1. Stop `npm run dev` (terminal B): `Ctrl + C`

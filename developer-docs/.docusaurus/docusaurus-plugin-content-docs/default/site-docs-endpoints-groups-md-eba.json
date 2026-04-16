@@ -1,0 +1,26 @@
+{
+  "id": "endpoints/endpoints-groups",
+  "title": "Groups",
+  "description": "POST /groups/messages/send",
+  "source": "@site/docs/endpoints/groups.md",
+  "sourceDirName": "endpoints",
+  "slug": "/endpoints/endpoints-groups",
+  "permalink": "/endpoints/endpoints-groups",
+  "draft": false,
+  "unlisted": false,
+  "tags": [],
+  "version": "current",
+  "frontMatter": {
+    "id": "endpoints-groups",
+    "title": "Groups"
+  },
+  "sidebar": "apiSidebar",
+  "previous": {
+    "title": "Messages",
+    "permalink": "/endpoints/endpoints-messages"
+  },
+  "next": {
+    "title": "Device",
+    "permalink": "/endpoints/endpoints-device"
+  }
+}

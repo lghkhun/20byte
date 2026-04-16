@@ -1,0 +1,78 @@
+{
+  "docusaurus-plugin-content-docs": {
+    "default": {
+      "path": "/",
+      "versions": [
+        {
+          "name": "current",
+          "label": "Next",
+          "isLast": true,
+          "path": "/",
+          "mainDocId": "overview",
+          "docs": [
+            {
+              "id": "authentication",
+              "path": "/authentication",
+              "sidebar": "apiSidebar"
+            },
+            {
+              "id": "endpoints/endpoints-device",
+              "path": "/endpoints/endpoints-device",
+              "sidebar": "apiSidebar"
+            },
+            {
+              "id": "endpoints/endpoints-groups",
+              "path": "/endpoints/endpoints-groups",
+              "sidebar": "apiSidebar"
+            },
+            {
+              "id": "endpoints/endpoints-messages",
+              "path": "/endpoints/endpoints-messages",
+              "sidebar": "apiSidebar"
+            },
+            {
+              "id": "endpoints/endpoints-schedules",
+              "path": "/endpoints/endpoints-schedules",
+              "sidebar": "apiSidebar"
+            },
+            {
+              "id": "endpoints/endpoints-webhook",
+              "path": "/endpoints/endpoints-webhook",
+              "sidebar": "apiSidebar"
+            },
+            {
+              "id": "error-codes",
+              "path": "/error-codes",
+              "sidebar": "apiSidebar"
+            },
+            {
+              "id": "migration-woowa",
+              "path": "/migration-woowa",
+              "sidebar": "apiSidebar"
+            },
+            {
+              "id": "overview",
+              "path": "/",
+              "sidebar": "apiSidebar"
+            },
+            {
+              "id": "payloads",
+              "path": "/payloads",
+              "sidebar": "apiSidebar"
+            }
+          ],
+          "draftIds": [],
+          "sidebars": {
+            "apiSidebar": {
+              "link": {
+                "path": "/",
+                "label": "overview"
+              }
+            }
+          }
+        }
+      ],
+      "breadcrumbs": true
+    }
+  }
+}

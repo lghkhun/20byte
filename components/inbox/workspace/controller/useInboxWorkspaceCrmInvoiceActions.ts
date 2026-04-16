@@ -11,7 +11,7 @@ import type {
 import type { InboxWorkspaceLoaders } from "./useInboxWorkspaceLoaders";
 import type { InboxWorkspaceState } from "./useInboxWorkspaceState";
 
-type SendTextMessage = (text: string) => Promise<void>;
+type SendTextMessage = (text: string) => Promise<{ scheduledDueAt?: string | null } | void>;
 
 export function useInboxWorkspaceCrmInvoiceActions(
   state: InboxWorkspaceState,
@@ -246,8 +246,12 @@ export function useInboxWorkspaceCrmInvoiceActions(
 
   const sendQuickReply = useCallback(
     async (text: string) => {
-      await sendTextMessage(text);
-      setIsQuickReplyModalOpen(false);
+      try {
+        await sendTextMessage(text);
+        setIsQuickReplyModalOpen(false);
+      } catch {
+        // Error feedback is handled by sendTextMessage through workspace state/toast.
+      }
     },
     [sendTextMessage, setIsQuickReplyModalOpen]
   );

@@ -1,0 +1,26 @@
+{
+  "id": "payloads",
+  "title": "Payload Reference",
+  "description": "Send Text",
+  "source": "@site/docs/payloads.md",
+  "sourceDirName": ".",
+  "slug": "/payloads",
+  "permalink": "/payloads",
+  "draft": false,
+  "unlisted": false,
+  "tags": [],
+  "version": "current",
+  "frontMatter": {
+    "id": "payloads",
+    "title": "Payload Reference"
+  },
+  "sidebar": "apiSidebar",
+  "previous": {
+    "title": "Webhook",
+    "permalink": "/endpoints/endpoints-webhook"
+  },
+  "next": {
+    "title": "Error Codes",
+    "permalink": "/error-codes"
+  }
+}
