@@ -299,7 +299,9 @@ export function MessageInput({
 
   return (
     <form
-      className={`space-y-2 border-t border-border/80 bg-card/95 backdrop-blur-sm ${density === "compact" ? "px-3 py-2 sm:px-4 sm:py-3" : "px-3 py-3 sm:px-4 sm:py-4"}`}
+      className={`space-y-2 border-t border-border/70 bg-card/95 backdrop-blur-sm ${
+        density === "compact" ? "px-2 py-2 sm:px-4 sm:py-3" : "px-2 py-2.5 sm:px-4 sm:py-4"
+      }`}
       onSubmit={handleSubmit}
     >
       {replyTarget ? (
@@ -314,8 +316,8 @@ export function MessageInput({
         </div>
       ) : null}
       <div
-        className={`relative flex items-end gap-2 rounded-2xl border border-border bg-background/95 shadow-sm transition ${
-          density === "compact" ? "px-2 py-1.5" : "px-2 py-2 sm:px-3 sm:py-2"
+        className={`relative flex items-end gap-1.5 rounded-2xl border border-border bg-background/95 shadow-sm transition ${
+          density === "compact" ? "px-2 py-1.5" : "px-2 py-2 sm:px-3"
         }`}
       >
         <textarea
@@ -342,16 +344,17 @@ export function MessageInput({
           placeholder="Ketik pesan..."
           disabled={disabled}
           rows={1}
-          className="min-h-8 flex-1 resize-none border-0 bg-transparent px-0 py-0 text-sm shadow-none placeholder:text-muted-foreground/80 focus-visible:outline-none"
+          className="min-h-[40px] flex-1 resize-none border-0 bg-transparent px-1 py-2 text-[15px] leading-relaxed shadow-none placeholder:text-muted-foreground/70 focus-visible:outline-none sm:text-sm sm:py-0 sm:min-h-8"
         />
-        <div className="flex items-center gap-1">
+        <div className="flex items-center gap-0.5 pb-1 sm:gap-1">
+          {/* Schedule button — hidden on mobile to save space */}
           <DropdownMenu open={isScheduleMenuOpen} onOpenChange={setIsScheduleMenuOpen}>
             <DropdownMenuTrigger asChild>
               <Button
                 type="button"
                 variant="ghost"
                 size="icon"
-                className="h-8 w-8 rounded-md text-muted-foreground"
+                className="hidden h-9 w-9 rounded-lg text-muted-foreground sm:flex"
                 title="Jadwalkan pengiriman"
                 disabled={disabled || !textValue.trim() || isScheduling}
               >
@@ -404,7 +407,7 @@ export function MessageInput({
             type="button"
             variant="ghost"
             size="icon"
-            className="h-8 w-8 rounded-md text-muted-foreground"
+            className="h-9 w-9 rounded-lg text-muted-foreground"
             title="Sisipkan emoji"
             onClick={() => {
               setIsEmojiOpen((current) => !current);
@@ -412,7 +415,7 @@ export function MessageInput({
           >
             <Smile className="h-4 w-4" />
           </Button>
-          <label className="inline-flex h-8 w-8 cursor-pointer items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground">
+          <label className="inline-flex h-9 w-9 cursor-pointer items-center justify-center rounded-lg text-muted-foreground hover:bg-accent hover:text-foreground">
             <Paperclip className="h-4 w-4" />
             <input
               type="file"
@@ -429,11 +432,11 @@ export function MessageInput({
             />
           </label>
         </div>
-        <Button type="submit" disabled={disabled} className="h-9 rounded-xl px-4 shadow-md shadow-primary/20 sm:px-6">
+        <Button type="submit" disabled={disabled} className="h-10 rounded-xl px-4 font-semibold shadow-md shadow-primary/20 sm:h-9 sm:px-5">
           Kirim
         </Button>
         {isEmojiOpen ? (
-          <div className="absolute bottom-[calc(100%_+_12px)] right-0 z-20 overflow-hidden rounded-2xl border border-border bg-card shadow-2xl">
+          <div className="absolute bottom-[calc(100%_+_12px)] right-0 z-20 max-w-[min(340px,100vw-16px)] overflow-hidden rounded-2xl border border-border bg-card shadow-2xl">
             <EmojiPicker
               lazyLoadEmojis
               emojiStyle={EmojiStyle.APPLE}

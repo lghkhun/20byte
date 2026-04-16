@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Bar, BarChart, CartesianGrid, XAxis, YAxis } from "recharts";
-import { ShieldCheck, RefreshCcw, Layers, Globe, Users2, Activity, ShieldAlert, AlertCircle, ReceiptText, CreditCard, WalletCards, HandCoins } from "lucide-react";
+import { ShieldCheck, RefreshCcw, Layers, Globe, Users2, Activity, ShieldAlert, AlertCircle, ReceiptText, CreditCard, WalletCards, HandCoins, TicketPercent } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { ChartContainer, ChartTooltip, ChartTooltipContent, type ChartConfig } from "@/components/ui/chart";
@@ -129,6 +129,8 @@ type BillingChargeItem = {
   baseAmountCents: number;
   gatewayFeeCents: number;
   totalAmountCents: number;
+  appliedCouponCode: string | null;
+  couponDiscountCents: number;
   paymentNumber: string | null;
   expiredAt: string | null;
   paidAt: string | null;
@@ -203,6 +205,25 @@ type WalletWithdrawRequestItem = {
   };
 };
 
+type CouponItem = {
+  id: string;
+  code: string;
+  name: string;
+  description: string | null;
+  discountType: "FIXED" | "PERCENT";
+  discountValue: number;
+  maxDiscountCents: number | null;
+  minSubtotalCents: number | null;
+  maxRedemptions: number | null;
+  redeemedCount: number;
+  target: "BILLING" | "BUSINESS_PROVISIONING" | "ALL";
+  startsAt: string | null;
+  expiresAt: string | null;
+  isActive: boolean;
+  createdAt: string;
+  updatedAt: string;
+};
+
 function formatDate(value: string | null): string {
   if (!value) {
     return "-";
@@ -272,6 +293,7 @@ export default function SuperadminPage() {
   const [invoiceAttempts, setInvoiceAttempts] = useState<InvoicePaymentAttemptItem[]>([]);
   const [walletTopups, setWalletTopups] = useState<WalletTopupItem[]>([]);
   const [walletWithdrawRequests, setWalletWithdrawRequests] = useState<WalletWithdrawRequestItem[]>([]);
+  const [coupons, setCoupons] = useState<CouponItem[]>([]);
   const [trendWindow, setTrendWindow] = useState<"7" | "30">("7");
   const [error, setError] = useState<string | null>(null);
   const [busyKey, setBusyKey] = useState<string | null>(null);
@@ -280,6 +302,17 @@ export default function SuperadminPage() {
   const [auditTargetType, setAuditTargetType] = useState("all");
   const [auditDateFrom, setAuditDateFrom] = useState("");
   const [auditDateTo, setAuditDateTo] = useState("");
+  const [couponCode, setCouponCode] = useState("");
+  const [couponName, setCouponName] = useState("");
+  const [couponDescription, setCouponDescription] = useState("");
+  const [couponTarget, setCouponTarget] = useState<"ALL" | "BILLING" | "BUSINESS_PROVISIONING">("ALL");
+  const [couponDiscountType, setCouponDiscountType] = useState<"FIXED" | "PERCENT">("FIXED");
+  const [couponDiscountValue, setCouponDiscountValue] = useState("");
+  const [couponMaxDiscount, setCouponMaxDiscount] = useState("");
+  const [couponMinSubtotal, setCouponMinSubtotal] = useState("");
+  const [couponMaxRedemptions, setCouponMaxRedemptions] = useState("");
+  const [couponStartsAt, setCouponStartsAt] = useState("");
+  const [couponExpiresAt, setCouponExpiresAt] = useState("");
   const [highlightedAuditIds, setHighlightedAuditIds] = useState<string[]>([]);
   const knownFailureAuditIdsRef = useRef<Set<string>>(new Set());
   const isFirstFailurePollRef = useRef(true);
@@ -393,6 +426,20 @@ export default function SuperadminPage() {
     }
   }, []);
 
+  const loadCoupons = useCallback(async () => {
+    setError(null);
+    try {
+      const couponsRes = await fetch("/api/sa/coupons?limit=300", { cache: "no-store" });
+      const payload = (await couponsRes.json().catch(() => null)) as { data?: { coupons?: CouponItem[] }; error?: { message?: string } } | null;
+      if (!couponsRes.ok) {
+        throw new Error(payload?.error?.message ?? "Failed to load coupons.");
+      }
+      setCoupons(payload?.data?.coupons ?? []);
+    } catch (loadError) {
+      setError(loadError instanceof Error ? loadError.message : "Failed to load coupons.");
+    }
+  }, []);
+
   const pollWebhookFailures = useCallback(async () => {
     try {
       const [verificationRes, missingChargeRes] = await Promise.all([
@@ -481,6 +528,10 @@ export default function SuperadminPage() {
     void loadFinance();
   }, [loadFinance]);
 
+  useEffect(() => {
+    void loadCoupons();
+  }, [loadCoupons]);
+
   async function applySubscriptionAction(
     orgId: string,
     action: "MARK_ACTIVE" | "MARK_PAST_DUE" | "CANCEL" | "EXTEND_TRIAL",
@@ -557,6 +608,82 @@ export default function SuperadminPage() {
       await Promise.all([loadFinance(), loadOverview(), loadAuditLogs()]);
     } catch (requestError) {
       setError(requestError instanceof Error ? requestError.message : "Failed to process withdraw request.");
+    } finally {
+      setBusyKey(null);
+    }
+  }
+
+  async function createCoupon() {
+    const code = couponCode.trim().toUpperCase();
+    const name = couponName.trim();
+    if (!code || !name) {
+      setError("Kode dan nama kupon wajib diisi.");
+      return;
+    }
+
+    setBusyKey("coupon:create");
+    setError(null);
+    try {
+      const response = await fetch("/api/sa/coupons", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          code,
+          name,
+          description: couponDescription.trim() || null,
+          target: couponTarget,
+          discountType: couponDiscountType,
+          discountValue: Number(couponDiscountValue),
+          maxDiscountCents: couponMaxDiscount.trim() ? Number(couponMaxDiscount) : null,
+          minSubtotalCents: couponMinSubtotal.trim() ? Number(couponMinSubtotal) : null,
+          maxRedemptions: couponMaxRedemptions.trim() ? Number(couponMaxRedemptions) : null,
+          startsAt: couponStartsAt || null,
+          expiresAt: couponExpiresAt || null,
+          isActive: true
+        })
+      });
+      const payload = (await response.json().catch(() => null)) as { error?: { message?: string } } | null;
+      if (!response.ok) {
+        throw new Error(payload?.error?.message ?? "Failed to create coupon.");
+      }
+
+      setCouponCode("");
+      setCouponName("");
+      setCouponDescription("");
+      setCouponDiscountValue("");
+      setCouponMaxDiscount("");
+      setCouponMinSubtotal("");
+      setCouponMaxRedemptions("");
+      setCouponStartsAt("");
+      setCouponExpiresAt("");
+      await Promise.all([loadCoupons(), loadAuditLogs()]);
+    } catch (actionError) {
+      setError(actionError instanceof Error ? actionError.message : "Failed to create coupon.");
+    } finally {
+      setBusyKey(null);
+    }
+  }
+
+  async function toggleCouponActive(couponId: string, isActive: boolean) {
+    setBusyKey(`coupon:${couponId}:${isActive ? "on" : "off"}`);
+    setError(null);
+    try {
+      const response = await fetch(`/api/sa/coupons/${encodeURIComponent(couponId)}`, {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({ isActive })
+      });
+      const payload = (await response.json().catch(() => null)) as { error?: { message?: string } } | null;
+      if (!response.ok) {
+        throw new Error(payload?.error?.message ?? "Failed to update coupon.");
+      }
+      await Promise.all([loadCoupons(), loadAuditLogs()]);
+    } catch (actionError) {
+      setError(actionError instanceof Error ? actionError.message : "Failed to update coupon.");
     } finally {
       setBusyKey(null);
     }
@@ -674,7 +801,7 @@ export default function SuperadminPage() {
                </p>
              </div>
           </div>
-          <Button size="lg" className="h-12 rounded-xl bg-emerald-600 hover:bg-emerald-700 font-bold text-white shadow-[0_8px_20px_-6px_rgba(16,185,129,0.3)] transition-all px-6 relative z-10" onClick={() => void Promise.all([loadCore(), loadOverview(), loadAuditLogs(), loadFinance()])} disabled={Boolean(busyKey)}>
+          <Button size="lg" className="h-12 rounded-xl bg-emerald-600 hover:bg-emerald-700 font-bold text-white shadow-[0_8px_20px_-6px_rgba(16,185,129,0.3)] transition-all px-6 relative z-10" onClick={() => void Promise.all([loadCore(), loadOverview(), loadAuditLogs(), loadFinance(), loadCoupons()])} disabled={Boolean(busyKey)}>
             <RefreshCcw className={`mr-2.5 h-5 w-5 ${busyKey ? "animate-spin" : ""}`} />
             Refresh Data
           </Button>
@@ -689,6 +816,7 @@ export default function SuperadminPage() {
             <TabsTrigger value="risk" className="flex-1 min-w-[120px] rounded-xl text-[13px] font-bold data-[state=active]:bg-white dark:data-[state=active]:bg-card data-[state=active]:shadow-sm data-[state=active]:text-emerald-600 py-2.5 transition-all">Risk & Billing</TabsTrigger>
             <TabsTrigger value="subscriptions" className="flex-1 min-w-[120px] rounded-xl text-[13px] font-bold data-[state=active]:bg-white dark:data-[state=active]:bg-card data-[state=active]:shadow-sm data-[state=active]:text-emerald-600 py-2.5 transition-all">Subscriptions</TabsTrigger>
             <TabsTrigger value="transactions" className="flex-1 min-w-[120px] rounded-xl text-[13px] font-bold data-[state=active]:bg-white dark:data-[state=active]:bg-card data-[state=active]:shadow-sm data-[state=active]:text-emerald-600 py-2.5 transition-all">Transactions</TabsTrigger>
+            <TabsTrigger value="coupons" className="flex-1 min-w-[120px] rounded-xl text-[13px] font-bold data-[state=active]:bg-white dark:data-[state=active]:bg-card data-[state=active]:shadow-sm data-[state=active]:text-emerald-600 py-2.5 transition-all">Coupons</TabsTrigger>
             <TabsTrigger value="whatsapp" className="flex-1 min-w-[120px] rounded-xl text-[13px] font-bold data-[state=active]:bg-white dark:data-[state=active]:bg-card data-[state=active]:shadow-sm data-[state=active]:text-emerald-600 py-2.5 transition-all">WhatsApp</TabsTrigger>
             <TabsTrigger value="users" className="flex-1 min-w-[120px] rounded-xl text-[13px] font-bold data-[state=active]:bg-white dark:data-[state=active]:bg-card data-[state=active]:shadow-sm data-[state=active]:text-emerald-600 py-2.5 transition-all">Users</TabsTrigger>
             <TabsTrigger value="audit" className="flex-1 min-w-[120px] rounded-xl text-[13px] font-bold data-[state=active]:bg-white dark:data-[state=active]:bg-card data-[state=active]:shadow-sm data-[state=active]:text-emerald-600 py-2.5 transition-all">Audit</TabsTrigger>
@@ -842,6 +970,94 @@ export default function SuperadminPage() {
                         </TableRow>
                       ))}
                       {(overview?.webhookEvents ?? []).length === 0 ? <TableRow><TableCell colSpan={4} className="px-6 py-12 text-center text-[14px] font-medium text-muted-foreground">Belum ada webhook event.</TableCell></TableRow> : null}
+                    </TableBody>
+                  </Table>
+                </div>
+              </div>
+            </TabsContent>
+
+            <TabsContent value="coupons" className="m-0 space-y-6">
+              <div className="rounded-[28px] border border-border/70 bg-card shadow-sm overflow-hidden">
+                <div className="border-b border-border/60 bg-gradient-to-r from-violet-500/5 to-transparent px-6 py-5">
+                  <div className="flex items-center gap-2">
+                    <TicketPercent className="h-5 w-5 text-violet-500" />
+                    <h2 className="text-[18px] font-bold tracking-tight text-foreground">Coupon Management</h2>
+                  </div>
+                </div>
+
+                <div className="px-6 py-5 border-b border-border/50 space-y-3">
+                  <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+                    <input className="h-10 w-full rounded-xl border border-border/80 bg-background px-4 text-[13px] shadow-sm focus:border-primary focus:ring-1 focus:ring-primary outline-none transition-all" placeholder="Code (contoh: HEMAT20)" value={couponCode} onChange={(event) => setCouponCode(event.target.value.toUpperCase())} />
+                    <input className="h-10 w-full rounded-xl border border-border/80 bg-background px-4 text-[13px] shadow-sm focus:border-primary focus:ring-1 focus:ring-primary outline-none transition-all" placeholder="Nama kupon" value={couponName} onChange={(event) => setCouponName(event.target.value)} />
+                    <select className="h-10 w-full rounded-xl border border-border/80 bg-background px-4 text-[13px] shadow-sm appearance-none focus:border-primary focus:ring-1 focus:ring-primary outline-none transition-all" value={couponTarget} onChange={(event) => setCouponTarget(event.target.value as "ALL" | "BILLING" | "BUSINESS_PROVISIONING")}>
+                      <option value="ALL">Target: Semua</option>
+                      <option value="BILLING">Target: Billing</option>
+                      <option value="BUSINESS_PROVISIONING">Target: Add Business</option>
+                    </select>
+                    <select className="h-10 w-full rounded-xl border border-border/80 bg-background px-4 text-[13px] shadow-sm appearance-none focus:border-primary focus:ring-1 focus:ring-primary outline-none transition-all" value={couponDiscountType} onChange={(event) => setCouponDiscountType(event.target.value as "FIXED" | "PERCENT")}>
+                      <option value="FIXED">Diskon: Fixed</option>
+                      <option value="PERCENT">Diskon: Percent</option>
+                    </select>
+                  </div>
+
+                  <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+                    <input className="h-10 w-full rounded-xl border border-border/80 bg-background px-4 text-[13px] shadow-sm focus:border-primary focus:ring-1 focus:ring-primary outline-none transition-all" placeholder={couponDiscountType === "FIXED" ? "Nilai diskon (cents)" : "Nilai diskon (%)"} value={couponDiscountValue} onChange={(event) => setCouponDiscountValue(event.target.value.replace(/[^0-9]/g, ""))} />
+                    <input className="h-10 w-full rounded-xl border border-border/80 bg-background px-4 text-[13px] shadow-sm focus:border-primary focus:ring-1 focus:ring-primary outline-none transition-all" placeholder="Max diskon (cents, opsional)" value={couponMaxDiscount} onChange={(event) => setCouponMaxDiscount(event.target.value.replace(/[^0-9]/g, ""))} />
+                    <input className="h-10 w-full rounded-xl border border-border/80 bg-background px-4 text-[13px] shadow-sm focus:border-primary focus:ring-1 focus:ring-primary outline-none transition-all" placeholder="Min transaksi (cents, opsional)" value={couponMinSubtotal} onChange={(event) => setCouponMinSubtotal(event.target.value.replace(/[^0-9]/g, ""))} />
+                    <input className="h-10 w-full rounded-xl border border-border/80 bg-background px-4 text-[13px] shadow-sm focus:border-primary focus:ring-1 focus:ring-primary outline-none transition-all" placeholder="Max pemakaian (opsional)" value={couponMaxRedemptions} onChange={(event) => setCouponMaxRedemptions(event.target.value.replace(/[^0-9]/g, ""))} />
+                  </div>
+
+                  <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+                    <input type="datetime-local" className="h-10 w-full rounded-xl border border-border/80 bg-background px-4 text-[13px] shadow-sm focus:border-primary focus:ring-1 focus:ring-primary outline-none transition-all" value={couponStartsAt} onChange={(event) => setCouponStartsAt(event.target.value)} />
+                    <input type="datetime-local" className="h-10 w-full rounded-xl border border-border/80 bg-background px-4 text-[13px] shadow-sm focus:border-primary focus:ring-1 focus:ring-primary outline-none transition-all" value={couponExpiresAt} onChange={(event) => setCouponExpiresAt(event.target.value)} />
+                    <input className="h-10 w-full rounded-xl border border-border/80 bg-background px-4 text-[13px] shadow-sm focus:border-primary focus:ring-1 focus:ring-primary outline-none transition-all md:col-span-2" placeholder="Deskripsi (opsional)" value={couponDescription} onChange={(event) => setCouponDescription(event.target.value)} />
+                  </div>
+
+                  <Button className="h-10 w-full md:w-[220px] rounded-xl font-bold" disabled={Boolean(busyKey) || !couponCode.trim() || !couponName.trim() || !couponDiscountValue.trim()} onClick={() => void createCoupon()}>
+                    {busyKey === "coupon:create" ? "Menyimpan..." : "Tambah Kupon"}
+                  </Button>
+                </div>
+
+                <div className="overflow-x-auto">
+                  <Table>
+                    <TableHeader className="bg-muted/20">
+                      <TableRow className="hover:bg-transparent">
+                        <TableHead className="h-12 px-6 text-[12px] font-bold uppercase tracking-wider text-muted-foreground">Coupon</TableHead>
+                        <TableHead className="h-12 px-6 text-[12px] font-bold uppercase tracking-wider text-muted-foreground">Rule</TableHead>
+                        <TableHead className="h-12 px-6 text-[12px] font-bold uppercase tracking-wider text-muted-foreground">Usage</TableHead>
+                        <TableHead className="h-12 px-6 text-[12px] font-bold uppercase tracking-wider text-muted-foreground">Periode</TableHead>
+                        <TableHead className="h-12 px-6 text-[12px] font-bold uppercase tracking-wider text-muted-foreground text-right">Actions</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {coupons.map((item) => (
+                        <TableRow key={item.id} className="border-t border-border/50 hover:bg-muted/10 transition-colors">
+                          <TableCell className="px-6 py-4">
+                            <p className="font-bold text-foreground text-[13px]">{item.code}</p>
+                            <p className="text-[12px] font-medium text-muted-foreground mt-0.5">{item.name}</p>
+                            {item.description ? <p className="text-[12px] text-muted-foreground">{item.description}</p> : null}
+                          </TableCell>
+                          <TableCell className="px-6 py-4 text-[12px] font-medium text-muted-foreground">
+                            <p>{item.discountType === "PERCENT" ? `${item.discountValue}%` : formatCurrency(item.discountValue)} • {item.target}</p>
+                            <p>Min: {item.minSubtotalCents !== null ? formatCurrency(item.minSubtotalCents) : "-"}</p>
+                            <p>Max disc: {item.maxDiscountCents !== null ? formatCurrency(item.maxDiscountCents) : "-"}</p>
+                          </TableCell>
+                          <TableCell className="px-6 py-4 text-[12px] font-medium text-muted-foreground">
+                            <p>Dipakai: {item.redeemedCount}</p>
+                            <p>Batas: {item.maxRedemptions ?? "-"}</p>
+                          </TableCell>
+                          <TableCell className="px-6 py-4 text-[12px] font-medium text-muted-foreground">
+                            <p>Mulai: {formatDateTime(item.startsAt)}</p>
+                            <p>Selesai: {formatDateTime(item.expiresAt)}</p>
+                          </TableCell>
+                          <TableCell className="px-6 py-4 text-right">
+                            <Button size="sm" variant="outline" className="h-8 rounded-lg text-[12px] font-bold border-border/60" disabled={Boolean(busyKey)} onClick={() => void toggleCouponActive(item.id, !item.isActive)}>
+                              {item.isActive ? "Nonaktifkan" : "Aktifkan"}
+                            </Button>
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                      {coupons.length === 0 ? <TableRow><TableCell colSpan={5} className="px-6 py-12 text-center text-[14px] font-medium text-muted-foreground">Belum ada kupon.</TableCell></TableRow> : null}
                     </TableBody>
                   </Table>
                 </div>
@@ -1009,6 +1225,7 @@ export default function SuperadminPage() {
                           <TableCell className="px-6 py-4 text-[13px] font-medium">
                             <p className="font-semibold text-foreground">{formatCurrency(item.totalAmountCents)}</p>
                             <p className="text-muted-foreground">Base {formatCurrency(item.baseAmountCents)} • Fee {formatCurrency(item.gatewayFeeCents)}</p>
+                            {item.appliedCouponCode && item.couponDiscountCents > 0 ? <p className="text-emerald-600">Coupon {item.appliedCouponCode} • -{formatCurrency(item.couponDiscountCents)}</p> : null}
                           </TableCell>
                           <TableCell className="px-6 py-4">
                             <span className={`inline-flex rounded-full border px-2.5 py-0.5 text-[11px] font-bold uppercase tracking-wider ${item.status === "PAID" ? "bg-emerald-500/10 text-emerald-600 border-emerald-500/20" : item.status === "PENDING" ? "bg-amber-500/10 text-amber-600 border-amber-500/20" : "bg-rose-500/10 text-rose-600 border-rose-500/20"}`}>{item.status}</span>

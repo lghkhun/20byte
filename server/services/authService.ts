@@ -1,6 +1,7 @@
 import { hashPassword, validatePasswordPolicy, verifyPassword } from "@/lib/auth/password";
 import { createSessionToken } from "@/lib/auth/session";
 import { prisma } from "@/lib/db/prisma";
+import { getSuperadminEmailAllowlist } from "@/lib/env";
 import { logAuthFailure } from "@/lib/logging/auth";
 import { getProxyAssetUrl, getPublicObjectKeyFromUrl } from "@/lib/r2/client";
 import { normalizePossibleE164, normalizeWhatsAppDestination } from "@/lib/whatsapp/e164";
@@ -116,6 +117,11 @@ function isValidEmail(email: string): boolean {
   return emailRegex.test(email);
 }
 
+export function isReservedSuperadminSignupEmail(email: string, allowlist = getSuperadminEmailAllowlist()): boolean {
+  const normalized = email.trim().toLowerCase();
+  return Boolean(normalized) && allowlist.has(normalized);
+}
+
 function buildResetPasswordEmail(input: {
   name: string | null;
   setupLink: string;
@@ -170,6 +176,14 @@ export async function registerUser(input: RegisterUserInput): Promise<RegisterRe
 
   if (!isValidEmail(email)) {
     throw new ServiceError(400, "INVALID_EMAIL", "Email format is invalid.");
+  }
+
+  if (isReservedSuperadminSignupEmail(email)) {
+    throw new ServiceError(
+      403,
+      "SUPERADMIN_EMAIL_RESERVED",
+      "Email ini direservasi untuk akses superadmin dan tidak bisa dipakai registrasi publik."
+    );
   }
 
   const passwordPolicyError = validatePasswordPolicy(password);

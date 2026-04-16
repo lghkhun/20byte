@@ -5,7 +5,7 @@ import { errorResponse } from "@/lib/api/http";
 import { requireApiSession } from "@/lib/auth/middleware";
 import { requireSuperadmin } from "@/server/services/platformAccessService";
 import { ServiceError } from "@/server/services/serviceError";
-import { listPlatformAuditLogs } from "@/server/services/superadminService";
+import { listPlatformAuditLogs, normalizePlatformAuditLogLimit } from "@/server/services/superadminService";
 
 function csvEscape(value: string): string {
   return `"${value.replaceAll('"', '""')}"`;
@@ -20,6 +20,8 @@ export async function GET(request: NextRequest) {
   const query = request.nextUrl.searchParams.get("query");
   const action = request.nextUrl.searchParams.get("action");
   const targetType = request.nextUrl.searchParams.get("targetType");
+  const limitRaw = request.nextUrl.searchParams.get("limit");
+  const limit = normalizePlatformAuditLogLimit(limitRaw ? Number(limitRaw) : 5000);
   const dateFromRaw = request.nextUrl.searchParams.get("dateFrom");
   const dateToRaw = request.nextUrl.searchParams.get("dateTo");
   const dateFrom = dateFromRaw ? new Date(`${dateFromRaw}T00:00:00.000Z`) : null;
@@ -29,7 +31,7 @@ export async function GET(request: NextRequest) {
     await requireSuperadmin(auth.session.userId, auth.session.email);
 
     const logs = await listPlatformAuditLogs({
-      limit: 5000,
+      limit,
       query,
       action,
       targetType,

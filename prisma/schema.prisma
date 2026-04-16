@@ -148,6 +148,17 @@ enum PlatformRole {
   SUPERADMIN
 }
 
+enum PlatformCouponDiscountType {
+  FIXED
+  PERCENT
+}
+
+enum PlatformCouponTarget {
+  BILLING
+  BUSINESS_PROVISIONING
+  ALL
+}
+
 model Org {
   id                 String   @id @default(cuid())
   name               String
@@ -877,10 +888,14 @@ model BillingCharge {
   expiredAt         DateTime?
   paidAt            DateTime?
   createdByUserId   String?
+  appliedCouponCode String?
+  couponDiscountCents Int             @default(0)
+  couponSnapshotJson String?          @db.LongText
   createdAt         DateTime          @default(now())
   updatedAt         DateTime          @updatedAt
 
   org               Org               @relation(fields: [orgId], references: [id])
+  couponRedemption  PlatformCouponRedemption?
 
   @@index([orgId, createdAt])
   @@index([orgId, status, createdAt])
@@ -903,11 +918,15 @@ model OwnerBusinessProvisioningOrder {
   expiredAt         DateTime?
   paidAt            DateTime?
   createdOrgId      String?            @unique
+  appliedCouponCode String?
+  couponDiscountCents Int              @default(0)
+  couponSnapshotJson String?           @db.LongText
   createdAt         DateTime           @default(now())
   updatedAt         DateTime           @updatedAt
 
   user              User               @relation(fields: [userId], references: [id])
   createdOrg        Org?               @relation(fields: [createdOrgId], references: [id])
+  couponRedemption  PlatformCouponRedemption?
 
   @@index([userId, createdAt])
   @@index([status, createdAt])
@@ -1069,6 +1088,56 @@ model PlatformMember {
   createdAt       DateTime     @default(now())
 
   user            User         @relation(fields: [userId], references: [id])
+}
+
+model PlatformCoupon {
+  id                String                     @id @default(cuid())
+  code              String                     @unique
+  name              String
+  description       String?                    @db.Text
+  discountType      PlatformCouponDiscountType
+  discountValue     Int
+  maxDiscountCents  Int?
+  minSubtotalCents  Int?
+  maxRedemptions    Int?
+  redeemedCount     Int                        @default(0)
+  target            PlatformCouponTarget       @default(ALL)
+  startsAt          DateTime?
+  expiresAt         DateTime?
+  isActive          Boolean                    @default(true)
+  createdByUserId   String?
+  updatedByUserId   String?
+  createdAt         DateTime                   @default(now())
+  updatedAt         DateTime                   @updatedAt
+
+  redemptions       PlatformCouponRedemption[]
+
+  @@index([isActive, code])
+  @@index([target, isActive, expiresAt])
+}
+
+model PlatformCouponRedemption {
+  id                   String                           @id @default(cuid())
+  couponId             String
+  couponCode           String
+  targetType           PlatformCouponTarget
+  orgId                String?
+  userId               String?
+  billingChargeId      String?                          @unique
+  provisioningOrderId  String?                          @unique
+  subtotalCents        Int
+  discountCents        Int
+  finalAmountCents     Int
+  createdAt            DateTime                         @default(now())
+
+  coupon               PlatformCoupon                   @relation(fields: [couponId], references: [id])
+  billingCharge        BillingCharge?                   @relation(fields: [billingChargeId], references: [id])
+  provisioningOrder    OwnerBusinessProvisioningOrder?  @relation(fields: [provisioningOrderId], references: [id])
+
+  @@index([couponId, createdAt])
+  @@index([orgId, createdAt])
+  @@index([userId, createdAt])
+  @@index([targetType, createdAt])
 }
 
 model PlatformAuditLog {

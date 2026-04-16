@@ -74,6 +74,13 @@ type CheckoutResponse = {
       providerFeeCents?: number | null;
       payableAmountCents?: number;
     };
+    appliedCoupon?: {
+      code: string;
+      name: string;
+      discountCents: number;
+      subtotalCents: number;
+      finalAmountCents: number;
+    } | null;
   };
   error?: {
     message?: string;
@@ -97,6 +104,8 @@ type ChargeItem = {
   paymentMethod: string;
   paymentNumber: string | null;
   expiredAt: string | null;
+  appliedCouponCode?: string | null;
+  couponDiscountCents?: number;
   createdAt: string;
   paidAt: string | null;
 };
@@ -189,6 +198,9 @@ export default function BillingPage() {
   const [error, setError] = useState<string | null>(null);
   const [selectedPlanMonths, setSelectedPlanMonths] = useState<1 | 3 | 12>(1);
   const [isPricingDialogOpen, setIsPricingDialogOpen] = useState(false);
+  const [couponCode, setCouponCode] = useState("");
+  const [paymentCouponCode, setPaymentCouponCode] = useState<string | null>(null);
+  const [paymentCouponDiscountCents, setPaymentCouponDiscountCents] = useState(0);
   const orgId = subscriptionPayload?.subscription?.orgId ?? null;
 
   const load = useCallback(async () => {
@@ -212,12 +224,16 @@ export default function BillingPage() {
         setPaymentTotalCents(latestPending.payableAmountCents ?? latestPending.totalAmountCents);
         setPaymentProviderFeeCents(latestPending.providerFeeCents ?? null);
         setPaymentExpiresAt(latestPending.expiredAt);
+        setPaymentCouponCode(latestPending.appliedCouponCode ?? null);
+        setPaymentCouponDiscountCents(latestPending.couponDiscountCents ?? 0);
       } else {
         setPaymentNumber(null);
         setPaymentMethod(null);
         setPaymentTotalCents(null);
         setPaymentProviderFeeCents(null);
         setPaymentExpiresAt(null);
+        setPaymentCouponCode(null);
+        setPaymentCouponDiscountCents(0);
       }
     } catch (loadError) {
       setError(loadError instanceof Error ? loadError.message : "Failed to load billing data.");
@@ -368,7 +384,8 @@ export default function BillingPage() {
         },
         body: JSON.stringify({
           paymentMethod: "qris",
-          planMonths: selectedPlan?.months ?? selectedPlanMonths
+          planMonths: selectedPlan?.months ?? selectedPlanMonths,
+          couponCode: couponCode.trim() || undefined
         })
       });
 
@@ -391,6 +408,8 @@ export default function BillingPage() {
           (typeof payload?.data?.payment?.fee === "number" ? payload.data.payment.fee : null)
       );
       setPaymentExpiresAt(payload?.data?.payment?.expired_at ?? null);
+      setPaymentCouponCode(payload?.data?.appliedCoupon?.code ?? null);
+      setPaymentCouponDiscountCents(payload?.data?.appliedCoupon?.discountCents ?? 0);
       setIsPricingDialogOpen(false); // Close pricing popup on successful creation
       if ((nextPaymentMethod ?? "").toLowerCase() === "qris" && payload?.data?.payment?.payment_number) {
         setIsQrDialogOpen(true);
@@ -597,6 +616,20 @@ export default function BillingPage() {
                   ) : null}
                 </div>
 
+                <div className="space-y-2">
+                  <label className="text-sm font-medium text-foreground" htmlFor="billing-coupon-code">
+                    Kode kupon (opsional)
+                  </label>
+                  <input
+                    id="billing-coupon-code"
+                    className="h-10 w-full rounded-xl border border-border/80 bg-background px-4 text-[13px] shadow-sm focus:border-primary focus:ring-1 focus:ring-primary outline-none transition-all uppercase"
+                    placeholder="Contoh: HEMAT20"
+                    value={couponCode}
+                    onChange={(event) => setCouponCode(event.target.value.toUpperCase())}
+                    maxLength={40}
+                  />
+                </div>
+
                 <div className="pt-2">
                   <Button 
                     onClick={() => void handleCheckout()} 
@@ -649,6 +682,12 @@ export default function BillingPage() {
                   <span className="text-[12px] font-semibold text-muted-foreground/80">Sisa waktu pembayaran:</span>
                   <span className="text-[13px] font-bold text-amber-600 tracking-tight">{formatCountdown(paymentExpiresAt, nowMs)}</span>
                 </div>
+                {paymentCouponCode && paymentCouponDiscountCents > 0 ? (
+                  <div className="flex items-center justify-between">
+                    <span className="text-[12px] font-semibold text-emerald-700">Kupon {paymentCouponCode}</span>
+                    <span className="text-[13px] font-bold text-emerald-700">-{formatIdr(paymentCouponDiscountCents)}</span>
+                  </div>
+                ) : null}
               </div>
 
               <p className="mt-4 text-center text-[11px] font-medium text-muted-foreground/60 uppercase tracking-wider">

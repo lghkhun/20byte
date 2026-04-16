@@ -38,6 +38,26 @@ function parseJsonObject(value: string): Record<string, unknown> | null {
   }
 }
 
+export function normalizePlatformAuditLogLimit(limitInput?: number | null): number {
+  const limitRaw = Number.isFinite(limitInput) ? Number(limitInput) : 100;
+  return Math.max(1, Math.min(5000, Math.floor(limitRaw)));
+}
+
+export function assertCanRevokeSuperadmin(input: {
+  actorUserId: string;
+  targetUserId: string;
+  isTargetSuperadmin: boolean;
+  superadminCount: number;
+}): void {
+  if (input.actorUserId === input.targetUserId) {
+    throw new ServiceError(400, "CANNOT_REVOKE_SELF", "Superadmin tidak dapat mencabut akses dirinya sendiri.");
+  }
+
+  if (input.isTargetSuperadmin && input.superadminCount <= 1) {
+    throw new ServiceError(400, "CANNOT_REVOKE_LAST_SUPERADMIN", "Tidak dapat mencabut superadmin terakhir.");
+  }
+}
+
 function resolveDueAt(status: SubscriptionStatus, trialEndAt: Date, currentPeriodEndAt: Date | null): Date | null {
   if (status === SubscriptionStatus.ACTIVE) {
     return currentPeriodEndAt;
@@ -140,6 +160,8 @@ export async function listBillingChargesForSuperadmin(limit = 200) {
       baseAmountCents: true,
       gatewayFeeCents: true,
       totalAmountCents: true,
+      appliedCouponCode: true,
+      couponDiscountCents: true,
       paymentNumber: true,
       expiredAt: true,
       paidAt: true,
@@ -566,8 +588,7 @@ export type PlatformAuditLogListInput = {
 };
 
 export async function listPlatformAuditLogs(input: PlatformAuditLogListInput = {}) {
-  const limitRaw = Number.isFinite(input.limit) ? Number(input.limit) : 100;
-  const limit = Math.max(1, Math.min(1000, Math.floor(limitRaw)));
+  const limit = normalizePlatformAuditLogLimit(input.limit);
   const query = typeof input.query === "string" ? input.query.trim() : "";
   const action = typeof input.action === "string" ? input.action.trim() : "";
   const targetType = typeof input.targetType === "string" ? input.targetType.trim() : "";
@@ -717,6 +738,14 @@ export async function upsertPlatformMember(input: {
   }
 
   if (input.enabled) {
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+      select: { id: true }
+    });
+    if (!user) {
+      throw new ServiceError(404, "USER_NOT_FOUND", "User tidak ditemukan.");
+    }
+
     const member = await prisma.platformMember.upsert({
       where: { userId },
       create: {
@@ -741,6 +770,29 @@ export async function upsertPlatformMember(input: {
 
     return member;
   }
+
+  const targetMember = await prisma.platformMember.findUnique({
+    where: { userId },
+    select: {
+      id: true,
+      role: true
+    }
+  });
+  if (!targetMember) {
+    return null;
+  }
+
+  const superadminCount = await prisma.platformMember.count({
+    where: {
+      role: PlatformRole.SUPERADMIN
+    }
+  });
+  assertCanRevokeSuperadmin({
+    actorUserId: input.actorUserId,
+    targetUserId: userId,
+    isTargetSuperadmin: targetMember.role === PlatformRole.SUPERADMIN,
+    superadminCount
+  });
 
   await prisma.platformMember.deleteMany({
     where: { userId }

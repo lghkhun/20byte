@@ -1,4 +1,7 @@
 import { createCipheriv, createDecipheriv, createHash, createHmac, randomBytes, timingSafeEqual } from "crypto";
+import { lookup as dnsLookup } from "dns/promises";
+import type { LookupAddress } from "dns";
+import { isIP } from "net";
 
 import { Role, WhatsAppPublicScheduleStatus } from "@prisma/client";
 
@@ -26,6 +29,8 @@ const API_KEY_PREFIX = "twapi";
 const ENC_VERSION = "v1";
 const DEFAULT_EVENT_FILTERS = ["message.inbound", "message.outbound.status", "device.connection"] as const;
 const WEBHOOK_MAX_ATTEMPTS = 6;
+const MEDIA_DOWNLOAD_TIMEOUT_MS = 10_000;
+const MEDIA_DOWNLOAD_MAX_BYTES = 10 * 1024 * 1024;
 
 export type PublicApiActorContext = {
   orgId: string;
@@ -61,6 +66,111 @@ function normalize(value: string | null | undefined): string {
 function normalizeOptional(value: string | null | undefined): string | null {
   const normalized = normalize(value);
   return normalized || null;
+}
+
+function isPrivateOrLocalIpv4(ip: string): boolean {
+  const parts = ip.split(".").map((part) => Number(part));
+  if (parts.length !== 4 || parts.some((part) => !Number.isInteger(part) || part < 0 || part > 255)) {
+    return true;
+  }
+
+  const [a, b] = parts;
+  if (a === 10 || a === 127 || a === 0) {
+    return true;
+  }
+  if (a === 169 && b === 254) {
+    return true;
+  }
+  if (a === 172 && b >= 16 && b <= 31) {
+    return true;
+  }
+  if (a === 192 && b === 168) {
+    return true;
+  }
+  if (a >= 224) {
+    return true;
+  }
+  return false;
+}
+
+function isPrivateOrLocalIpv6(ip: string): boolean {
+  const normalized = ip.toLowerCase().split("%")[0];
+  if (normalized === "::" || normalized === "::1") {
+    return true;
+  }
+  if (normalized.startsWith("fc") || normalized.startsWith("fd")) {
+    return true;
+  }
+  if (normalized.startsWith("fe8") || normalized.startsWith("fe9") || normalized.startsWith("fea") || normalized.startsWith("feb")) {
+    return true;
+  }
+  if (normalized.startsWith("ff")) {
+    return true;
+  }
+
+  if (normalized.startsWith("::ffff:")) {
+    const mapped = normalized.slice("::ffff:".length);
+    if (isIP(mapped) === 4) {
+      return isPrivateOrLocalIpv4(mapped);
+    }
+  }
+
+  return false;
+}
+
+export function isPrivateOrLocalIp(input: string): boolean {
+  const normalized = input.trim();
+  const family = isIP(normalized);
+  if (family === 4) {
+    return isPrivateOrLocalIpv4(normalized);
+  }
+  if (family === 6) {
+    return isPrivateOrLocalIpv6(normalized);
+  }
+  return false;
+}
+
+export function validatePublicMediaUrl(rawUrl: string): URL {
+  let parsed: URL;
+  try {
+    parsed = new URL(rawUrl);
+  } catch {
+    throw new ServiceError(400, "INVALID_MEDIA_URL", "mediaUrl must be a valid URL.");
+  }
+
+  if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
+    throw new ServiceError(400, "INVALID_MEDIA_URL", "mediaUrl must use http/https.");
+  }
+
+  const hostname = parsed.hostname.trim().toLowerCase();
+  if (!hostname || hostname === "localhost" || hostname.endsWith(".localhost")) {
+    throw new ServiceError(400, "INVALID_MEDIA_URL", "mediaUrl host is not allowed.");
+  }
+
+  if (isIP(hostname) !== 0 && isPrivateOrLocalIp(hostname)) {
+    throw new ServiceError(400, "INVALID_MEDIA_URL", "mediaUrl host is not allowed.");
+  }
+
+  return parsed;
+}
+
+async function ensureMediaHostnameIsPublic(hostname: string): Promise<void> {
+  let addresses: LookupAddress[];
+  try {
+    addresses = (await dnsLookup(hostname, { all: true, verbatim: true })) as LookupAddress[];
+  } catch {
+    throw new ServiceError(400, "INVALID_MEDIA_URL", "mediaUrl host could not be resolved.");
+  }
+
+  if (addresses.length === 0) {
+    throw new ServiceError(400, "INVALID_MEDIA_URL", "mediaUrl host could not be resolved.");
+  }
+
+  for (const address of addresses) {
+    if (isPrivateOrLocalIp(address.address)) {
+      throw new ServiceError(400, "INVALID_MEDIA_URL", "mediaUrl host is not allowed.");
+    }
+  }
 }
 
 function ensureUrl(value: string | null): string | null {
@@ -499,7 +609,7 @@ export async function deleteOrgWhatsAppPublicWebhook(input: {
   };
 }
 
-function parseBearerToken(authHeader: string | null | undefined): string {
+export function parsePublicApiBearerToken(authHeader: string | null | undefined): string {
   const raw = normalize(authHeader);
   if (!raw) {
     throw new ServiceError(401, "UNAUTHORIZED", "Missing Authorization header.");
@@ -511,14 +621,20 @@ function parseBearerToken(authHeader: string | null | undefined): string {
   }
 
   if (!token.startsWith(`${API_KEY_PREFIX}_`)) {
-    throw new ServiceError(401, "UNAUTHORIZED", "Invalid API key format.");
+    throw new ServiceError(401, "INVALID_API_KEY", "Invalid API key.");
   }
 
   return token;
 }
 
+export function assertPublicApiKeyHashMatch(storedKeyHash: string | null | undefined, tokenHash: string): void {
+  if (!storedKeyHash || !hashSafeEqual(storedKeyHash, tokenHash)) {
+    throw new ServiceError(401, "INVALID_API_KEY", "Invalid API key.");
+  }
+}
+
 export async function authenticatePublicWhatsAppApiKey(authHeader: string | null | undefined): Promise<PublicApiActorContext> {
-  const token = parseBearerToken(authHeader);
+  const token = parsePublicApiBearerToken(authHeader);
   const tokenHash = hashApiKey(token);
 
   const row = await prisma.orgWhatsAppApiKey.findFirst({
@@ -533,8 +649,9 @@ export async function authenticatePublicWhatsAppApiKey(authHeader: string | null
     }
   });
 
-  if (!row || !hashSafeEqual(row.keyHash, tokenHash)) {
-    throw new ServiceError(401, "UNAUTHORIZED", "Invalid API key.");
+  assertPublicApiKeyHashMatch(row?.keyHash, tokenHash);
+  if (!row) {
+    throw new ServiceError(401, "INVALID_API_KEY", "Invalid API key.");
   }
 
   await assertOrgBillingAccess(row.orgId, "read");
@@ -622,19 +739,70 @@ export async function publicSendTextMessage(input: {
 }
 
 async function downloadMediaAsBuffer(mediaUrl: string): Promise<{ buffer: Buffer; mimeType: string }> {
-  const response = await fetch(mediaUrl, {
-    method: "GET"
-  });
-  if (!response.ok) {
-    throw new ServiceError(400, "INVALID_MEDIA_URL", "Failed to fetch media URL.");
-  }
+  const parsed = validatePublicMediaUrl(mediaUrl);
+  await ensureMediaHostnameIsPublic(parsed.hostname);
 
-  const mimeType = normalize(response.headers.get("content-type")) || "application/octet-stream";
-  const arrayBuffer = await response.arrayBuffer();
-  return {
-    buffer: Buffer.from(arrayBuffer),
-    mimeType
-  };
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), MEDIA_DOWNLOAD_TIMEOUT_MS);
+
+  try {
+    const response = await fetch(parsed.toString(), {
+      method: "GET",
+      redirect: "manual",
+      signal: controller.signal
+    });
+
+    if (response.status >= 300 && response.status < 400) {
+      throw new ServiceError(400, "INVALID_MEDIA_URL", "Redirect is not allowed for mediaUrl.");
+    }
+
+    if (!response.ok) {
+      throw new ServiceError(400, "INVALID_MEDIA_URL", "Failed to fetch media URL.");
+    }
+
+    const contentLength = Number(response.headers.get("content-length") ?? "");
+    if (Number.isFinite(contentLength) && contentLength > MEDIA_DOWNLOAD_MAX_BYTES) {
+      throw new ServiceError(413, "MEDIA_TOO_LARGE", "Media file exceeds maximum allowed size.");
+    }
+
+    if (!response.body) {
+      throw new ServiceError(400, "INVALID_MEDIA_URL", "Media response body is empty.");
+    }
+
+    const reader = response.body.getReader();
+    const chunks: Uint8Array[] = [];
+    let totalBytes = 0;
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) {
+        break;
+      }
+
+      const chunk = value ?? new Uint8Array();
+      totalBytes += chunk.byteLength;
+      if (totalBytes > MEDIA_DOWNLOAD_MAX_BYTES) {
+        throw new ServiceError(413, "MEDIA_TOO_LARGE", "Media file exceeds maximum allowed size.");
+      }
+      chunks.push(chunk);
+    }
+
+    const mimeType = normalize(response.headers.get("content-type")) || "application/octet-stream";
+    return {
+      buffer: Buffer.concat(chunks.map((chunk) => Buffer.from(chunk))),
+      mimeType
+    };
+  } catch (error) {
+    if (error instanceof ServiceError) {
+      throw error;
+    }
+    if (error instanceof Error && error.name === "AbortError") {
+      throw new ServiceError(408, "MEDIA_DOWNLOAD_TIMEOUT", "Media download timed out.");
+    }
+    throw new ServiceError(400, "INVALID_MEDIA_URL", "Failed to fetch media URL.");
+  } finally {
+    clearTimeout(timeout);
+  }
 }
 
 function mapMediaType(mimeType: string): "IMAGE" | "VIDEO" | "AUDIO" | "DOCUMENT" {

@@ -27,13 +27,11 @@ import {
 import { ServiceError } from "@/server/services/serviceError";
 
 type JsonBody = Record<string, unknown>;
+const STRICT_RATE_LIMIT_WHEN_REDIS_UNAVAILABLE = process.env.PUBLIC_API_RATE_LIMIT_STRICT?.trim() !== "0";
+let hasLoggedRedisRateLimitIssue = false;
 
 function normalize(value: string | undefined): string {
   return (value ?? "").trim();
-}
-
-function stringifyError(error: unknown): string {
-  return error instanceof Error ? error.message : "Unknown error";
 }
 
 async function parseJsonBody(request: NextRequest): Promise<JsonBody> {
@@ -59,22 +57,72 @@ async function enforceRateLimit(input: {
   bucket: string;
   limit: number;
   windowSec: number;
+  strict?: boolean;
 }): Promise<void> {
+  const strict = Boolean(input.strict);
   const redisUrl = getRedisUrl();
   if (!redisUrl) {
+    if (!hasLoggedRedisRateLimitIssue) {
+      console.error(
+        JSON.stringify({
+          scope: "public_api",
+          event: "rate_limit_unavailable",
+          reason: "missing_redis_url",
+          strict,
+          at: new Date().toISOString()
+        })
+      );
+      hasLoggedRedisRateLimitIssue = true;
+    }
+    if (strict && STRICT_RATE_LIMIT_WHEN_REDIS_UNAVAILABLE) {
+      throw new ServiceError(503, "RATE_LIMIT_UNAVAILABLE", "Rate limit backend is unavailable.");
+    }
     return;
   }
 
-  const key = `20byte:ratelimit:${input.bucket}:${input.apiKeyId}`;
-  const incremented = await sendRedisCommand(redisUrl, ["INCR", key]);
-  const current = typeof incremented === "number" ? incremented : Number(incremented);
-  if (current === 1) {
-    await sendRedisCommand(redisUrl, ["EXPIRE", key, String(input.windowSec)]);
-  }
+  try {
+    const key = `20byte:ratelimit:${input.bucket}:${input.apiKeyId}`;
+    const incremented = await sendRedisCommand(redisUrl, ["INCR", key]);
+    const current = typeof incremented === "number" ? incremented : Number(incremented);
+    if (current === 1) {
+      await sendRedisCommand(redisUrl, ["EXPIRE", key, String(input.windowSec)]);
+    }
 
-  if (!Number.isFinite(current) || current > input.limit) {
-    throw new ServiceError(429, "RATE_LIMITED", "Rate limit exceeded. Please retry later.");
+    if (!Number.isFinite(current) || current > input.limit) {
+      throw new ServiceError(429, "RATE_LIMITED", "Rate limit exceeded. Please retry later.");
+    }
+  } catch (error) {
+    if (error instanceof ServiceError) {
+      throw error;
+    }
+    console.error(
+      JSON.stringify({
+        scope: "public_api",
+        event: "rate_limit_unavailable",
+        reason: "redis_command_failed",
+        bucket: input.bucket,
+        strict,
+        at: new Date().toISOString()
+      })
+    );
+    if (strict && STRICT_RATE_LIMIT_WHEN_REDIS_UNAVAILABLE) {
+      throw new ServiceError(503, "RATE_LIMIT_UNAVAILABLE", "Rate limit backend is unavailable.");
+    }
   }
+}
+
+export function isSendEndpointPath(method: string, path: string): boolean {
+  if (method !== "POST") {
+    return false;
+  }
+  return [
+    "messages/send",
+    "messages/send-async",
+    "messages/send-media-url",
+    "messages/send-media-url-async",
+    "groups/messages/send",
+    "groups/messages/send-media-url"
+  ].includes(path);
 }
 
 async function handleRequest(method: string, request: NextRequest, slug: string[]): Promise<Response> {
@@ -88,7 +136,8 @@ async function handleRequest(method: string, request: NextRequest, slug: string[
     apiKeyId: auth.apiKeyId,
     bucket: "global",
     limit: 240,
-    windowSec: 60
+    windowSec: 60,
+    strict: method !== "GET"
   });
 
   if (method === "POST" && path === "messages/send") {
@@ -164,6 +213,7 @@ async function handleRequest(method: string, request: NextRequest, slug: string[
   }
 
   if (method === "POST" && path === "groups/messages/send") {
+    await enforceRateLimit({ apiKeyId: auth.apiKeyId, bucket: "send", limit: 90, windowSec: 60, strict: true });
     const payload = parsePublicSendPayload(body);
     const result = await publicSendTextMessage({
       orgId,
@@ -174,6 +224,7 @@ async function handleRequest(method: string, request: NextRequest, slug: string[
   }
 
   if (method === "POST" && path === "groups/messages/send-media-url") {
+    await enforceRateLimit({ apiKeyId: auth.apiKeyId, bucket: "send", limit: 60, windowSec: 60, strict: true });
     const payload = parsePublicSendPayload(body);
     const result = await publicSendMediaByUrl({
       orgId,
@@ -301,7 +352,7 @@ async function run(method: string, request: NextRequest, slug: string[]): Promis
       return errorResponse(error.status, error.code, error.message);
     }
 
-    return errorResponse(500, "PUBLIC_WHATSAPP_API_FAILED", stringifyError(error));
+    return errorResponse(500, "PUBLIC_WHATSAPP_API_FAILED", "Internal server error.");
   }
 }
 

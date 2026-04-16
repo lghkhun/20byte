@@ -164,46 +164,68 @@ export function ConversationListPanel({
 
   return (
     <section data-panel="conversation-list" className="inbox-scroll relative flex h-full min-h-0 max-h-full flex-col overflow-y-auto overscroll-contain bg-card/95 backdrop-blur-sm">
-      <div className="shrink-0 space-y-4 border-b border-border/70 bg-card/95 px-4 py-4 sm:px-5">
+      <div className="shrink-0 space-y-3 border-b border-border/70 bg-card/95 px-4 py-3 sm:space-y-4 sm:px-5 sm:py-4">
         <div className="flex items-center justify-between gap-3">
-          <div className="space-y-1">
-            <h2 className="text-lg font-semibold tracking-tight text-foreground">Inbox</h2>
-            <p className="text-xs text-muted-foreground">{filteredConversations.length} percakapan aktif</p>
+          <div className="space-y-0.5">
+            <h2 className="text-base font-bold tracking-tight text-foreground sm:text-lg">Inbox</h2>
+            <p className="text-[11px] text-muted-foreground sm:text-xs">{filteredConversations.length} percakapan aktif</p>
           </div>
           <IndicatorLegend compact />
         </div>
 
-        <div className="inbox-scroll flex items-center gap-4 overflow-x-auto whitespace-nowrap border-b border-border/70 pb-3">
+        {/* Filter tabs */}
+        <div className="flex items-center gap-1 rounded-xl border border-border/60 bg-muted/30 p-1">
           {tabItems.map((item) => (
             <button
               key={item.key}
               type="button"
               onClick={item.onClick}
-              className={item.isActive ? "shrink-0 border-b-2 border-primary px-0 pb-2 text-sm font-semibold text-primary" : "shrink-0 px-0 pb-2 text-sm font-semibold text-muted-foreground"}
+              className={`flex flex-1 items-center justify-center gap-1.5 rounded-lg py-1.5 text-[12px] font-semibold transition-all active:scale-95 ${
+                item.isActive
+                  ? "bg-background text-emerald-600 shadow-sm dark:text-emerald-400"
+                  : "text-muted-foreground hover:text-foreground"
+              }`}
             >
               {item.label}
-              <span className="ml-1.5 rounded-full bg-muted px-1.5 py-0.5 text-[11px]">{item.count}</span>
+              <span
+                className={`rounded-full px-1.5 py-0 text-[10px] font-bold tabular-nums ${
+                  item.isActive
+                    ? "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400"
+                    : "bg-muted text-muted-foreground"
+                }`}
+              >
+                {item.count}
+              </span>
             </button>
           ))}
         </div>
 
-        <div className="grid grid-cols-[minmax(0,1fr)_auto_auto] items-center gap-2">
+        <div className="grid grid-cols-[minmax(0,1fr)_auto_auto] items-center gap-1.5 sm:gap-2">
           <label className="relative block">
-            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground/70" />
             <Input
               ref={searchInputRef}
               type="text"
               value={searchQuery}
               onChange={(event) => onSearchQueryChange(event.target.value)}
               placeholder="Cari chat..."
-              className="h-10 rounded-xl border-border/80 bg-background/80 pl-9"
+              className="h-10 rounded-xl border-border/70 bg-background/80 pl-9 pr-9 text-[14px] shadow-sm transition-all focus:bg-background sm:text-sm"
             />
+            {searchQuery && (
+              <button
+                type="button"
+                onClick={() => onSearchQueryChange("")}
+                className="absolute right-2.5 top-1/2 -translate-y-1/2 rounded-full p-1 text-muted-foreground/50 hover:bg-muted hover:text-foreground active:scale-90"
+              >
+                <Plus className="h-4 w-4 rotate-45" />
+              </button>
+            )}
           </label>
           <Button
             type="button"
             variant="default"
             size="sm"
-            className="h-10 gap-2 rounded-xl border border-primary/70 bg-primary px-3 text-primary-foreground shadow-md shadow-primary/20 hover:bg-primary/90"
+            className="h-10 w-10 gap-0 rounded-xl border border-primary/70 bg-primary px-0 text-primary-foreground shadow-md shadow-primary/20 hover:bg-primary/90 sm:w-auto sm:gap-2 sm:px-3"
             title="Mulai chat baru"
             onClick={() => {
               setCreateError(null);
@@ -278,38 +300,45 @@ export function ConversationListPanel({
       </div>
 
       {isNewMessageOpen ? (
-        <div className="absolute inset-0 z-20 flex items-center justify-center bg-black/35 px-4 py-6 backdrop-blur-sm">
-          <div className="w-full max-w-md rounded-[28px] border border-border/80 bg-card p-5 shadow-2xl">
-            <div className="flex items-center justify-between gap-3">
-              <div>
-                <h3 className="text-lg font-semibold text-foreground">Chat Baru</h3>
-                <p className="text-sm text-muted-foreground">Masukkan nomor WhatsApp tujuan untuk mulai percakapan baru.</p>
+        <div className="absolute inset-0 z-20 flex items-end justify-center bg-black/40 px-0 pb-0 backdrop-blur-[2px] sm:items-center sm:px-4 sm:pb-6">
+          <div className="w-full max-w-lg animate-in slide-in-from-bottom duration-300 rounded-t-[32px] border-x border-t border-border/70 bg-card p-6 shadow-2xl sm:rounded-b-[32px] sm:border">
+            <div className="flex items-start justify-between gap-3">
+              <div className="space-y-1">
+                <h3 className="text-xl font-bold tracking-tight text-foreground">Chat Baru</h3>
+                <p className="text-[13px] leading-relaxed text-muted-foreground/80">Masukkan nomor WhatsApp tujuan untuk mulai percakapan baru.</p>
               </div>
-              <Button type="button" variant="ghost" size="sm" className="h-9 rounded-lg" onClick={() => setIsNewMessageOpen(false)}>
-                Tutup
+              <Button type="button" variant="ghost" size="icon" className="h-8 w-8 rounded-full bg-muted/50" onClick={() => setIsNewMessageOpen(false)}>
+                <Plus className="h-4 w-4 rotate-45" />
               </Button>
             </div>
-            <div className="mt-4 space-y-3">
-              <Input
-                value={newPhone}
-                onChange={(event) => setNewPhone(event.target.value)}
-                placeholder="Nomor WhatsApp tujuan (+628...)"
-                className="h-11 rounded-xl"
-              />
-              <Input
-                value={newName}
-                onChange={(event) => setNewName(event.target.value)}
-                placeholder="Nama customer (opsional)"
-                className="h-11 rounded-xl"
-              />
-              {createError ? <p className="text-sm text-destructive">{createError}</p> : null}
+            <div className="mt-6 flex flex-col gap-3">
+              <div className="space-y-1.5">
+                <p className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground/60 ml-1">Nomor WhatsApp</p>
+                <Input
+                  value={newPhone}
+                  onChange={(event) => setNewPhone(event.target.value)}
+                  placeholder="+628..."
+                  className="h-12 rounded-2xl border-border/70 bg-muted/20 text-base shadow-sm ring-offset-background focus-visible:ring-emerald-500/20"
+                />
+              </div>
+              <div className="space-y-1.5">
+                <p className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground/60 ml-1">Nama Customer (Opsional)</p>
+                <Input
+                  value={newName}
+                  onChange={(event) => setNewName(event.target.value)}
+                  placeholder="Contoh: Budi Santoso"
+                  className="h-12 rounded-2xl border-border/70 bg-muted/20 text-base shadow-sm ring-offset-background focus-visible:ring-emerald-500/20"
+                />
+              </div>
+              {createError ? <p className="mt-2 text-[13px] font-medium text-destructive">{createError}</p> : null}
             </div>
-            <div className="mt-5 flex justify-end gap-2">
-              <Button type="button" variant="ghost" onClick={() => setIsNewMessageOpen(false)}>
+            <div className="mt-8 flex flex-col gap-2 sm:flex-row sm:justify-end">
+              <Button type="button" variant="ghost" className="h-11 rounded-2xl sm:h-10" onClick={() => setIsNewMessageOpen(false)}>
                 Batal
               </Button>
               <Button
                 type="button"
+                className="h-11 rounded-2xl bg-emerald-600 font-bold text-white shadow-lg shadow-emerald-500/25 transition-all hover:bg-emerald-700 active:scale-[0.98] sm:h-10"
                 onClick={async () => {
                   if (!newPhone.trim() || isCreating) {
                     return;

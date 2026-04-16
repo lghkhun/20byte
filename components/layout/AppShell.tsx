@@ -168,11 +168,8 @@ export function AppShell({ user, ownerOnboardingStatus = null, children }: AppSh
     <SidebarProvider defaultOpen={false} className="h-dvh overflow-hidden">
       <AppSidebar user={user} ownerOnboardingStatus={ownerOnboardingStatus} />
       <SidebarInset className="h-full min-h-0 overflow-hidden md:m-0 md:rounded-none md:shadow-none">
-        <main className="app-shell-main flex h-full min-h-0 flex-1 overflow-hidden p-2 pb-[5.25rem] md:p-4">
+        <main className="app-shell-main flex h-full min-h-0 flex-1 overflow-hidden p-2 pb-20 md:p-4 md:pb-4">
           <div className="app-shell-surface flex h-full min-h-0 w-full flex-1 flex-col overflow-hidden rounded-[28px] border border-border/80 bg-surface/90 shadow-[0_20px_60px_hsl(var(--foreground)/0.06)] backdrop-blur">
-            <div className="px-2 pt-2 md:hidden">
-              <SidebarTrigger className="rounded-lg border border-border/70 bg-card hover:bg-accent" />
-            </div>
             <div className="flex min-h-0 flex-1 overflow-hidden">
               {children}
             </div>

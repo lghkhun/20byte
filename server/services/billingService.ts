@@ -1,10 +1,11 @@
 import { randomUUID } from "node:crypto";
 
-import { BillingChargeStatus, Role, SubscriptionStatus } from "@prisma/client";
+import { BillingChargeStatus, Prisma, Role, SubscriptionStatus } from "@prisma/client";
 
 import { getPakasirConfig } from "@/lib/env";
 import { prisma } from "@/lib/db/prisma";
 import { acquireIdempotencyLock } from "@/lib/redis/idempotency";
+import { normalizeCheckoutCouponCode, resolveCouponForCheckout, type ResolvedCheckoutCoupon } from "@/server/services/platformCouponService";
 import { ServiceError } from "@/server/services/serviceError";
 
 const TRIAL_DAYS = 14;
@@ -316,6 +317,60 @@ export function calculateGatewayFeeCents(baseAmountCents: number, feeBps = DEFAU
 
 export function calculateTotalChargeCents(baseAmountCents: number, feeBps = DEFAULT_GATEWAY_FEE_BPS): number {
   return baseAmountCents + calculateGatewayFeeCents(baseAmountCents, feeBps);
+}
+
+async function reserveCouponRedemption(input: {
+  tx: Prisma.TransactionClient;
+  coupon: ResolvedCheckoutCoupon;
+  target: "BILLING" | "BUSINESS_PROVISIONING";
+  orgId?: string;
+  userId?: string;
+  billingChargeId?: string;
+  provisioningOrderId?: string;
+}) {
+  if (input.coupon.maxRedemptions !== null) {
+    const updateCount = await input.tx.platformCoupon.updateMany({
+      where: {
+        id: input.coupon.couponId,
+        redeemedCount: {
+          lt: input.coupon.maxRedemptions
+        }
+      },
+      data: {
+        redeemedCount: {
+          increment: 1
+        }
+      }
+    });
+
+    if (updateCount.count === 0) {
+      throw new ServiceError(400, "COUPON_USAGE_LIMIT_REACHED", "Kupon sudah mencapai batas penggunaan.");
+    }
+  } else {
+    await input.tx.platformCoupon.update({
+      where: { id: input.coupon.couponId },
+      data: {
+        redeemedCount: {
+          increment: 1
+        }
+      }
+    });
+  }
+
+  await input.tx.platformCouponRedemption.create({
+    data: {
+      couponId: input.coupon.couponId,
+      couponCode: input.coupon.code,
+      targetType: input.target,
+      orgId: input.orgId,
+      userId: input.userId,
+      billingChargeId: input.billingChargeId,
+      provisioningOrderId: input.provisioningOrderId,
+      subtotalCents: input.coupon.subtotalCents,
+      discountCents: input.coupon.discountCents,
+      finalAmountCents: input.coupon.finalAmountCents
+    }
+  });
 }
 
 function addDays(source: Date, days: number): Date {
@@ -691,6 +746,7 @@ export async function createBillingCheckout(input: {
   orgId: string;
   paymentMethod?: string;
   planMonths?: unknown;
+  couponCode?: string | null;
 }) {
   const orgId = normalize(input.orgId);
   if (!orgId) {
@@ -707,9 +763,17 @@ export async function createBillingCheckout(input: {
     gatewayFeeBps: subscription.gatewayFeeBps,
     planMonths
   });
+  const couponCode = normalizeCheckoutCouponCode(input.couponCode);
+  const appliedCoupon = couponCode
+    ? await resolveCouponForCheckout({
+        couponCode,
+        target: "BILLING",
+        subtotalCents: selectedPlan.totalAmountCents
+      })
+    : null;
   const baseAmountCents = selectedPlan.netBaseAmountCents;
   const gatewayFeeCents = selectedPlan.gatewayFeeCents;
-  const totalAmountCents = selectedPlan.totalAmountCents;
+  const totalAmountCents = appliedCoupon?.finalAmountCents ?? selectedPlan.totalAmountCents;
   const orderId = `SUB-${orgId}-${Date.now()}`;
 
   const gatewayPayload = await createPakasirTransaction({
@@ -722,41 +786,75 @@ export async function createBillingCheckout(input: {
     fallbackRequestedAmountCents: totalAmountCents
   });
 
-  const charge = await prisma.billingCharge.create({
-    data: {
-      orgId,
-      orderId,
-      status: BillingChargeStatus.PENDING,
-      baseAmountCents,
-      gatewayFeeCents,
-      totalAmountCents,
-      paymentMethod,
-      gatewayProvider: "pakasir",
-      gatewayProjectSlug: config.slug,
-      gatewayRawJson: JSON.stringify({
-        create: gatewayPayload,
-        checkoutMeta: {
-          planMonths: selectedPlan.months,
-          renewalDays: selectedPlan.renewalDays,
-          discountBps: selectedPlan.discountBps,
-          rawBaseAmountCents: selectedPlan.rawBaseAmountCents,
-          discountCents: selectedPlan.discountCents,
-          netBaseAmountCents: selectedPlan.netBaseAmountCents,
-          gatewayFeeCents: selectedPlan.gatewayFeeCents,
-          totalAmountCents: selectedPlan.totalAmountCents
-        }
-      }),
-      paymentNumber: gatewayPayload.payment?.payment_number ?? null,
-      expiredAt: gatewayPayload.payment?.expired_at ? new Date(gatewayPayload.payment.expired_at) : null,
-      createdByUserId: input.actorUserId
+  const charge = await prisma.$transaction(async (tx) => {
+    const createdCharge = await tx.billingCharge.create({
+      data: {
+        orgId,
+        orderId,
+        status: BillingChargeStatus.PENDING,
+        baseAmountCents,
+        gatewayFeeCents,
+        totalAmountCents,
+        paymentMethod,
+        gatewayProvider: "pakasir",
+        gatewayProjectSlug: config.slug,
+        gatewayRawJson: JSON.stringify({
+          create: gatewayPayload,
+          checkoutMeta: {
+            planMonths: selectedPlan.months,
+            renewalDays: selectedPlan.renewalDays,
+            discountBps: selectedPlan.discountBps,
+            rawBaseAmountCents: selectedPlan.rawBaseAmountCents,
+            discountCents: selectedPlan.discountCents,
+            netBaseAmountCents: selectedPlan.netBaseAmountCents,
+            gatewayFeeCents: selectedPlan.gatewayFeeCents,
+            totalAmountCents: selectedPlan.totalAmountCents,
+            couponCode: appliedCoupon?.code ?? null,
+            couponDiscountCents: appliedCoupon?.discountCents ?? 0,
+            finalAmountCents: totalAmountCents
+          }
+        }),
+        paymentNumber: gatewayPayload.payment?.payment_number ?? null,
+        expiredAt: gatewayPayload.payment?.expired_at ? new Date(gatewayPayload.payment.expired_at) : null,
+        createdByUserId: input.actorUserId,
+        appliedCouponCode: appliedCoupon?.code ?? null,
+        couponDiscountCents: appliedCoupon?.discountCents ?? 0,
+        couponSnapshotJson: appliedCoupon
+          ? JSON.stringify({
+              code: appliedCoupon.code,
+              name: appliedCoupon.name,
+              target: appliedCoupon.target,
+              discountType: appliedCoupon.discountType,
+              discountValue: appliedCoupon.discountValue,
+              maxDiscountCents: appliedCoupon.maxDiscountCents,
+              subtotalCents: appliedCoupon.subtotalCents,
+              discountCents: appliedCoupon.discountCents,
+              finalAmountCents: appliedCoupon.finalAmountCents
+            })
+          : null
+      }
+    });
+
+    if (appliedCoupon) {
+      await reserveCouponRedemption({
+        tx,
+        coupon: appliedCoupon,
+        target: "BILLING",
+        orgId,
+        userId: input.actorUserId,
+        billingChargeId: createdCharge.id
+      });
     }
+
+    return createdCharge;
   });
 
   return {
     charge,
     payment: gatewayPayload.payment ?? null,
     paymentSummary,
-    selectedPlan
+    selectedPlan,
+    appliedCoupon
   };
 }
 
@@ -836,6 +934,7 @@ export async function createBusinessProvisioningCheckout(input: {
   businessName: unknown;
   paymentMethod?: string;
   planMonths?: unknown;
+  couponCode?: string | null;
 }) {
   await requireAnyOwnedOrganization(input.actorUserId);
   const businessName = parseProvisioningBusinessName(input.businessName);
@@ -847,12 +946,21 @@ export async function createBusinessProvisioningCheckout(input: {
     gatewayFeeBps: DEFAULT_GATEWAY_FEE_BPS,
     planMonths
   });
+  const couponCode = normalizeCheckoutCouponCode(input.couponCode);
+  const appliedCoupon = couponCode
+    ? await resolveCouponForCheckout({
+        couponCode,
+        target: "BUSINESS_PROVISIONING",
+        subtotalCents: selectedPlan.totalAmountCents
+      })
+    : null;
+  const finalTotalAmountCents = appliedCoupon?.finalAmountCents ?? selectedPlan.totalAmountCents;
   const orderId = createBusinessProvisioningOrderId(input.actorUserId);
   let gatewayPayload: PakasirCreateResponse;
   try {
     gatewayPayload = await createPakasirTransaction({
       orderId,
-      amount: selectedPlan.totalAmountCents,
+      amount: finalTotalAmountCents,
       method: paymentMethod
     });
   } catch (error) {
@@ -867,7 +975,7 @@ export async function createBusinessProvisioningCheckout(input: {
             businessName,
             planMonths,
             paymentMethod,
-            amount: selectedPlan.totalAmountCents,
+            amount: finalTotalAmountCents,
             ...(error instanceof ServiceError && (error as ServiceError & { metaJson?: Record<string, unknown> }).metaJson
               ? (error as ServiceError & { metaJson?: Record<string, unknown> }).metaJson
               : {})
@@ -881,52 +989,85 @@ export async function createBusinessProvisioningCheckout(input: {
   }
   const paymentSummary = resolvePakasirPaymentSummary({
     payment: gatewayPayload.payment ?? null,
-    fallbackRequestedAmountCents: selectedPlan.totalAmountCents
+    fallbackRequestedAmountCents: finalTotalAmountCents
   });
 
-  const provisioningOrder = await prisma.ownerBusinessProvisioningOrder.create({
-    data: {
-      userId: input.actorUserId,
-      orderId,
-      businessName,
-      status: BillingChargeStatus.PENDING,
-      baseAmountCents: selectedPlan.netBaseAmountCents,
-      gatewayFeeCents: selectedPlan.gatewayFeeCents,
-      totalAmountCents: selectedPlan.totalAmountCents,
-      paymentMethod,
-      gatewayProvider: "pakasir",
-      gatewayProjectSlug: config.slug,
-      gatewayRawJson: JSON.stringify({
-        create: gatewayPayload,
-        checkoutMeta: {
-          planMonths: selectedPlan.months,
-          renewalDays: selectedPlan.renewalDays,
-          discountBps: selectedPlan.discountBps,
-          rawBaseAmountCents: selectedPlan.rawBaseAmountCents,
-          discountCents: selectedPlan.discountCents,
-          netBaseAmountCents: selectedPlan.netBaseAmountCents,
-          gatewayFeeCents: selectedPlan.gatewayFeeCents,
-          totalAmountCents: selectedPlan.totalAmountCents
-        }
-      }),
-      paymentNumber: gatewayPayload.payment?.payment_number ?? null,
-      expiredAt: gatewayPayload.payment?.expired_at ? new Date(gatewayPayload.payment.expired_at) : null
-    },
-    include: {
-      createdOrg: {
-        select: {
-          id: true,
-          name: true
+  const provisioningOrder = await prisma.$transaction(async (tx) => {
+    const createdOrder = await tx.ownerBusinessProvisioningOrder.create({
+      data: {
+        userId: input.actorUserId,
+        orderId,
+        businessName,
+        status: BillingChargeStatus.PENDING,
+        baseAmountCents: selectedPlan.netBaseAmountCents,
+        gatewayFeeCents: selectedPlan.gatewayFeeCents,
+        totalAmountCents: finalTotalAmountCents,
+        paymentMethod,
+        gatewayProvider: "pakasir",
+        gatewayProjectSlug: config.slug,
+        gatewayRawJson: JSON.stringify({
+          create: gatewayPayload,
+          checkoutMeta: {
+            planMonths: selectedPlan.months,
+            renewalDays: selectedPlan.renewalDays,
+            discountBps: selectedPlan.discountBps,
+            rawBaseAmountCents: selectedPlan.rawBaseAmountCents,
+            discountCents: selectedPlan.discountCents,
+            netBaseAmountCents: selectedPlan.netBaseAmountCents,
+            gatewayFeeCents: selectedPlan.gatewayFeeCents,
+            totalAmountCents: selectedPlan.totalAmountCents,
+            couponCode: appliedCoupon?.code ?? null,
+            couponDiscountCents: appliedCoupon?.discountCents ?? 0,
+            finalAmountCents: finalTotalAmountCents
+          }
+        }),
+        paymentNumber: gatewayPayload.payment?.payment_number ?? null,
+        expiredAt: gatewayPayload.payment?.expired_at ? new Date(gatewayPayload.payment.expired_at) : null,
+        appliedCouponCode: appliedCoupon?.code ?? null,
+        couponDiscountCents: appliedCoupon?.discountCents ?? 0,
+        couponSnapshotJson: appliedCoupon
+          ? JSON.stringify({
+              code: appliedCoupon.code,
+              name: appliedCoupon.name,
+              target: appliedCoupon.target,
+              discountType: appliedCoupon.discountType,
+              discountValue: appliedCoupon.discountValue,
+              maxDiscountCents: appliedCoupon.maxDiscountCents,
+              subtotalCents: appliedCoupon.subtotalCents,
+              discountCents: appliedCoupon.discountCents,
+              finalAmountCents: appliedCoupon.finalAmountCents
+            })
+          : null
+      },
+      include: {
+        createdOrg: {
+          select: {
+            id: true,
+            name: true
+          }
         }
       }
+    });
+
+    if (appliedCoupon) {
+      await reserveCouponRedemption({
+        tx,
+        coupon: appliedCoupon,
+        target: "BUSINESS_PROVISIONING",
+        userId: input.actorUserId,
+        provisioningOrderId: createdOrder.id
+      });
     }
+
+    return createdOrder;
   });
 
   return {
     order: mapProvisioningOrderView(provisioningOrder),
     payment: gatewayPayload.payment ?? null,
     paymentSummary,
-    selectedPlan
+    selectedPlan,
+    appliedCoupon
   };
 }
 
