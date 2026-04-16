@@ -2,6 +2,7 @@ import { randomUUID } from "crypto";
 import path from "path";
 import { type NextRequest, NextResponse } from "next/server";
 
+import { getActiveOrgIdFromRequest } from "@/lib/auth/activeOrg";
 import { requireApiSession } from "@/lib/auth/middleware";
 import { deleteFromR2, getPublicObjectKeyFromUrl, uploadToR2 } from "@/lib/r2/client";
 import { getOrganizationBusinessProfile, updateOrganizationBusinessProfile } from "@/server/services/organizationService";
@@ -65,9 +66,10 @@ export async function POST(request: NextRequest) {
   }
 
   try {
+    const activeOrgId = getActiveOrgIdFromRequest(request);
     const profile = await getOrganizationBusinessProfile(
       auth.session.userId,
-      `${formData.get("orgId") ?? ""}`.trim()
+      `${formData.get("orgId") ?? ""}`.trim() || activeOrgId
     );
     const extension = resolveExtension(fileEntry);
     const objectKey = `org/${profile.id}/business/${assetType}-${randomUUID()}${extension}`;

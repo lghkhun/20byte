@@ -1,14 +1,12 @@
 import type { NextRequest } from "next/server";
 
 import { errorResponse, successResponse } from "@/lib/api/http";
-import { getActiveOrgIdFromRequest } from "@/lib/auth/activeOrg";
 import { requireApiSession } from "@/lib/auth/middleware";
-import { getPrimaryOrganizationForUser } from "@/server/services/organizationService";
-import { createBillingCheckout } from "@/server/services/billingService";
+import { createBusinessProvisioningCheckout } from "@/server/services/billingService";
 import { ServiceError } from "@/server/services/serviceError";
 
-type CheckoutRequest = {
-  orgId?: unknown;
+type ProvisioningCheckoutRequest = {
+  businessName?: unknown;
   paymentMethod?: unknown;
   planMonths?: unknown;
 };
@@ -19,28 +17,17 @@ export async function POST(request: NextRequest) {
     return auth.response;
   }
 
-  let body: CheckoutRequest;
+  let body: ProvisioningCheckoutRequest;
   try {
-    body = (await request.json()) as CheckoutRequest;
+    body = (await request.json()) as ProvisioningCheckoutRequest;
   } catch {
     return errorResponse(400, "INVALID_JSON", "Request body must be valid JSON.");
   }
 
   try {
-    const primary = await getPrimaryOrganizationForUser(auth.session.userId);
-    const activeOrgId = getActiveOrgIdFromRequest(request);
-    const orgId =
-      (typeof body.orgId === "string" && body.orgId.trim() ? body.orgId : "") ||
-      activeOrgId ||
-      primary?.id ||
-      "";
-    if (!orgId) {
-      return errorResponse(404, "ORG_NOT_FOUND", "No business is available for this account.");
-    }
-
-    const result = await createBillingCheckout({
+    const result = await createBusinessProvisioningCheckout({
       actorUserId: auth.session.userId,
-      orgId,
+      businessName: body.businessName,
       paymentMethod: typeof body.paymentMethod === "string" ? body.paymentMethod : undefined,
       planMonths:
         typeof body.planMonths === "number"
@@ -50,12 +37,12 @@ export async function POST(request: NextRequest) {
             : undefined
     });
 
-    return successResponse(result, 200);
+    return successResponse(result, 201);
   } catch (error) {
     if (error instanceof ServiceError) {
       return errorResponse(error.status, error.code, error.message);
     }
 
-    return errorResponse(500, "BILLING_CHECKOUT_FAILED", "Failed to create checkout.");
+    return errorResponse(500, "BUSINESS_PROVISIONING_FAILED", "Failed to start business provisioning checkout.");
   }
 }

@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import Image from "next/image";
 import { createPortal } from "react-dom";
 import { Scissors, X } from "lucide-react";
 
@@ -354,8 +355,10 @@ export function VideoAttachmentEditorModal({
                 {/* Filmstrip Background */}
                 <div className="absolute inset-0 flex h-full w-full opacity-80">
                   {thumbnails.map((thumb, i) => (
-                    <div key={i} className="flex-1 h-full overflow-hidden border-r border-white/5 last:border-r-0 bg-black/50">
-                      {thumb ? <img src={thumb} className="h-full w-full object-cover" alt="" /> : null}
+                    <div key={i} className="relative flex-1 h-full overflow-hidden border-r border-white/5 last:border-r-0 bg-black/50">
+                      {thumb ? (
+                        <Image src={thumb} alt="" fill unoptimized className="h-full w-full object-cover" />
+                      ) : null}
                     </div>
                   ))}
                 </div>

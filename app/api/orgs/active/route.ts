@@ -2,17 +2,15 @@ import { type NextRequest, NextResponse } from "next/server";
 
 import { getActiveOrgIdFromRequest, setActiveOrgCookie } from "@/lib/auth/activeOrg";
 import { requireApiSession } from "@/lib/auth/middleware";
-import { createBusinessProvisioningCheckout } from "@/server/services/billingService";
 import {
   getActiveOrganizationForUser,
-  listOrganizationsForUser
+  listOrganizationsForUser,
+  resolvePrimaryOrganizationIdForUser
 } from "@/server/services/organizationService";
 import { ServiceError } from "@/server/services/serviceError";
 
-type ProvisioningRequest = {
-  businessName?: unknown;
-  paymentMethod?: unknown;
-  planMonths?: unknown;
+type SetActiveOrgRequest = {
+  orgId?: unknown;
 };
 
 function errorResponse(status: number, code: string, message: string) {
@@ -39,24 +37,14 @@ export async function GET(request: NextRequest) {
       listOrganizationsForUser(auth.session.userId),
       getActiveOrganizationForUser(auth.session.userId, cookieOrgId)
     ]);
-    const activeOrgId = activeOrg?.id ?? organizations[0]?.id ?? null;
-    const sorted = activeOrgId
-      ? [...organizations].sort((left, right) => {
-          if (left.id === activeOrgId) {
-            return -1;
-          }
-          if (right.id === activeOrgId) {
-            return 1;
-          }
-          return new Date(left.createdAt).getTime() - new Date(right.createdAt).getTime();
-        })
-      : organizations;
 
+    const activeOrgId = activeOrg?.id ?? organizations[0]?.id ?? null;
     const response = NextResponse.json(
       {
         data: {
-          organizations: sorted,
-          activeOrgId
+          activeOrgId,
+          activeOrganization: activeOrg,
+          organizations
         },
         meta: {}
       },
@@ -69,48 +57,47 @@ export async function GET(request: NextRequest) {
 
     return response;
   } catch {
-    return errorResponse(500, "ORG_LIST_FAILED", "Failed to fetch businesses.");
+    return errorResponse(500, "ACTIVE_ORG_GET_FAILED", "Failed to resolve active business.");
   }
 }
 
-export async function POST(request: NextRequest) {
+export async function PUT(request: NextRequest) {
   const auth = requireApiSession(request);
   if (auth.response) {
     return auth.response;
   }
 
-  let body: ProvisioningRequest;
+  let body: SetActiveOrgRequest;
   try {
-    body = (await request.json()) as ProvisioningRequest;
+    body = (await request.json()) as SetActiveOrgRequest;
   } catch {
     return errorResponse(400, "INVALID_JSON", "Request body must be valid JSON.");
   }
 
-  try {
-    const result = await createBusinessProvisioningCheckout({
-      actorUserId: auth.session.userId,
-      businessName: body.businessName,
-      paymentMethod: typeof body.paymentMethod === "string" ? body.paymentMethod : undefined,
-      planMonths:
-        typeof body.planMonths === "number"
-          ? body.planMonths
-          : typeof body.planMonths === "string" && body.planMonths.trim()
-            ? Number(body.planMonths)
-            : undefined
-    });
+  const candidateOrgId = typeof body.orgId === "string" ? body.orgId.trim() : "";
+  if (!candidateOrgId) {
+    return errorResponse(400, "MISSING_ORG_ID", "orgId is required.");
+  }
 
-    return NextResponse.json(
+  try {
+    const orgId = await resolvePrimaryOrganizationIdForUser(auth.session.userId, candidateOrgId);
+    const activeOrg = await getActiveOrganizationForUser(auth.session.userId, orgId);
+    const response = NextResponse.json(
       {
-        data: result,
+        data: {
+          activeOrgId: orgId,
+          activeOrganization: activeOrg
+        },
         meta: {}
       },
-      { status: 201 }
+      { status: 200 }
     );
+    setActiveOrgCookie(response, orgId);
+    return response;
   } catch (error) {
     if (error instanceof ServiceError) {
       return errorResponse(error.status, error.code, error.message);
     }
-
-    return errorResponse(500, "BUSINESS_PROVISIONING_FAILED", "Failed to start business provisioning checkout.");
+    return errorResponse(500, "ACTIVE_ORG_SET_FAILED", "Failed to update active business.");
   }
 }

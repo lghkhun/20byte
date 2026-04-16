@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import Image from "next/image";
 import { FileText, PlayCircle } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
@@ -40,9 +41,12 @@ export function AttachmentPendingBar({
   return (
     <div className="space-y-2 rounded-xl border border-border bg-background/55 p-2.5 text-xs">
       {isImage ? (
-        <img
+        <Image
           src={objectUrl}
           alt={pendingAttachment.fileName}
+          width={640}
+          height={640}
+          unoptimized
           className="max-h-[320px] w-auto max-w-[min(70vw,340px)] rounded-lg border border-border object-contain"
           onError={() => setFailed(true)}
         />

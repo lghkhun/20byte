@@ -95,20 +95,6 @@ export function InvoicePaymentMethodSettings() {
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
 
-  // Expose the save button via Context Header
-  const headerAction = useMemo(() => (
-    <Button 
-      type="button" 
-      onClick={() => void handleSaveSettings()} 
-      disabled={isSaving || isLoading} 
-      className="bg-emerald-600 hover:bg-emerald-700 text-white font-semibold"
-    >
-      {isSaving ? "Menyimpan..." : "Simpan Pengaturan"}
-    </Button>
-  ), [isSaving, isLoading]); // handleSaveSettings is not stable but it's okay
-
-  useSettingsHeaderAction("25-payment-save", headerAction);
-
   const applySettings = useCallback((settings: NonNullable<SettingsPayload["data"]>["settings"]) => {
     if (!settings) return;
     setEnableBankTransfer(settings.enableBankTransfer);
@@ -143,7 +129,7 @@ export function InvoicePaymentMethodSettings() {
     void loadData();
   }, [loadData]);
 
-  async function handleSaveSettings() {
+  const handleSaveSettings = useCallback(async () => {
     setIsSaving(true);
 
     try {
@@ -160,13 +146,29 @@ export function InvoicePaymentMethodSettings() {
 
       notifySuccess("Pengaturan metode pembayaran berhasil disimpan.");
     } catch (saveError) {
-       const message = saveError instanceof Error ? saveError.message : "Gagal menyimpan pengaturan.";
+      const message = saveError instanceof Error ? saveError.message : "Gagal menyimpan pengaturan.";
 
-       notifyError(message);
+      notifyError(message);
     } finally {
       setIsSaving(false);
     }
-  }
+  }, [applySettings, autoConfirmLabelEnabled, enableBankTransfer, enableQris, enabledVaMethods, feePolicy, paymentMethodsOrder]);
+
+  const headerAction = useMemo(
+    () => (
+      <Button
+        type="button"
+        onClick={() => void handleSaveSettings()}
+        disabled={isSaving || isLoading}
+        className="bg-emerald-600 hover:bg-emerald-700 text-white font-semibold"
+      >
+        {isSaving ? "Menyimpan..." : "Simpan Pengaturan"}
+      </Button>
+    ),
+    [handleSaveSettings, isLoading, isSaving]
+  );
+
+  useSettingsHeaderAction("25-payment-save", headerAction);
 
   async function handleCreateBank(event: React.FormEvent) {
     event.preventDefault();

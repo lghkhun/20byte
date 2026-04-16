@@ -280,7 +280,7 @@ export function CrmPipelineWorkspace() {
   const [board, setBoard] = useState<KanbanBoard | null>(null);
   const [boardCardLimit, setBoardCardLimit] = useState(DEFAULT_BOARD_CARD_LIMIT);
   const [isLoadingBoard, setIsLoadingBoard] = useState(true);
-  const [isRefreshingBoard, setIsRefreshingBoard] = useState(false);
+  const [, setIsRefreshingBoard] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isSavingMove, setIsSavingMove] = useState(false);
   const [draggedConversationId, setDraggedConversationId] = useState<string | null>(null);

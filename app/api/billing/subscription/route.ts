@@ -1,6 +1,7 @@
 import type { NextRequest } from "next/server";
 
 import { errorResponse, successResponse } from "@/lib/api/http";
+import { getActiveOrgIdFromRequest } from "@/lib/auth/activeOrg";
 import { requireApiSession } from "@/lib/auth/middleware";
 import { getPrimaryOrganizationForUser } from "@/server/services/organizationService";
 import { getOrgSubscriptionView } from "@/server/services/billingService";
@@ -53,10 +54,11 @@ export async function GET(request: NextRequest) {
   }
 
   const orgIdInput = request.nextUrl.searchParams.get("orgId")?.trim() ?? "";
+  const activeOrgId = getActiveOrgIdFromRequest(request);
 
   try {
     const primary = await getPrimaryOrganizationForUser(auth.session.userId);
-    const orgId = orgIdInput || primary?.id || "";
+    const orgId = orgIdInput || activeOrgId || primary?.id || "";
     if (!orgId) {
       return errorResponse(404, "ORG_NOT_FOUND", "No business is available for this account.");
     }

@@ -7,8 +7,10 @@ import {
   calculateBillingPlanPricing,
   calculateGatewayFeeCents,
   calculateTotalChargeCents,
+  createBusinessProvisioningOrderId,
   computeSubscriptionAccessState,
   computeSubscriptionReminderState,
+  resolvePakasirCreateFailureMessage,
   resolvePakasirPaymentSummary
 } from "@/server/services/billingService";
 
@@ -60,6 +62,53 @@ test("billing plan pricing applies discount and extends renewal days by selected
   assert.equal(plan3.gatewayFeeCents, 5_346);
   assert.equal(plan3.totalAmountCents, 272_646);
   assert.equal(plan3.renewalDays, 84);
+});
+
+test("createBusinessProvisioningOrderId builds safe deterministic id", () => {
+  const orderId = createBusinessProvisioningOrderId("user_clyx-TEST_123", 1_762_000_000_000);
+  assert.match(orderId, /^BIZ-[a-z0-9]{1,8}-[A-Z0-9]+$/);
+  assert.equal(orderId, "BIZ-xtest123-MHG9B18G00");
+});
+
+test("createBusinessProvisioningOrderId avoids collision in rapid generation", () => {
+  const first = createBusinessProvisioningOrderId("user-owner", 1_762_000_000_001);
+  const second = createBusinessProvisioningOrderId("user-owner", 1_762_000_000_001);
+  const third = createBusinessProvisioningOrderId("user-owner", 1_762_000_000_001);
+
+  assert.notEqual(first, second);
+  assert.notEqual(second, third);
+  assert.match(first, /^BIZ-[a-z0-9]{1,8}-[A-Z0-9]+$/);
+  assert.match(second, /^BIZ-[a-z0-9]{1,8}-[A-Z0-9]+$/);
+  assert.match(third, /^BIZ-[a-z0-9]{1,8}-[A-Z0-9]+$/);
+});
+
+test("createBusinessProvisioningOrderId appends entropy when nowMs is not explicitly provided", () => {
+  const first = createBusinessProvisioningOrderId("user-owner");
+  const second = createBusinessProvisioningOrderId("user-owner");
+
+  assert.notEqual(first, second);
+  assert.match(first, /^BIZ-[a-z0-9]{1,8}-[A-Z0-9]+$/);
+  assert.match(second, /^BIZ-[a-z0-9]{1,8}-[A-Z0-9]+$/);
+});
+
+test("resolvePakasirCreateFailureMessage prefers gateway message payload", () => {
+  const message = resolvePakasirCreateFailureMessage({
+    status: 400,
+    payload: {
+      message: "metode tidak valid"
+    },
+    rawBody: "{\"message\":\"metode tidak valid\"}"
+  });
+  assert.equal(message, "Failed to create payment transaction: metode tidak valid");
+});
+
+test("resolvePakasirCreateFailureMessage falls back to generic message", () => {
+  const message = resolvePakasirCreateFailureMessage({
+    status: 502,
+    payload: null,
+    rawBody: ""
+  });
+  assert.equal(message, "Failed to create payment transaction.");
 });
 
 test("trialing remains unlocked during trial+grace then locks", () => {

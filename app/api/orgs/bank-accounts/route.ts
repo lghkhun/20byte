@@ -1,5 +1,6 @@
 import { type NextRequest, NextResponse } from "next/server";
 
+import { getActiveOrgIdFromRequest } from "@/lib/auth/activeOrg";
 import { requireApiSession } from "@/lib/auth/middleware";
 import { resolvePrimaryOrganizationIdForUser } from "@/server/services/organizationService";
 import {
@@ -40,9 +41,10 @@ export async function GET(request: NextRequest) {
   }
 
   try {
+    const activeOrgId = getActiveOrgIdFromRequest(request);
     const orgId = await resolvePrimaryOrganizationIdForUser(
       auth.session.userId,
-      request.nextUrl.searchParams.get("orgId")?.trim() ?? ""
+      request.nextUrl.searchParams.get("orgId")?.trim() ?? activeOrgId
     );
     const accounts = await listOrgBankAccounts({
       actorUserId: auth.session.userId,
@@ -81,9 +83,10 @@ export async function POST(request: NextRequest) {
   }
 
   try {
+    const activeOrgId = getActiveOrgIdFromRequest(request);
     const orgId = await resolvePrimaryOrganizationIdForUser(
       auth.session.userId,
-      typeof body.orgId === "string" ? body.orgId : ""
+      typeof body.orgId === "string" && body.orgId.trim() ? body.orgId : activeOrgId
     );
     const account = await createOrgBankAccount({
       actorUserId: auth.session.userId,
@@ -125,9 +128,10 @@ export async function DELETE(request: NextRequest) {
   }
 
   try {
+    const activeOrgId = getActiveOrgIdFromRequest(request);
     const orgId = await resolvePrimaryOrganizationIdForUser(
       auth.session.userId,
-      typeof body.orgId === "string" ? body.orgId : ""
+      typeof body.orgId === "string" && body.orgId.trim() ? body.orgId : activeOrgId
     );
     const deleted = await deleteOrgBankAccount({
       actorUserId: auth.session.userId,

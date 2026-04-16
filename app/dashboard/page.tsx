@@ -14,12 +14,12 @@ import {
 
 import { DashboardDateRangePicker } from "@/components/dashboard/dashboard-date-range-picker";
 import { DashboardMessageChart } from "@/components/dashboard/dashboard-message-chart";
-import { Badge } from "@/components/ui/badge";
 import { HoverCard, HoverCardContent, HoverCardTrigger } from "@/components/ui/hover-card";
+import { ACTIVE_ORG_COOKIE_NAME } from "@/lib/auth/activeOrg";
 import { SESSION_COOKIE_NAME, verifySessionToken } from "@/lib/auth/session";
 import { prisma } from "@/lib/db/prisma";
 import { cn } from "@/lib/utils";
-import { getPrimaryOrganizationForUser } from "@/server/services/organizationService";
+import { getActiveOrganizationForUser } from "@/server/services/organizationService";
 
 const MS_PER_DAY = 24 * 60 * 60 * 1000;
 
@@ -88,12 +88,13 @@ export default async function DashboardPage({
   const resolvedSearchParams = searchParams ? await searchParams : undefined;
   const cookieStore = await cookies();
   const token = cookieStore.get(SESSION_COOKIE_NAME)?.value;
+  const activeOrgIdCookie = cookieStore.get(ACTIVE_ORG_COOKIE_NAME)?.value?.trim() ?? "";
   const session = token ? verifySessionToken(token) : null;
   if (!session) {
     return null;
   }
 
-  const business = await getPrimaryOrganizationForUser(session.userId);
+  const business = await getActiveOrganizationForUser(session.userId, activeOrgIdCookie);
   if (!business) {
     return <section className="p-6 text-sm text-muted-foreground">No business found.</section>;
   }

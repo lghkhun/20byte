@@ -3,7 +3,7 @@
 import Image from "next/image";
 import Link from "next/link";
 import QRCode from "qrcode";
-import { Copy, CreditCard } from "lucide-react";
+import { CreditCard } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 
 import { Button } from "@/components/ui/button";
@@ -111,7 +111,7 @@ function formatDateTime(value: string | null): string {
   }).format(date);
 }
 
-function formatCountdown(value: string | null): string {
+function formatCountdown(value: string | null, nowMs: number): string {
   if (!value) {
     return "-";
   }
@@ -120,7 +120,7 @@ function formatCountdown(value: string | null): string {
     return "-";
   }
 
-  const diffMs = Math.max(0, endAt - Date.now());
+  const diffMs = Math.max(0, endAt - nowMs);
   const totalSeconds = Math.floor(diffMs / 1000);
   const hours = Math.floor(totalSeconds / 3600);
   const minutes = Math.floor((totalSeconds % 3600) / 60);
@@ -147,7 +147,7 @@ export function PublicInvoicePayWorkspace({ token }: { token: string }) {
   const [options, setOptions] = useState<PaymentOptionsResponse["data"] | null>(null);
   const [activePayment, setActivePayment] = useState<PaymentPayload | null>(null);
   const [qrisDataUrl, setQrisDataUrl] = useState<string | null>(null);
-  const [clockTick, setClockTick] = useState(0);
+  const [countdownNowMs, setCountdownNowMs] = useState(() => Date.now());
 
   useEffect(() => {
     let mounted = true;
@@ -189,7 +189,7 @@ export function PublicInvoicePayWorkspace({ token }: { token: string }) {
       return;
     }
     const timer = window.setInterval(() => {
-      setClockTick((current) => current + 1);
+      setCountdownNowMs(Date.now());
     }, 1000);
     return () => {
       window.clearInterval(timer);
@@ -431,7 +431,7 @@ export function PublicInvoicePayWorkspace({ token }: { token: string }) {
                 </div>
                 <div className="flex items-center justify-between text-sm">
                   <span className="text-muted-foreground">Sisa Waktu</span>
-                  <span className="font-medium">{formatCountdown(activePayment.expiresAt)}</span>
+                  <span className="font-medium">{formatCountdown(activePayment.expiresAt, countdownNowMs)}</span>
                 </div>
 
                 {activePayment.paymentMethod === "qris" ? (

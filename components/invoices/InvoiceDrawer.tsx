@@ -467,12 +467,6 @@ export function InvoiceDrawer({
     }
   }
 
-  function toggleCatalogSelection(itemId: string) {
-    setCatalogSelectedIds((current) =>
-      current.includes(itemId) ? current.filter((id) => id !== itemId) : [...current, itemId]
-    );
-  }
-
   function handleApplyCatalogItems() {
     const selectedItems = catalogItems.filter((item) => catalogSelectedIds.includes(item.id));
     selectedItems.forEach((item) =>

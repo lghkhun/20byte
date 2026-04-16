@@ -1,3 +1,5 @@
+import { randomUUID } from "node:crypto";
+
 import { BillingChargeStatus, Role, SubscriptionStatus } from "@prisma/client";
 
 import { getPakasirConfig } from "@/lib/env";
@@ -12,6 +14,9 @@ const DEFAULT_BASE_AMOUNT_CENTS = 99_000;
 const DEFAULT_GATEWAY_FEE_BPS = 200;
 const DEFAULT_CURRENCY = "IDR";
 const WEBHOOK_ACTOR_USER_ID = "system:pakasir-webhook";
+const BUSINESS_PROVISIONING_ORDER_PREFIX = "BIZ";
+let lastProvisioningOrderTs = 0;
+let lastProvisioningOrderSeq = 0;
 const BILLING_PLAN_SCHEMES = [
   { months: 1, label: "Bulanan", discountBps: 0 },
   { months: 3, label: "3 Bulan", discountBps: 1_000 },
@@ -20,6 +25,26 @@ const BILLING_PLAN_SCHEMES = [
 const DEFAULT_BILLING_PLAN_MONTHS = 1 as const;
 
 type BillingPlanMonths = (typeof BILLING_PLAN_SCHEMES)[number]["months"];
+
+type OwnerBusinessProvisioningOrderView = {
+  id: string;
+  orderId: string;
+  businessName: string;
+  status: BillingChargeStatus;
+  requestedAmountCents: number;
+  providerFeeCents: number | null;
+  payableAmountCents: number;
+  paymentMethod: string;
+  paymentNumber: string | null;
+  expiredAt: Date | null;
+  paidAt: Date | null;
+  createdOrg: {
+    id: string;
+    name: string;
+  } | null;
+  createdAt: Date;
+  updatedAt: Date;
+};
 
 export type BillingPlanPricing = {
   months: BillingPlanMonths;
@@ -60,6 +85,9 @@ async function writeWebhookAuditLog(input: {
 }
 
 type PakasirCreateResponse = {
+  message?: string;
+  status?: string | boolean;
+  error?: string;
   payment?: {
     project?: string;
     order_id?: string;
@@ -91,6 +119,60 @@ type PakasirDetailResponse = {
 
 function normalize(value: string): string {
   return value.trim();
+}
+
+function normalizePaymentMethod(value: string | undefined, fallback: string): string {
+  const normalized = normalize(value ?? "").toLowerCase();
+  if (!normalized) {
+    return fallback;
+  }
+
+  if (!/^[a-z0-9_]{2,32}$/.test(normalized)) {
+    return fallback;
+  }
+
+  return normalized;
+}
+
+function toSafeAuditMessage(value: unknown): string | null {
+  if (typeof value !== "string") {
+    return null;
+  }
+  const normalized = value.trim();
+  return normalized ? normalized.slice(0, 240) : null;
+}
+
+function parseJsonSafely(value: string): Record<string, unknown> | null {
+  try {
+    const parsed = JSON.parse(value) as unknown;
+    if (parsed && typeof parsed === "object") {
+      return parsed as Record<string, unknown>;
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+export function resolvePakasirCreateFailureMessage(input: {
+  status: number;
+  payload: Record<string, unknown> | null;
+  rawBody: string;
+}): string {
+  const payload = input.payload;
+  const candidates = [
+    toSafeAuditMessage(payload?.message),
+    toSafeAuditMessage(payload?.error),
+    toSafeAuditMessage(payload?.status),
+    toSafeAuditMessage(input.rawBody)
+  ].filter(Boolean) as string[];
+
+  const gatewayReason = candidates[0] ?? null;
+  if (!gatewayReason) {
+    return "Failed to create payment transaction.";
+  }
+
+  return `Failed to create payment transaction: ${gatewayReason}`;
 }
 
 function toPositiveWholeNumber(value: unknown): number | null {
@@ -326,6 +408,27 @@ async function requireOrgOwner(userId: string, orgId: string) {
   }
 }
 
+async function requireAnyOwnedOrganization(userId: string): Promise<{ orgId: string }> {
+  const membership = await prisma.orgMember.findFirst({
+    where: {
+      userId,
+      role: Role.OWNER
+    },
+    select: {
+      orgId: true
+    },
+    orderBy: {
+      createdAt: "asc"
+    }
+  });
+
+  if (!membership) {
+    throw new ServiceError(403, "FORBIDDEN_OWNER_ONLY", "Only owner can create new business.");
+  }
+
+  return membership;
+}
+
 function resolveSubscriptionDueAt(input: {
   status: SubscriptionStatus;
   trialEndAt: Date;
@@ -556,9 +659,28 @@ async function createPakasirTransaction(input: {
     })
   });
 
-  const payload = (await response.json().catch(() => null)) as PakasirCreateResponse | null;
+  const rawBody = await response.text();
+  const parsedPayload = parseJsonSafely(rawBody);
+  const payload = (parsedPayload as PakasirCreateResponse | null) ?? null;
   if (!response.ok || !payload?.payment?.order_id) {
-    throw new ServiceError(502, "PAKASIR_CREATE_FAILED", "Failed to create payment transaction.");
+    const message = resolvePakasirCreateFailureMessage({
+      status: response.status,
+      payload: parsedPayload,
+      rawBody
+    });
+    const error = new ServiceError(502, "PAKASIR_CREATE_FAILED", message) as ServiceError & {
+      metaJson?: Record<string, unknown>;
+    };
+    error.metaJson = {
+      status: response.status,
+      method: input.method,
+      orderId: input.orderId,
+      amount: input.amount,
+      gatewayMessage: toSafeAuditMessage(parsedPayload?.message) ?? toSafeAuditMessage(parsedPayload?.error),
+      gatewayStatus: toSafeAuditMessage(parsedPayload?.status),
+      rawBody: toSafeAuditMessage(rawBody)
+    };
+    throw error;
   }
 
   return payload;
@@ -578,7 +700,7 @@ export async function createBillingCheckout(input: {
   await requireOrgOwner(input.actorUserId, orgId);
   const subscription = await getOrgSubscriptionOrThrow(orgId);
   const config = getPakasirConfig();
-  const paymentMethod = normalize(input.paymentMethod ?? config.defaultMethod) || config.defaultMethod;
+  const paymentMethod = normalizePaymentMethod(input.paymentMethod, config.defaultMethod);
   const planMonths = resolveBillingPlanMonths(input.planMonths);
   const selectedPlan = calculateBillingPlanPricing({
     baseAmountCents: subscription.baseAmountCents,
@@ -638,6 +760,207 @@ export async function createBillingCheckout(input: {
   };
 }
 
+function parseProvisioningBusinessName(value: unknown): string {
+  const businessName = typeof value === "string" ? value.trim() : "";
+  if (businessName.length < 2 || businessName.length > 80) {
+    throw new ServiceError(400, "INVALID_BUSINESS_NAME", "Business name must be between 2 and 80 characters.");
+  }
+  return businessName;
+}
+
+export function createBusinessProvisioningOrderId(
+  userId: string,
+  nowMs = Date.now(),
+  forceDeterministic = false
+): string {
+  const suffix = userId
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]/g, "")
+    .slice(-8) || "owner";
+  const ts = Math.max(0, Math.floor(nowMs));
+  if (ts === lastProvisioningOrderTs) {
+    lastProvisioningOrderSeq = (lastProvisioningOrderSeq + 1) % (36 * 36);
+  } else {
+    lastProvisioningOrderTs = ts;
+    lastProvisioningOrderSeq = 0;
+  }
+
+  const encodedTs = ts.toString(36).toUpperCase();
+  const encodedSeq = lastProvisioningOrderSeq.toString(36).toUpperCase().padStart(2, "0");
+  const shouldAppendEntropy = !forceDeterministic && arguments.length < 2;
+  const entropy = shouldAppendEntropy ? randomUUID().replace(/-/g, "").slice(0, 2).toUpperCase() : "";
+  return `${BUSINESS_PROVISIONING_ORDER_PREFIX}-${suffix}-${encodedTs}${encodedSeq}${entropy}`;
+}
+
+function mapProvisioningOrderView(order: {
+  id: string;
+  orderId: string;
+  businessName: string;
+  status: BillingChargeStatus;
+  paymentMethod: string;
+  paymentNumber: string | null;
+  expiredAt: Date | null;
+  paidAt: Date | null;
+  gatewayRawJson: string | null;
+  totalAmountCents: number;
+  createdAt: Date;
+  updatedAt: Date;
+  createdOrg: { id: string; name: string } | null;
+}): OwnerBusinessProvisioningOrderView {
+  const paymentSummary = resolvePakasirPaymentSummary({
+    payment: parsePakasirPaymentFromGatewayRaw(order.gatewayRawJson),
+    fallbackRequestedAmountCents: order.totalAmountCents
+  });
+
+  return {
+    id: order.id,
+    orderId: order.orderId,
+    businessName: order.businessName,
+    status: order.status,
+    requestedAmountCents: paymentSummary.requestedAmountCents,
+    providerFeeCents: paymentSummary.providerFeeCents,
+    payableAmountCents: paymentSummary.payableAmountCents,
+    paymentMethod: order.paymentMethod,
+    paymentNumber: order.paymentNumber,
+    expiredAt: order.expiredAt,
+    paidAt: order.paidAt,
+    createdOrg: order.createdOrg,
+    createdAt: order.createdAt,
+    updatedAt: order.updatedAt
+  };
+}
+
+export async function createBusinessProvisioningCheckout(input: {
+  actorUserId: string;
+  businessName: unknown;
+  paymentMethod?: string;
+  planMonths?: unknown;
+}) {
+  await requireAnyOwnedOrganization(input.actorUserId);
+  const businessName = parseProvisioningBusinessName(input.businessName);
+  const config = getPakasirConfig();
+  const paymentMethod = normalizePaymentMethod(input.paymentMethod, config.defaultMethod);
+  const planMonths = resolveBillingPlanMonths(input.planMonths);
+  const selectedPlan = calculateBillingPlanPricing({
+    baseAmountCents: DEFAULT_BASE_AMOUNT_CENTS,
+    gatewayFeeBps: DEFAULT_GATEWAY_FEE_BPS,
+    planMonths
+  });
+  const orderId = createBusinessProvisioningOrderId(input.actorUserId);
+  let gatewayPayload: PakasirCreateResponse;
+  try {
+    gatewayPayload = await createPakasirTransaction({
+      orderId,
+      amount: selectedPlan.totalAmountCents,
+      method: paymentMethod
+    });
+  } catch (error) {
+    try {
+      await prisma.platformAuditLog.create({
+        data: {
+          actorUserId: input.actorUserId,
+          action: "pakasir.provisioning.checkout_failed",
+          targetType: "business_provisioning",
+          targetId: orderId,
+          metaJson: JSON.stringify({
+            businessName,
+            planMonths,
+            paymentMethod,
+            amount: selectedPlan.totalAmountCents,
+            ...(error instanceof ServiceError && (error as ServiceError & { metaJson?: Record<string, unknown> }).metaJson
+              ? (error as ServiceError & { metaJson?: Record<string, unknown> }).metaJson
+              : {})
+          })
+        }
+      });
+    } catch {
+      // best effort audit logging
+    }
+    throw error;
+  }
+  const paymentSummary = resolvePakasirPaymentSummary({
+    payment: gatewayPayload.payment ?? null,
+    fallbackRequestedAmountCents: selectedPlan.totalAmountCents
+  });
+
+  const provisioningOrder = await prisma.ownerBusinessProvisioningOrder.create({
+    data: {
+      userId: input.actorUserId,
+      orderId,
+      businessName,
+      status: BillingChargeStatus.PENDING,
+      baseAmountCents: selectedPlan.netBaseAmountCents,
+      gatewayFeeCents: selectedPlan.gatewayFeeCents,
+      totalAmountCents: selectedPlan.totalAmountCents,
+      paymentMethod,
+      gatewayProvider: "pakasir",
+      gatewayProjectSlug: config.slug,
+      gatewayRawJson: JSON.stringify({
+        create: gatewayPayload,
+        checkoutMeta: {
+          planMonths: selectedPlan.months,
+          renewalDays: selectedPlan.renewalDays,
+          discountBps: selectedPlan.discountBps,
+          rawBaseAmountCents: selectedPlan.rawBaseAmountCents,
+          discountCents: selectedPlan.discountCents,
+          netBaseAmountCents: selectedPlan.netBaseAmountCents,
+          gatewayFeeCents: selectedPlan.gatewayFeeCents,
+          totalAmountCents: selectedPlan.totalAmountCents
+        }
+      }),
+      paymentNumber: gatewayPayload.payment?.payment_number ?? null,
+      expiredAt: gatewayPayload.payment?.expired_at ? new Date(gatewayPayload.payment.expired_at) : null
+    },
+    include: {
+      createdOrg: {
+        select: {
+          id: true,
+          name: true
+        }
+      }
+    }
+  });
+
+  return {
+    order: mapProvisioningOrderView(provisioningOrder),
+    payment: gatewayPayload.payment ?? null,
+    paymentSummary,
+    selectedPlan
+  };
+}
+
+export async function getBusinessProvisioningOrderView(input: {
+  actorUserId: string;
+  provisioningOrderId: string;
+}): Promise<OwnerBusinessProvisioningOrderView> {
+  const provisioningOrderId = normalize(input.provisioningOrderId);
+  if (!provisioningOrderId) {
+    throw new ServiceError(400, "INVALID_PROVISIONING_ORDER_ID", "Provisioning order id is required.");
+  }
+
+  const order = await prisma.ownerBusinessProvisioningOrder.findFirst({
+    where: {
+      id: provisioningOrderId,
+      userId: input.actorUserId
+    },
+    include: {
+      createdOrg: {
+        select: {
+          id: true,
+          name: true
+        }
+      }
+    }
+  });
+
+  if (!order) {
+    throw new ServiceError(404, "PROVISIONING_ORDER_NOT_FOUND", "Business provisioning order not found.");
+  }
+
+  return mapProvisioningOrderView(order);
+}
+
 async function fetchPakasirTransactionDetail(input: {
   orderId: string;
   amount: number;
@@ -678,6 +1001,169 @@ async function activateSubscriptionFromPaidCharge(orgId: string, paidAt: Date, r
   });
 }
 
+async function activateSubscriptionForProvisionedBusiness(input: {
+  orgId: string;
+  paidAt: Date;
+  renewalDays: number;
+}) {
+  const periodStart = input.paidAt;
+  const normalizedRenewalDays = Math.max(1, Math.floor(input.renewalDays));
+  const periodEnd = addDays(periodStart, normalizedRenewalDays);
+
+  await prisma.orgSubscription.upsert({
+    where: {
+      orgId: input.orgId
+    },
+    create: {
+      orgId: input.orgId,
+      status: SubscriptionStatus.ACTIVE,
+      trialStartAt: periodStart,
+      trialEndAt: periodStart,
+      graceDays: DEFAULT_GRACE_DAYS,
+      currentPeriodStartAt: periodStart,
+      currentPeriodEndAt: periodEnd,
+      nextDueAt: periodEnd,
+      baseAmountCents: DEFAULT_BASE_AMOUNT_CENTS,
+      gatewayFeeBps: DEFAULT_GATEWAY_FEE_BPS,
+      currency: DEFAULT_CURRENCY,
+      lastPaidAt: periodStart
+    },
+    update: {
+      status: SubscriptionStatus.ACTIVE,
+      trialStartAt: periodStart,
+      trialEndAt: periodStart,
+      graceDays: DEFAULT_GRACE_DAYS,
+      currentPeriodStartAt: periodStart,
+      currentPeriodEndAt: periodEnd,
+      nextDueAt: periodEnd,
+      baseAmountCents: DEFAULT_BASE_AMOUNT_CENTS,
+      gatewayFeeBps: DEFAULT_GATEWAY_FEE_BPS,
+      currency: DEFAULT_CURRENCY,
+      lastPaidAt: periodStart
+    }
+  });
+}
+
+async function completeBusinessProvisioningOrder(input: {
+  orderId: string;
+  amount: number;
+  status: string;
+}) {
+  const order = await prisma.ownerBusinessProvisioningOrder.findUnique({
+    where: {
+      orderId: input.orderId
+    }
+  });
+  if (!order) {
+    return null;
+  }
+
+  if (order.status === BillingChargeStatus.PAID && order.createdOrgId) {
+    return { order, skipped: true as const };
+  }
+
+  const detail = await fetchPakasirTransactionDetail({
+    orderId: input.orderId,
+    amount: input.amount
+  });
+  const transaction = detail.transaction;
+  const isCompleted = transaction?.status?.toLowerCase() === "completed";
+  const isAmountMatch = Number(transaction?.amount) === order.totalAmountCents;
+
+  if (!isCompleted || !isAmountMatch) {
+    await writeWebhookAuditLog({
+      action: "pakasir.webhook.verification_failed",
+      orderId: input.orderId,
+      meta: {
+        amount: input.amount,
+        status: input.status,
+        detailStatus: transaction?.status ?? null,
+        detailAmount: transaction?.amount ?? null,
+        expectedAmount: order.totalAmountCents,
+        provisioningOrderId: order.id
+      }
+    });
+    throw new ServiceError(400, "PAYMENT_VERIFICATION_FAILED", "Payment verification failed.");
+  }
+
+  const paidAt = transaction?.completed_at ? new Date(transaction.completed_at) : new Date();
+  const existingGatewayRaw = parseGatewayRawAsRecord(order.gatewayRawJson);
+  const createPayload = existingGatewayRaw?.create ?? existingGatewayRaw ?? null;
+  const checkoutMeta = extractNestedObjectField(existingGatewayRaw, "checkoutMeta");
+  const renewalDays = resolveRenewalDaysFromCharge(order.gatewayRawJson);
+
+  const updated = await prisma.$transaction(async (tx) => {
+    const latest = await tx.ownerBusinessProvisioningOrder.findUnique({
+      where: {
+        id: order.id
+      }
+    });
+    if (!latest) {
+      throw new ServiceError(404, "PROVISIONING_ORDER_NOT_FOUND", "Business provisioning order not found.");
+    }
+
+    let createdOrgId = latest.createdOrgId;
+    if (!createdOrgId) {
+      const createdOrg = await tx.org.create({
+        data: {
+          name: latest.businessName
+        },
+        select: {
+          id: true
+        }
+      });
+      createdOrgId = createdOrg.id;
+      await tx.orgMember.create({
+        data: {
+          orgId: createdOrgId,
+          userId: latest.userId,
+          role: Role.OWNER
+        }
+      });
+    }
+
+    const updatedOrder = await tx.ownerBusinessProvisioningOrder.update({
+      where: {
+        id: latest.id
+      },
+      data: {
+        status: BillingChargeStatus.PAID,
+        paidAt,
+        createdOrgId,
+        gatewayRawJson: JSON.stringify({
+          create: createPayload,
+          checkoutMeta,
+          detail
+        })
+      }
+    });
+
+    return updatedOrder;
+  });
+
+  if (updated.createdOrgId) {
+    await activateSubscriptionForProvisionedBusiness({
+      orgId: updated.createdOrgId,
+      paidAt,
+      renewalDays
+    });
+  }
+
+  await writeWebhookAuditLog({
+    action: "pakasir.webhook.completed",
+    orderId: input.orderId,
+    meta: {
+      amount: input.amount,
+      status: input.status,
+      provisioningOrderId: updated.id,
+      orgId: updated.createdOrgId,
+      paidAt: paidAt.toISOString()
+    }
+  });
+
+  return { order: updated, skipped: false as const };
+}
+
 export async function processPakasirWebhook(input: {
   order_id?: unknown;
   amount?: unknown;
@@ -716,6 +1202,19 @@ export async function processPakasirWebhook(input: {
 
   const charge = await prisma.billingCharge.findUnique({ where: { orderId } });
   if (!charge) {
+    const provisioningResult = await completeBusinessProvisioningOrder({
+      orderId,
+      amount,
+      status
+    });
+    if (provisioningResult) {
+      return {
+        charge: null,
+        provisioningOrder: provisioningResult.order,
+        skipped: provisioningResult.skipped
+      };
+    }
+
     await writeWebhookAuditLog({
       action: "pakasir.webhook.charge_not_found",
       orderId,

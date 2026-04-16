@@ -1,6 +1,7 @@
 import type { NextRequest } from "next/server";
 
 import { errorResponse, successResponse } from "@/lib/api/http";
+import { getActiveOrgIdFromRequest } from "@/lib/auth/activeOrg";
 import { requireApiSession } from "@/lib/auth/middleware";
 import { createWalletTopup, listWalletTopups } from "@/server/services/invoiceGatewayService";
 import { ServiceError } from "@/server/services/serviceError";
@@ -18,9 +19,10 @@ export async function GET(request: NextRequest) {
   }
 
   try {
+    const activeOrgId = getActiveOrgIdFromRequest(request);
     const topups = await listWalletTopups({
       actorUserId: auth.session.userId,
-      orgId: request.nextUrl.searchParams.get("orgId") ?? undefined
+      orgId: request.nextUrl.searchParams.get("orgId") ?? activeOrgId ?? undefined
     });
     return successResponse({ topups }, 200);
   } catch (error) {
@@ -47,9 +49,13 @@ export async function POST(request: NextRequest) {
   const amountCents = typeof body.amountCents === "number" ? body.amountCents : Number(body.amountCents ?? 0);
 
   try {
+    const activeOrgId = getActiveOrgIdFromRequest(request);
     const topup = await createWalletTopup({
       actorUserId: auth.session.userId,
-      orgId: typeof body.orgId === "string" ? body.orgId : undefined,
+      orgId:
+        typeof body.orgId === "string" && body.orgId.trim()
+          ? body.orgId
+          : activeOrgId || undefined,
       amountCents,
       paymentMethod: typeof body.paymentMethod === "string" ? body.paymentMethod : undefined
     });

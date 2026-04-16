@@ -1,5 +1,6 @@
 import { type NextRequest, NextResponse } from "next/server";
 
+import { getActiveOrgIdFromRequest } from "@/lib/auth/activeOrg";
 import { requireApiSession } from "@/lib/auth/middleware";
 import {
   getOrganizationBusinessProfile,
@@ -51,9 +52,10 @@ export async function GET(request: NextRequest) {
   }
 
   try {
+    const activeOrgId = getActiveOrgIdFromRequest(request);
     const profile = await getOrganizationBusinessProfile(
       auth.session.userId,
-      request.nextUrl.searchParams.get("orgId")?.trim() ?? ""
+      request.nextUrl.searchParams.get("orgId")?.trim() ?? activeOrgId
     );
     return NextResponse.json({ data: { profile }, meta: {} }, { status: 200 });
   } catch (error) {
@@ -83,9 +85,13 @@ export async function PATCH(request: NextRequest) {
   }
 
   try {
+    const activeOrgId = getActiveOrgIdFromRequest(request);
     const profile = await updateOrganizationBusinessProfile({
       actorUserId: auth.session.userId,
-      orgId: typeof body.orgId === "string" ? body.orgId : undefined,
+      orgId:
+        typeof body.orgId === "string" && body.orgId.trim()
+          ? body.orgId
+          : activeOrgId || undefined,
       name: body.name,
       legalName: parseOptionalString(body.legalName),
       responsibleName: parseOptionalString(body.responsibleName),

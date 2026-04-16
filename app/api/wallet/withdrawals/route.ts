@@ -1,6 +1,7 @@
 import type { NextRequest } from "next/server";
 
 import { errorResponse, successResponse } from "@/lib/api/http";
+import { getActiveOrgIdFromRequest } from "@/lib/auth/activeOrg";
 import { requireApiSession } from "@/lib/auth/middleware";
 import { createWithdrawRequest, listWithdrawRequests } from "@/server/services/invoiceGatewayService";
 import { ServiceError } from "@/server/services/serviceError";
@@ -21,9 +22,10 @@ export async function GET(request: NextRequest) {
   }
 
   try {
+    const activeOrgId = getActiveOrgIdFromRequest(request);
     const requests = await listWithdrawRequests({
       actorUserId: auth.session.userId,
-      orgId: request.nextUrl.searchParams.get("orgId") ?? undefined
+      orgId: request.nextUrl.searchParams.get("orgId") ?? activeOrgId ?? undefined
     });
     return successResponse({ requests }, 200);
   } catch (error) {
@@ -48,9 +50,13 @@ export async function POST(request: NextRequest) {
   }
 
   try {
+    const activeOrgId = getActiveOrgIdFromRequest(request);
     const requestRow = await createWithdrawRequest({
       actorUserId: auth.session.userId,
-      orgId: typeof body.orgId === "string" ? body.orgId : undefined,
+      orgId:
+        typeof body.orgId === "string" && body.orgId.trim()
+          ? body.orgId
+          : activeOrgId || undefined,
       amountCents: typeof body.amountCents === "number" ? body.amountCents : Number(body.amountCents ?? 0),
       bankName: typeof body.bankName === "string" ? body.bankName : "",
       accountNumber: typeof body.accountNumber === "string" ? body.accountNumber : "",

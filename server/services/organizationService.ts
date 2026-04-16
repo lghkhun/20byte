@@ -269,32 +269,6 @@ export async function createOrganizationForUser(input: CreateOrganizationInput):
   const name = validateOrgName(input.name);
 
   return prisma.$transaction(async (tx) => {
-    const existingOwnedOrganization = await tx.orgMember.findFirst({
-      where: {
-        userId: input.userId,
-        role: Role.OWNER
-      },
-      include: {
-        org: {
-          select: {
-            id: true,
-            name: true
-          }
-        }
-      },
-      orderBy: {
-        createdAt: "asc"
-      }
-    });
-
-    if (existingOwnedOrganization) {
-      throw new ServiceError(
-        409,
-        "OWNER_ALREADY_HAS_ORGANIZATION",
-        `MVP saat ini hanya mendukung 1 bisnis per akun owner. Akun ini sudah memiliki bisnis "${existingOwnedOrganization.org.name}".`
-      );
-    }
-
     const organization = await tx.org.create({
       data: {
         name
@@ -324,6 +298,43 @@ export async function createOrganizationForUser(input: CreateOrganizationInput):
       createdAt: organization.createdAt
     };
   });
+}
+
+export async function getActiveOrganizationForUser(
+  userId: string,
+  candidateOrgId = ""
+): Promise<OrganizationSummary | null> {
+  const normalizedCandidate = candidateOrgId.trim();
+  if (normalizedCandidate) {
+    const membership = await prisma.orgMember.findUnique({
+      where: {
+        orgId_userId: {
+          orgId: normalizedCandidate,
+          userId
+        }
+      },
+      include: {
+        org: {
+          select: {
+            id: true,
+            name: true,
+            createdAt: true
+          }
+        }
+      }
+    });
+
+    if (membership) {
+      return {
+        id: membership.org.id,
+        name: membership.org.name,
+        role: membership.role,
+        createdAt: membership.org.createdAt
+      };
+    }
+  }
+
+  return getPrimaryOrganizationForUser(userId);
 }
 
 export async function listOrganizationsForUser(userId: string): Promise<OrganizationSummary[]> {

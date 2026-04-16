@@ -8,6 +8,7 @@ type OrgSummary = {
 type OrgsResponse = {
   data?: {
     organizations?: OrgSummary[];
+    activeOrgId?: string | null;
   };
   error?: {
     message?: string;
@@ -19,6 +20,7 @@ const ORG_CACHE_TTL_MS = 60_000;
 let orgCache: {
   expiresAt: number;
   value: OrgSummary[];
+  activeOrgId: string | null;
 } | null = null;
 
 let inflightOrgsPromise: Promise<OrgSummary[]> | null = null;
@@ -54,6 +56,7 @@ export async function fetchOrganizationsCached(options?: { force?: boolean }): P
     const organizations = parseOrganizations(payload);
     orgCache = {
       value: organizations,
+      activeOrgId: payload?.data?.activeOrgId ?? organizations[0]?.id ?? null,
       expiresAt: Date.now() + ORG_CACHE_TTL_MS
     };
     return organizations;
@@ -69,4 +72,8 @@ export async function fetchOrganizationsCached(options?: { force?: boolean }): P
 export function invalidateOrganizationsCache(): void {
   orgCache = null;
   inflightOrgsPromise = null;
+}
+
+export function getCachedActiveOrgId(): string | null {
+  return orgCache?.activeOrgId ?? null;
 }

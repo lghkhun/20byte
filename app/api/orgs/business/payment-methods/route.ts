@@ -1,5 +1,6 @@
 import { type NextRequest, NextResponse } from "next/server";
 
+import { getActiveOrgIdFromRequest } from "@/lib/auth/activeOrg";
 import { requireApiSession } from "@/lib/auth/middleware";
 import {
   getOrgInvoicePaymentSettings,
@@ -37,9 +38,10 @@ export async function GET(request: NextRequest) {
   }
 
   try {
+    const activeOrgId = getActiveOrgIdFromRequest(request);
     const orgId = await resolvePrimaryOrganizationIdForUser(
       auth.session.userId,
-      request.nextUrl.searchParams.get("orgId")?.trim() ?? ""
+      request.nextUrl.searchParams.get("orgId")?.trim() ?? activeOrgId
     );
 
     const settings = await getOrgInvoicePaymentSettings(orgId);
@@ -67,9 +69,13 @@ export async function PATCH(request: NextRequest) {
   }
 
   try {
+    const activeOrgId = getActiveOrgIdFromRequest(request);
     const settings = await updateOrgInvoicePaymentSettings({
       actorUserId: auth.session.userId,
-      orgId: typeof body.orgId === "string" ? body.orgId : undefined,
+      orgId:
+        typeof body.orgId === "string" && body.orgId.trim()
+          ? body.orgId
+          : activeOrgId || undefined,
       enableBankTransfer: typeof body.enableBankTransfer === "boolean" ? body.enableBankTransfer : undefined,
       enableQris: typeof body.enableQris === "boolean" ? body.enableQris : undefined,
       enabledVaMethods: Array.isArray(body.enabledVaMethods)

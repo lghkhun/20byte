@@ -116,12 +116,20 @@ export function getAuthSecret(): string {
 }
 
 export function getPakasirConfig() {
-  const slug = process.env.PAKASIR_PROJECT_SLUG?.trim() ?? "";
-  const apiKey = process.env.PAKASIR_API_KEY?.trim() ?? "";
-  const baseUrl = process.env.PAKASIR_BASE_URL?.trim() || "https://app.pakasir.com";
-  const defaultMethod = process.env.PAKASIR_DEFAULT_METHOD?.trim() || "qris";
-  const webhookPath = process.env.PAKASIR_WEBHOOK_PATH?.trim() || "/api/billing/webhooks/pakasir";
-  const webhookToken = process.env.PAKASIR_WEBHOOK_TOKEN?.trim() || "";
+  const normalizeLooseQuoted = (value: string | undefined): string => {
+    const trimmed = value?.trim() ?? "";
+    if (!trimmed) {
+      return "";
+    }
+    return trimmed.replace(/^['"]+|['"]+$/g, "");
+  };
+
+  const slug = normalizeLooseQuoted(process.env.PAKASIR_PROJECT_SLUG);
+  const apiKey = normalizeLooseQuoted(process.env.PAKASIR_API_KEY);
+  const baseUrl = normalizeLooseQuoted(process.env.PAKASIR_BASE_URL) || "https://app.pakasir.com";
+  const defaultMethod = normalizeLooseQuoted(process.env.PAKASIR_DEFAULT_METHOD) || "qris";
+  const webhookPath = normalizeLooseQuoted(process.env.PAKASIR_WEBHOOK_PATH) || "/api/billing/webhooks/pakasir";
+  const webhookToken = normalizeLooseQuoted(process.env.PAKASIR_WEBHOOK_TOKEN);
 
   if (!slug) {
     throw new Error("Missing required environment variable: PAKASIR_PROJECT_SLUG");

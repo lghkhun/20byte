@@ -8,11 +8,12 @@ import "@/styles/globals.css";
 import { AppShell } from "@/components/layout/AppShell";
 import { ThemeProvider } from "@/components/providers/ThemeProvider";
 import { Toaster } from "@/components/ui/sonner";
+import { ACTIVE_ORG_COOKIE_NAME } from "@/lib/auth/activeOrg";
 import { SESSION_COOKIE_NAME, verifySessionToken } from "@/lib/auth/session";
 import { cn } from "@/lib/utils";
 import { getOwnerOnboardingStatus } from "@/server/services/onboardingService";
 import { isSuperadmin } from "@/server/services/platformAccessService";
-import { getPrimaryOrganizationForUser } from "@/server/services/organizationService";
+import { getActiveOrganizationForUser } from "@/server/services/organizationService";
 
 export const metadata: Metadata = {
   title: "20byte",
@@ -26,11 +27,12 @@ export default async function RootLayout({
 }>) {
   const cookieStore = await cookies();
   const token = cookieStore.get(SESSION_COOKIE_NAME)?.value;
+  const activeOrgIdCookie = cookieStore.get(ACTIVE_ORG_COOKIE_NAME)?.value?.trim() ?? "";
   const session = token ? verifySessionToken(token) : null;
   const [superadminEnabled, primaryOrganization] = session
     ? await Promise.all([
       isSuperadmin(session.userId, session.email).catch(() => false),
-      getPrimaryOrganizationForUser(session.userId).catch(() => null)
+      getActiveOrganizationForUser(session.userId, activeOrgIdCookie).catch(() => null)
     ])
     : [false, null];
   const ownerOnboardingStatus =

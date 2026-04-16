@@ -84,6 +84,8 @@ export function ChatWindow({
   onCreateNoteFromMessage,
   onUnselectConversation
 }: ChatWindowProps) {
+  void onDeleteConversation;
+  void onUnselectConversation;
   const displayName = conversation?.customerDisplayName?.trim() || conversation?.customerPhoneE164 || "Belum ada chat dipilih";
   const isOpen = conversation?.status === "OPEN";
   const scrollRef = useRef<HTMLDivElement | null>(null);

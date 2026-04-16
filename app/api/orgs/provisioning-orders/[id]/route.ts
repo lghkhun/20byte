@@ -1,28 +1,33 @@
 import type { NextRequest } from "next/server";
 
 import { errorResponse, successResponse } from "@/lib/api/http";
-import { getActiveOrgIdFromRequest } from "@/lib/auth/activeOrg";
 import { requireApiSession } from "@/lib/auth/middleware";
-import { getOrgWalletSummary } from "@/server/services/invoiceGatewayService";
+import { getBusinessProvisioningOrderView } from "@/server/services/billingService";
 import { ServiceError } from "@/server/services/serviceError";
 
-export async function GET(request: NextRequest) {
+export async function GET(
+  request: NextRequest,
+  context: { params: Promise<{ id: string }> }
+) {
   const auth = requireApiSession(request);
   if (auth.response) {
     return auth.response;
   }
 
+  const params = await context.params;
+  const provisioningOrderId = params.id?.trim() ?? "";
+
   try {
-    const activeOrgId = getActiveOrgIdFromRequest(request);
-    const summary = await getOrgWalletSummary({
+    const order = await getBusinessProvisioningOrderView({
       actorUserId: auth.session.userId,
-      orgId: request.nextUrl.searchParams.get("orgId") ?? activeOrgId ?? undefined
+      provisioningOrderId
     });
-    return successResponse({ summary }, 200);
+    return successResponse({ order }, 200);
   } catch (error) {
     if (error instanceof ServiceError) {
       return errorResponse(error.status, error.code, error.message);
     }
-    return errorResponse(500, "WALLET_SUMMARY_FAILED", "Failed to load wallet summary.");
+
+    return errorResponse(500, "PROVISIONING_ORDER_FETCH_FAILED", "Failed to load provisioning order.");
   }
 }

@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 
+import { clearActiveOrgCookie } from "@/lib/auth/activeOrg";
 import { clearSessionCookie } from "@/lib/auth/session";
 
 export async function POST() {
@@ -8,5 +9,6 @@ export async function POST() {
     meta: {}
   });
   clearSessionCookie(response);
+  clearActiveOrgCookie(response);
   return response;
 }

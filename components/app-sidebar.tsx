@@ -7,6 +7,7 @@ import { AlertTriangle, FileText, LayoutDashboard, Link2, MessageCircle, Shield,
 import QRCode from "qrcode";
 import { useEffect, useMemo, useRef, useState } from "react";
 
+import { BusinessSwitcher } from "@/components/layout/BusinessSwitcher";
 import { NavMain } from "@/components/nav-main";
 import { NavUser } from "@/components/nav-user";
 import { SidebarOnboardingCard } from "@/components/onboarding/OwnerOnboardingView";
@@ -488,6 +489,12 @@ export function AppSidebar({ user, ownerOnboardingStatus = null }: AppSidebarPro
         </SidebarMenu>
       </SidebarHeader>
       <SidebarContent>
+        <BusinessSwitcher
+          isOwnerRole={isOwnerRole}
+          onActiveOrgChanged={() => {
+            setPendingPath(null);
+          }}
+        />
         {isOwnerRole ? (
           <div className="mx-3 mb-2 group-data-[collapsible=icon]:hidden">
             <Link
