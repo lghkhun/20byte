@@ -2,6 +2,7 @@ import type { NextRequest } from "next/server";
 
 import { errorResponse, successResponse } from "@/lib/api/http";
 import { requireApiSession } from "@/lib/auth/middleware";
+import { requireSuperadmin } from "@/server/services/platformAccessService";
 import { processWithdrawRequestAction } from "@/server/services/invoiceGatewayService";
 import { ServiceError } from "@/server/services/serviceError";
 
@@ -32,6 +33,7 @@ export async function PATCH(
   }
 
   try {
+    await requireSuperadmin(auth.session.userId, auth.session.email);
     const updated = await processWithdrawRequestAction({
       actorUserId: auth.session.userId,
       requestId: (await context.params).requestId,

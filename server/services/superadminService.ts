@@ -123,6 +123,138 @@ export async function listUsersForSuperadmin() {
   return users;
 }
 
+export async function listBillingChargesForSuperadmin(limit = 200) {
+  const safeLimit = Math.max(1, Math.min(1000, Math.floor(limit)));
+  return prisma.billingCharge.findMany({
+    orderBy: {
+      createdAt: "desc"
+    },
+    take: safeLimit,
+    select: {
+      id: true,
+      orgId: true,
+      orderId: true,
+      status: true,
+      paymentMethod: true,
+      gatewayProvider: true,
+      baseAmountCents: true,
+      gatewayFeeCents: true,
+      totalAmountCents: true,
+      paymentNumber: true,
+      expiredAt: true,
+      paidAt: true,
+      createdAt: true,
+      org: {
+        select: {
+          name: true
+        }
+      }
+    }
+  });
+}
+
+export async function listInvoicePaymentAttemptsForSuperadmin(limit = 200) {
+  const safeLimit = Math.max(1, Math.min(1000, Math.floor(limit)));
+  return prisma.invoicePaymentAttempt.findMany({
+    orderBy: {
+      createdAt: "desc"
+    },
+    take: safeLimit,
+    select: {
+      id: true,
+      orgId: true,
+      invoiceId: true,
+      orderId: true,
+      provider: true,
+      paymentMethod: true,
+      status: true,
+      feePolicy: true,
+      invoiceAmountCents: true,
+      feeCents: true,
+      customerPayableCents: true,
+      paymentNumber: true,
+      expiresAt: true,
+      paidAt: true,
+      createdAt: true,
+      org: {
+        select: {
+          name: true
+        }
+      },
+      invoice: {
+        select: {
+          invoiceNo: true,
+          customer: {
+            select: {
+              displayName: true,
+              phoneE164: true
+            }
+          }
+        }
+      }
+    }
+  });
+}
+
+export async function listWalletTopupsForSuperadmin(limit = 200) {
+  const safeLimit = Math.max(1, Math.min(1000, Math.floor(limit)));
+  return prisma.orgWalletTopup.findMany({
+    orderBy: {
+      createdAt: "desc"
+    },
+    take: safeLimit,
+    select: {
+      id: true,
+      orgId: true,
+      orderId: true,
+      amountCents: true,
+      feeCents: true,
+      customerPayableCents: true,
+      paymentMethod: true,
+      paymentNumber: true,
+      status: true,
+      expiresAt: true,
+      paidAt: true,
+      createdAt: true,
+      org: {
+        select: {
+          name: true
+        }
+      }
+    }
+  });
+}
+
+export async function listWalletWithdrawRequestsForSuperadmin(limit = 200) {
+  const safeLimit = Math.max(1, Math.min(1000, Math.floor(limit)));
+  return prisma.orgWalletWithdrawRequest.findMany({
+    orderBy: {
+      createdAt: "desc"
+    },
+    take: safeLimit,
+    select: {
+      id: true,
+      orgId: true,
+      amountCents: true,
+      bankName: true,
+      accountNumber: true,
+      accountHolder: true,
+      status: true,
+      note: true,
+      processedNote: true,
+      requestedByUserId: true,
+      processedByUserId: true,
+      processedAt: true,
+      createdAt: true,
+      org: {
+        select: {
+          name: true
+        }
+      }
+    }
+  });
+}
+
 export async function getSuperadminOverview() {
   const now = new Date();
   const start30 = startOfUtcDay(addDays(now, -29));

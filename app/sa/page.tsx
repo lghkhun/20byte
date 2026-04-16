@@ -2,10 +2,9 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Bar, BarChart, CartesianGrid, XAxis, YAxis } from "recharts";
-import { ShieldCheck, RefreshCcw, Layers, Globe, Users2, Activity, ShieldAlert, AlertTriangle, AlertCircle } from "lucide-react";
+import { ShieldCheck, RefreshCcw, Layers, Globe, Users2, Activity, ShieldAlert, AlertCircle, ReceiptText, CreditCard, WalletCards, HandCoins } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { ChartContainer, ChartTooltip, ChartTooltipContent, type ChartConfig } from "@/components/ui/chart";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -120,6 +119,90 @@ type AuditItem = {
   meta: Record<string, unknown> | null;
 };
 
+type BillingChargeItem = {
+  id: string;
+  orgId: string;
+  orderId: string;
+  status: string;
+  paymentMethod: string;
+  gatewayProvider: string;
+  baseAmountCents: number;
+  gatewayFeeCents: number;
+  totalAmountCents: number;
+  paymentNumber: string | null;
+  expiredAt: string | null;
+  paidAt: string | null;
+  createdAt: string;
+  org: {
+    name: string;
+  };
+};
+
+type InvoicePaymentAttemptItem = {
+  id: string;
+  orgId: string;
+  invoiceId: string;
+  orderId: string;
+  provider: string;
+  paymentMethod: string;
+  status: string;
+  feePolicy: string;
+  invoiceAmountCents: number;
+  feeCents: number;
+  customerPayableCents: number;
+  paymentNumber: string | null;
+  expiresAt: string | null;
+  paidAt: string | null;
+  createdAt: string;
+  org: {
+    name: string;
+  };
+  invoice: {
+    invoiceNo: string;
+    customer: {
+      displayName: string | null;
+      phoneE164: string;
+    };
+  };
+};
+
+type WalletTopupItem = {
+  id: string;
+  orgId: string;
+  orderId: string;
+  amountCents: number;
+  feeCents: number;
+  customerPayableCents: number;
+  paymentMethod: string;
+  paymentNumber: string | null;
+  status: string;
+  expiresAt: string | null;
+  paidAt: string | null;
+  createdAt: string;
+  org: {
+    name: string;
+  };
+};
+
+type WalletWithdrawRequestItem = {
+  id: string;
+  orgId: string;
+  amountCents: number;
+  bankName: string;
+  accountNumber: string;
+  accountHolder: string;
+  status: string;
+  note: string | null;
+  processedNote: string | null;
+  requestedByUserId: string;
+  processedByUserId: string | null;
+  processedAt: string | null;
+  createdAt: string;
+  org: {
+    name: string;
+  };
+};
+
 function formatDate(value: string | null): string {
   if (!value) {
     return "-";
@@ -185,6 +268,10 @@ export default function SuperadminPage() {
   const [users, setUsers] = useState<UserItem[]>([]);
   const [overview, setOverview] = useState<SuperadminOverview | null>(null);
   const [auditLogs, setAuditLogs] = useState<AuditItem[]>([]);
+  const [billingCharges, setBillingCharges] = useState<BillingChargeItem[]>([]);
+  const [invoiceAttempts, setInvoiceAttempts] = useState<InvoicePaymentAttemptItem[]>([]);
+  const [walletTopups, setWalletTopups] = useState<WalletTopupItem[]>([]);
+  const [walletWithdrawRequests, setWalletWithdrawRequests] = useState<WalletWithdrawRequestItem[]>([]);
   const [trendWindow, setTrendWindow] = useState<"7" | "30">("7");
   const [error, setError] = useState<string | null>(null);
   const [busyKey, setBusyKey] = useState<string | null>(null);
@@ -268,6 +355,43 @@ export default function SuperadminPage() {
       setError(loadError instanceof Error ? loadError.message : "Failed to load audit logs.");
     }
   }, [auditAction, auditDateFrom, auditDateTo, auditQuery, auditTargetType]);
+
+  const loadFinance = useCallback(async () => {
+    setError(null);
+    try {
+      const [chargesRes, attemptsRes, topupsRes, withdrawRes] = await Promise.all([
+        fetch("/api/sa/billing/charges", { cache: "no-store" }),
+        fetch("/api/sa/invoices/payment-attempts", { cache: "no-store" }),
+        fetch("/api/sa/wallet/topups", { cache: "no-store" }),
+        fetch("/api/sa/wallet/withdrawals", { cache: "no-store" })
+      ]);
+
+      const chargesPayload = (await chargesRes.json().catch(() => null)) as { data?: { charges?: BillingChargeItem[] }; error?: { message?: string } } | null;
+      const attemptsPayload = (await attemptsRes.json().catch(() => null)) as { data?: { attempts?: InvoicePaymentAttemptItem[] }; error?: { message?: string } } | null;
+      const topupsPayload = (await topupsRes.json().catch(() => null)) as { data?: { topups?: WalletTopupItem[] }; error?: { message?: string } } | null;
+      const withdrawPayload = (await withdrawRes.json().catch(() => null)) as { data?: { requests?: WalletWithdrawRequestItem[] }; error?: { message?: string } } | null;
+
+      if (!chargesRes.ok) {
+        throw new Error(chargesPayload?.error?.message ?? "Failed to load billing charges.");
+      }
+      if (!attemptsRes.ok) {
+        throw new Error(attemptsPayload?.error?.message ?? "Failed to load invoice payment attempts.");
+      }
+      if (!topupsRes.ok) {
+        throw new Error(topupsPayload?.error?.message ?? "Failed to load wallet topups.");
+      }
+      if (!withdrawRes.ok) {
+        throw new Error(withdrawPayload?.error?.message ?? "Failed to load wallet withdraw requests.");
+      }
+
+      setBillingCharges(chargesPayload?.data?.charges ?? []);
+      setInvoiceAttempts(attemptsPayload?.data?.attempts ?? []);
+      setWalletTopups(topupsPayload?.data?.topups ?? []);
+      setWalletWithdrawRequests(withdrawPayload?.data?.requests ?? []);
+    } catch (loadError) {
+      setError(loadError instanceof Error ? loadError.message : "Failed to load finance data.");
+    }
+  }, []);
 
   const pollWebhookFailures = useCallback(async () => {
     try {
@@ -353,6 +477,10 @@ export default function SuperadminPage() {
     void loadAuditLogs();
   }, [loadAuditLogs]);
 
+  useEffect(() => {
+    void loadFinance();
+  }, [loadFinance]);
+
   async function applySubscriptionAction(
     orgId: string,
     action: "MARK_ACTIVE" | "MARK_PAST_DUE" | "CANCEL" | "EXTEND_TRIAL",
@@ -409,6 +537,31 @@ export default function SuperadminPage() {
     }
   }
 
+  async function processWithdrawRequest(requestId: string, action: "APPROVE" | "PAID" | "REJECT") {
+    setBusyKey(`withdraw:${requestId}:${action}`);
+    setError(null);
+
+    try {
+      const response = await fetch(`/api/sa/wallet/withdrawals/${encodeURIComponent(requestId)}`, {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({ action })
+      });
+      const payload = (await response.json().catch(() => null)) as { error?: { message?: string } } | null;
+      if (!response.ok) {
+        throw new Error(payload?.error?.message ?? "Failed to process withdraw request.");
+      }
+
+      await Promise.all([loadFinance(), loadOverview(), loadAuditLogs()]);
+    } catch (requestError) {
+      setError(requestError instanceof Error ? requestError.message : "Failed to process withdraw request.");
+    } finally {
+      setBusyKey(null);
+    }
+  }
+
   const statusSummary = overview?.statusSummary ?? {
     totalOrgs: subscriptions.length,
     active: subscriptions.filter((item) => item.status === "ACTIVE").length,
@@ -420,15 +573,6 @@ export default function SuperadminPage() {
 
   const statTotalUsers = users.length;
   const statSuperadmins = users.filter((user) => Boolean(user.platformMembership)).length;
-
-  const waConnectivity = subscriptions
-    .map((item) => ({
-      orgId: item.orgId,
-      orgName: item.org.name,
-      waAccounts: item.org._count.waAccounts,
-      members: item.org._count.members
-    }))
-    .sort((left, right) => right.waAccounts - left.waAccounts || left.orgName.localeCompare(right.orgName));
 
   const trendData = trendWindow === "7" ? (overview?.trends.sevenDays ?? []) : (overview?.trends.thirtyDays ?? []);
   const auditActions = useMemo(
@@ -530,7 +674,7 @@ export default function SuperadminPage() {
                </p>
              </div>
           </div>
-          <Button size="lg" className="h-12 rounded-xl bg-emerald-600 hover:bg-emerald-700 font-bold text-white shadow-[0_8px_20px_-6px_rgba(16,185,129,0.3)] transition-all px-6 relative z-10" onClick={() => void Promise.all([loadCore(), loadOverview(), loadAuditLogs()])} disabled={Boolean(busyKey)}>
+          <Button size="lg" className="h-12 rounded-xl bg-emerald-600 hover:bg-emerald-700 font-bold text-white shadow-[0_8px_20px_-6px_rgba(16,185,129,0.3)] transition-all px-6 relative z-10" onClick={() => void Promise.all([loadCore(), loadOverview(), loadAuditLogs(), loadFinance()])} disabled={Boolean(busyKey)}>
             <RefreshCcw className={`mr-2.5 h-5 w-5 ${busyKey ? "animate-spin" : ""}`} />
             Refresh Data
           </Button>
@@ -544,6 +688,7 @@ export default function SuperadminPage() {
             <TabsTrigger value="webhook" className="flex-1 min-w-[120px] rounded-xl text-[13px] font-bold data-[state=active]:bg-white dark:data-[state=active]:bg-card data-[state=active]:shadow-sm data-[state=active]:text-emerald-600 py-2.5 transition-all">Webhook & Jobs</TabsTrigger>
             <TabsTrigger value="risk" className="flex-1 min-w-[120px] rounded-xl text-[13px] font-bold data-[state=active]:bg-white dark:data-[state=active]:bg-card data-[state=active]:shadow-sm data-[state=active]:text-emerald-600 py-2.5 transition-all">Risk & Billing</TabsTrigger>
             <TabsTrigger value="subscriptions" className="flex-1 min-w-[120px] rounded-xl text-[13px] font-bold data-[state=active]:bg-white dark:data-[state=active]:bg-card data-[state=active]:shadow-sm data-[state=active]:text-emerald-600 py-2.5 transition-all">Subscriptions</TabsTrigger>
+            <TabsTrigger value="transactions" className="flex-1 min-w-[120px] rounded-xl text-[13px] font-bold data-[state=active]:bg-white dark:data-[state=active]:bg-card data-[state=active]:shadow-sm data-[state=active]:text-emerald-600 py-2.5 transition-all">Transactions</TabsTrigger>
             <TabsTrigger value="whatsapp" className="flex-1 min-w-[120px] rounded-xl text-[13px] font-bold data-[state=active]:bg-white dark:data-[state=active]:bg-card data-[state=active]:shadow-sm data-[state=active]:text-emerald-600 py-2.5 transition-all">WhatsApp</TabsTrigger>
             <TabsTrigger value="users" className="flex-1 min-w-[120px] rounded-xl text-[13px] font-bold data-[state=active]:bg-white dark:data-[state=active]:bg-card data-[state=active]:shadow-sm data-[state=active]:text-emerald-600 py-2.5 transition-all">Users</TabsTrigger>
             <TabsTrigger value="audit" className="flex-1 min-w-[120px] rounded-xl text-[13px] font-bold data-[state=active]:bg-white dark:data-[state=active]:bg-card data-[state=active]:shadow-sm data-[state=active]:text-emerald-600 py-2.5 transition-all">Audit</TabsTrigger>
@@ -810,6 +955,203 @@ export default function SuperadminPage() {
                   </Table>
                 </div>
               </div>
+            </TabsContent>
+
+            <TabsContent value="transactions" className="m-0 space-y-6">
+              <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+                <div className="rounded-[24px] border border-border/70 bg-card p-6 shadow-sm overflow-hidden relative">
+                  <ReceiptText className="absolute -right-4 -bottom-4 h-24 w-24 text-emerald-500/5 rotate-12" />
+                  <p className="text-[11px] font-bold uppercase tracking-[0.2em] text-muted-foreground/80 relative z-10">Billing Charges</p>
+                  <p className="mt-3 text-3xl font-black tracking-tight text-foreground relative z-10">{billingCharges.length}</p>
+                  <p className="mt-2 text-[13px] font-medium text-muted-foreground relative z-10">Transaksi langganan organisasi</p>
+                </div>
+                <div className="rounded-[24px] border border-border/70 bg-card p-6 shadow-sm overflow-hidden relative">
+                  <CreditCard className="absolute -right-4 -bottom-4 h-24 w-24 text-sky-500/5 rotate-12" />
+                  <p className="text-[11px] font-bold uppercase tracking-[0.2em] text-muted-foreground/80 relative z-10">Invoice Payments</p>
+                  <p className="mt-3 text-3xl font-black tracking-tight text-foreground relative z-10">{invoiceAttempts.length}</p>
+                  <p className="mt-2 text-[13px] font-medium text-muted-foreground relative z-10">Attempt pembayaran invoice customer</p>
+                </div>
+                <div className="rounded-[24px] border border-border/70 bg-card p-6 shadow-sm overflow-hidden relative">
+                  <WalletCards className="absolute -right-4 -bottom-4 h-24 w-24 text-indigo-500/5 rotate-12" />
+                  <p className="text-[11px] font-bold uppercase tracking-[0.2em] text-muted-foreground/80 relative z-10">Wallet Topups</p>
+                  <p className="mt-3 text-3xl font-black tracking-tight text-foreground relative z-10">{walletTopups.length}</p>
+                  <p className="mt-2 text-[13px] font-medium text-muted-foreground relative z-10">Topup saldo wallet organisasi</p>
+                </div>
+                <div className="rounded-[24px] border border-border/70 bg-card p-6 shadow-sm overflow-hidden relative">
+                  <HandCoins className="absolute -right-4 -bottom-4 h-24 w-24 text-amber-500/5 rotate-12" />
+                  <p className="text-[11px] font-bold uppercase tracking-[0.2em] text-muted-foreground/80 relative z-10">Withdraw Requests</p>
+                  <p className="mt-3 text-3xl font-black tracking-tight text-foreground relative z-10">{walletWithdrawRequests.length}</p>
+                  <p className="mt-2 text-[13px] font-medium text-muted-foreground relative z-10">Request penarikan saldo wallet</p>
+                </div>
+              </section>
+
+              <div className="rounded-[28px] border border-border/70 bg-card shadow-sm overflow-hidden">
+                <div className="border-b border-border/60 bg-gradient-to-r from-emerald-500/5 to-transparent px-6 py-5">
+                  <h2 className="text-[18px] font-bold tracking-tight text-foreground">Billing Charges (Subscription)</h2>
+                </div>
+                <div className="overflow-x-auto">
+                  <Table>
+                    <TableHeader className="bg-muted/20">
+                      <TableRow className="hover:bg-transparent">
+                        <TableHead className="h-12 px-6 text-[12px] font-bold uppercase tracking-wider text-muted-foreground">Order / Org</TableHead>
+                        <TableHead className="h-12 px-6 text-[12px] font-bold uppercase tracking-wider text-muted-foreground">Amount</TableHead>
+                        <TableHead className="h-12 px-6 text-[12px] font-bold uppercase tracking-wider text-muted-foreground">Status</TableHead>
+                        <TableHead className="h-12 px-6 text-[12px] font-bold uppercase tracking-wider text-muted-foreground">Timeline</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {billingCharges.slice(0, 120).map((item) => (
+                        <TableRow key={item.id} className="border-t border-border/50 hover:bg-muted/10 transition-colors">
+                          <TableCell className="px-6 py-4">
+                            <p className="font-bold text-foreground text-[13px]">{item.orderId}</p>
+                            <p className="text-[12px] font-medium text-muted-foreground mt-0.5">{item.org.name}</p>
+                          </TableCell>
+                          <TableCell className="px-6 py-4 text-[13px] font-medium">
+                            <p className="font-semibold text-foreground">{formatCurrency(item.totalAmountCents)}</p>
+                            <p className="text-muted-foreground">Base {formatCurrency(item.baseAmountCents)} • Fee {formatCurrency(item.gatewayFeeCents)}</p>
+                          </TableCell>
+                          <TableCell className="px-6 py-4">
+                            <span className={`inline-flex rounded-full border px-2.5 py-0.5 text-[11px] font-bold uppercase tracking-wider ${item.status === "PAID" ? "bg-emerald-500/10 text-emerald-600 border-emerald-500/20" : item.status === "PENDING" ? "bg-amber-500/10 text-amber-600 border-amber-500/20" : "bg-rose-500/10 text-rose-600 border-rose-500/20"}`}>{item.status}</span>
+                          </TableCell>
+                          <TableCell className="px-6 py-4 text-[12px] font-medium text-muted-foreground">
+                            <p>Created: {formatDateTime(item.createdAt)}</p>
+                            <p>Paid: {formatDateTime(item.paidAt)}</p>
+                            <p>Expired: {formatDateTime(item.expiredAt)}</p>
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                      {billingCharges.length === 0 ? <TableRow><TableCell colSpan={4} className="px-6 py-12 text-center text-[14px] font-medium text-muted-foreground">Belum ada billing charge.</TableCell></TableRow> : null}
+                    </TableBody>
+                  </Table>
+                </div>
+              </div>
+
+              <div className="rounded-[28px] border border-border/70 bg-card shadow-sm overflow-hidden">
+                <div className="border-b border-border/60 bg-gradient-to-r from-sky-500/5 to-transparent px-6 py-5">
+                  <h2 className="text-[18px] font-bold tracking-tight text-foreground">Invoice Payment Attempts</h2>
+                </div>
+                <div className="overflow-x-auto">
+                  <Table>
+                    <TableHeader className="bg-muted/20">
+                      <TableRow className="hover:bg-transparent">
+                        <TableHead className="h-12 px-6 text-[12px] font-bold uppercase tracking-wider text-muted-foreground">Invoice / Customer</TableHead>
+                        <TableHead className="h-12 px-6 text-[12px] font-bold uppercase tracking-wider text-muted-foreground">Order</TableHead>
+                        <TableHead className="h-12 px-6 text-[12px] font-bold uppercase tracking-wider text-muted-foreground">Amount</TableHead>
+                        <TableHead className="h-12 px-6 text-[12px] font-bold uppercase tracking-wider text-muted-foreground">Status</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {invoiceAttempts.slice(0, 120).map((item) => (
+                        <TableRow key={item.id} className="border-t border-border/50 hover:bg-muted/10 transition-colors">
+                          <TableCell className="px-6 py-4">
+                            <p className="font-bold text-foreground text-[13px]">{item.invoice.invoiceNo}</p>
+                            <p className="text-[12px] font-medium text-muted-foreground mt-0.5">{item.invoice.customer.displayName || item.invoice.customer.phoneE164}</p>
+                            <p className="text-[12px] font-medium text-muted-foreground">{item.org.name}</p>
+                          </TableCell>
+                          <TableCell className="px-6 py-4 text-[13px] font-medium">
+                            <p className="font-semibold text-foreground">{item.orderId}</p>
+                            <p className="text-muted-foreground">{item.provider} • {item.paymentMethod}</p>
+                          </TableCell>
+                          <TableCell className="px-6 py-4 text-[13px] font-medium">
+                            <p className="font-semibold text-foreground">{formatCurrency(item.customerPayableCents)}</p>
+                            <p className="text-muted-foreground">Invoice {formatCurrency(item.invoiceAmountCents)} • Fee {formatCurrency(item.feeCents)}</p>
+                          </TableCell>
+                          <TableCell className="px-6 py-4 text-[12px] font-medium text-muted-foreground">
+                            <span className={`inline-flex rounded-full border px-2.5 py-0.5 text-[11px] font-bold uppercase tracking-wider ${item.status === "PAID" ? "bg-emerald-500/10 text-emerald-600 border-emerald-500/20" : item.status === "PENDING" ? "bg-amber-500/10 text-amber-600 border-amber-500/20" : "bg-rose-500/10 text-rose-600 border-rose-500/20"}`}>{item.status}</span>
+                            <p className="mt-1">Created: {formatDateTime(item.createdAt)}</p>
+                            <p>Paid: {formatDateTime(item.paidAt)}</p>
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                      {invoiceAttempts.length === 0 ? <TableRow><TableCell colSpan={4} className="px-6 py-12 text-center text-[14px] font-medium text-muted-foreground">Belum ada invoice payment attempt.</TableCell></TableRow> : null}
+                    </TableBody>
+                  </Table>
+                </div>
+              </div>
+
+              <section className="grid gap-6 xl:grid-cols-2">
+                <div className="rounded-[28px] border border-border/70 bg-card shadow-sm overflow-hidden">
+                  <div className="border-b border-border/60 bg-gradient-to-r from-indigo-500/5 to-transparent px-6 py-5">
+                    <h2 className="text-[18px] font-bold tracking-tight text-foreground">Wallet Topups</h2>
+                  </div>
+                  <div className="overflow-x-auto">
+                    <Table>
+                      <TableHeader className="bg-muted/20">
+                        <TableRow className="hover:bg-transparent">
+                          <TableHead className="h-12 px-6 text-[12px] font-bold uppercase tracking-wider text-muted-foreground">Order / Org</TableHead>
+                          <TableHead className="h-12 px-6 text-[12px] font-bold uppercase tracking-wider text-muted-foreground">Amount</TableHead>
+                          <TableHead className="h-12 px-6 text-[12px] font-bold uppercase tracking-wider text-muted-foreground">Status</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {walletTopups.slice(0, 80).map((item) => (
+                          <TableRow key={item.id} className="border-t border-border/50 hover:bg-muted/10 transition-colors">
+                            <TableCell className="px-6 py-4">
+                              <p className="font-bold text-foreground text-[13px]">{item.orderId}</p>
+                              <p className="text-[12px] font-medium text-muted-foreground mt-0.5">{item.org.name}</p>
+                            </TableCell>
+                            <TableCell className="px-6 py-4 text-[13px] font-medium">
+                              <p className="font-semibold text-foreground">{formatCurrency(item.customerPayableCents)}</p>
+                              <p className="text-muted-foreground">Net {formatCurrency(item.amountCents)} • Fee {formatCurrency(item.feeCents)}</p>
+                            </TableCell>
+                            <TableCell className="px-6 py-4 text-[12px] font-medium text-muted-foreground">
+                              <span className={`inline-flex rounded-full border px-2.5 py-0.5 text-[11px] font-bold uppercase tracking-wider ${item.status === "PAID" ? "bg-emerald-500/10 text-emerald-600 border-emerald-500/20" : item.status === "PENDING" ? "bg-amber-500/10 text-amber-600 border-amber-500/20" : "bg-rose-500/10 text-rose-600 border-rose-500/20"}`}>{item.status}</span>
+                              <p className="mt-1">Created: {formatDateTime(item.createdAt)}</p>
+                              <p>Paid: {formatDateTime(item.paidAt)}</p>
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                        {walletTopups.length === 0 ? <TableRow><TableCell colSpan={3} className="px-6 py-12 text-center text-[14px] font-medium text-muted-foreground">Belum ada topup wallet.</TableCell></TableRow> : null}
+                      </TableBody>
+                    </Table>
+                  </div>
+                </div>
+
+                <div className="rounded-[28px] border border-border/70 bg-card shadow-sm overflow-hidden">
+                  <div className="border-b border-border/60 bg-gradient-to-r from-amber-500/5 to-transparent px-6 py-5">
+                    <h2 className="text-[18px] font-bold tracking-tight text-foreground">Wallet Withdraw Requests</h2>
+                  </div>
+                  <div className="overflow-x-auto">
+                    <Table>
+                      <TableHeader className="bg-muted/20">
+                        <TableRow className="hover:bg-transparent">
+                          <TableHead className="h-12 px-6 text-[12px] font-bold uppercase tracking-wider text-muted-foreground">Org / Bank</TableHead>
+                          <TableHead className="h-12 px-6 text-[12px] font-bold uppercase tracking-wider text-muted-foreground">Amount</TableHead>
+                          <TableHead className="h-12 px-6 text-[12px] font-bold uppercase tracking-wider text-muted-foreground">Status</TableHead>
+                          <TableHead className="h-12 px-6 text-[12px] font-bold uppercase tracking-wider text-muted-foreground text-right">Actions</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {walletWithdrawRequests.slice(0, 80).map((item) => (
+                          <TableRow key={item.id} className="border-t border-border/50 hover:bg-muted/10 transition-colors">
+                            <TableCell className="px-6 py-4">
+                              <p className="font-bold text-foreground text-[13px]">{item.org.name}</p>
+                              <p className="text-[12px] font-medium text-muted-foreground mt-0.5">{item.bankName} • {item.accountNumber}</p>
+                              <p className="text-[12px] font-medium text-muted-foreground">{item.accountHolder}</p>
+                            </TableCell>
+                            <TableCell className="px-6 py-4 text-[13px] font-semibold text-foreground">
+                              {formatCurrency(item.amountCents)}
+                            </TableCell>
+                            <TableCell className="px-6 py-4 text-[12px] font-medium text-muted-foreground">
+                              <span className={`inline-flex rounded-full border px-2.5 py-0.5 text-[11px] font-bold uppercase tracking-wider ${item.status === "PAID" ? "bg-emerald-500/10 text-emerald-600 border-emerald-500/20" : item.status === "APPROVED" ? "bg-sky-500/10 text-sky-600 border-sky-500/20" : item.status === "PENDING" ? "bg-amber-500/10 text-amber-600 border-amber-500/20" : "bg-rose-500/10 text-rose-600 border-rose-500/20"}`}>{item.status}</span>
+                              <p className="mt-1">Requested: {formatDateTime(item.createdAt)}</p>
+                              <p>Processed: {formatDateTime(item.processedAt)}</p>
+                            </TableCell>
+                            <TableCell className="px-6 py-4 text-right">
+                              <div className="flex items-center justify-end gap-2">
+                                <Button size="sm" variant="outline" className="h-8 rounded-lg text-[12px] font-bold hover:bg-sky-500/10 hover:text-sky-600 border-border/60" disabled={Boolean(busyKey) || item.status !== "PENDING"} onClick={() => void processWithdrawRequest(item.id, "APPROVE")}>Approve</Button>
+                                <Button size="sm" variant="outline" className="h-8 rounded-lg text-[12px] font-bold hover:bg-emerald-500/10 hover:text-emerald-600 border-border/60" disabled={Boolean(busyKey) || item.status !== "APPROVED"} onClick={() => void processWithdrawRequest(item.id, "PAID")}>Mark Paid</Button>
+                                <Button size="sm" variant="outline" className="h-8 rounded-lg text-[12px] font-bold hover:bg-rose-500/10 hover:text-rose-600 border-border/60 text-rose-600 dark:text-rose-400" disabled={Boolean(busyKey) || (item.status !== "PENDING" && item.status !== "APPROVED")} onClick={() => void processWithdrawRequest(item.id, "REJECT")}>Reject</Button>
+                              </div>
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                        {walletWithdrawRequests.length === 0 ? <TableRow><TableCell colSpan={4} className="px-6 py-12 text-center text-[14px] font-medium text-muted-foreground">Belum ada request withdraw.</TableCell></TableRow> : null}
+                      </TableBody>
+                    </Table>
+                  </div>
+                </div>
+              </section>
             </TabsContent>
 
             <TabsContent value="whatsapp" className="m-0 space-y-6">
