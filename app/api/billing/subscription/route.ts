@@ -3,6 +3,7 @@ import type { NextRequest } from "next/server";
 import { errorResponse, successResponse } from "@/lib/api/http";
 import { getActiveOrgIdFromRequest } from "@/lib/auth/activeOrg";
 import { requireApiSession } from "@/lib/auth/middleware";
+import { isPrismaDatabaseUnavailableError } from "@/lib/db/prismaError";
 import { getPrimaryOrganizationForUser } from "@/server/services/organizationService";
 import { getOrgSubscriptionView } from "@/server/services/billingService";
 import { triggerOrgBillingReminderBroadcast } from "@/server/services/billingReminderService";
@@ -75,6 +76,9 @@ export async function GET(request: NextRequest) {
   } catch (error) {
     if (error instanceof ServiceError) {
       return errorResponse(error.status, error.code, error.message);
+    }
+    if (isPrismaDatabaseUnavailableError(error)) {
+      return errorResponse(503, "DB_UNAVAILABLE", "Database belum tersedia. Pastikan MySQL aktif di 127.0.0.1:3307.");
     }
 
     return errorResponse(500, "BILLING_SUBSCRIPTION_FAILED", "Failed to load subscription.");

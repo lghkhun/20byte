@@ -166,6 +166,7 @@ export function BusinessSwitcher({
   const [organizations, setOrganizations] = useState<OrgSummary[]>([]);
   const [activeOrgId, setActiveOrgId] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [switchingOrgId, setSwitchingOrgId] = useState<string | null>(null);
 
   const [isPlanDialogOpen, setIsPlanDialogOpen] = useState(false);
@@ -205,6 +206,7 @@ export function BusinessSwitcher({
 
   async function loadOrganizations() {
     setIsLoading(true);
+    setLoadError(null);
     try {
       const response = await fetch("/api/orgs", { cache: "no-store" });
       const payload = (await response.json().catch(() => null)) as OrganizationsPayload | null;
@@ -214,9 +216,10 @@ export function BusinessSwitcher({
       const rows = payload?.data?.organizations ?? [];
       setOrganizations(rows);
       setActiveOrgId(payload?.data?.activeOrgId ?? rows[0]?.id ?? null);
-    } catch {
-      setOrganizations([]);
-      setActiveOrgId(null);
+    } catch (error) {
+      // Jangan kosongkan data lama ketika fetch gagal sementara,
+      // agar business tidak terlihat "hilang" di UI.
+      setLoadError(error instanceof Error ? error.message : "Gagal memuat business.");
     } finally {
       setIsLoading(false);
     }
@@ -280,6 +283,17 @@ export function BusinessSwitcher({
 
   useEffect(() => {
     void loadOrganizations();
+  }, []);
+
+  useEffect(() => {
+    function handleFocus() {
+      void loadOrganizations();
+    }
+
+    window.addEventListener("focus", handleFocus);
+    return () => {
+      window.removeEventListener("focus", handleFocus);
+    };
   }, []);
 
   useEffect(() => {
@@ -479,9 +493,9 @@ export function BusinessSwitcher({
               </span>
               <span className="min-w-0 flex-1">
                 <span className="block truncate text-sm font-semibold text-sidebar-foreground">
-                  {activeOrg?.name ?? (isLoading ? "Memuat business..." : "Belum ada business")}
+                  {activeOrg?.name ?? (isLoading ? "Memuat business..." : loadError ? "Gagal memuat business" : "Belum ada business")}
                 </span>
-                <span className="block truncate text-xs text-sidebar-foreground/70">{activeOrg?.role ?? ""}</span>
+                <span className="block truncate text-xs text-sidebar-foreground/70">{activeOrg?.role ?? (loadError ? "Klik untuk coba lagi" : "")}</span>
               </span>
               {switchingOrgId ? <Loader2 className="h-4 w-4 animate-spin" /> : <ChevronsUpDown className="h-4 w-4" />}
             </button>

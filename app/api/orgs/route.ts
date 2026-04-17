@@ -2,6 +2,7 @@ import { type NextRequest, NextResponse } from "next/server";
 
 import { getActiveOrgIdFromRequest, setActiveOrgCookie } from "@/lib/auth/activeOrg";
 import { requireApiSession } from "@/lib/auth/middleware";
+import { isPrismaDatabaseUnavailableError } from "@/lib/db/prismaError";
 import { createBusinessProvisioningCheckout } from "@/server/services/billingService";
 import {
   getActiveOrganizationForUser,
@@ -69,7 +70,10 @@ export async function GET(request: NextRequest) {
     }
 
     return response;
-  } catch {
+  } catch (error) {
+    if (isPrismaDatabaseUnavailableError(error)) {
+      return errorResponse(503, "DB_UNAVAILABLE", "Database belum tersedia. Pastikan MySQL aktif di 127.0.0.1:3307.");
+    }
     return errorResponse(500, "ORG_LIST_FAILED", "Failed to fetch businesses.");
   }
 }
@@ -111,6 +115,9 @@ export async function POST(request: NextRequest) {
   } catch (error) {
     if (error instanceof ServiceError) {
       return errorResponse(error.status, error.code, error.message);
+    }
+    if (isPrismaDatabaseUnavailableError(error)) {
+      return errorResponse(503, "DB_UNAVAILABLE", "Database belum tersedia. Pastikan MySQL aktif di 127.0.0.1:3307.");
     }
 
     return errorResponse(500, "BUSINESS_PROVISIONING_FAILED", "Failed to start business provisioning checkout.");

@@ -610,7 +610,7 @@ export function AppSidebar({ user, ownerOnboardingStatus = null }: AppSidebarPro
             onClick={() => {
               void handleOpenBillingCheckout();
             }}
-            className="group relative mx-3 mb-3 w-[calc(100%-1.5rem)] overflow-hidden rounded-2xl border border-primary/20 bg-gradient-to-br from-primary/10 to-primary/5 px-4 py-3 text-left transition-all hover:border-primary/30 hover:shadow-md hover:shadow-primary/5"
+            className="group relative mx-3 mb-3 w-[calc(100%-1.5rem)] overflow-hidden rounded-2xl border border-primary/20 bg-gradient-to-br from-primary/10 to-primary/5 px-4 py-3 text-left transition-all hover:border-primary/30 hover:shadow-md hover:shadow-primary/5 group-data-[collapsible=icon]:hidden"
           >
             <div className="absolute inset-0 bg-gradient-to-r from-primary/0 via-primary/5 to-primary/0 opacity-0 transition-opacity group-hover:opacity-100" />
             <div className="relative z-10">
@@ -628,7 +628,7 @@ export function AppSidebar({ user, ownerOnboardingStatus = null }: AppSidebarPro
           </button>
         ) : null}
         {billingReminderMessage && !isOwnerRole ? (
-          <div className="mx-3 mb-3 w-[calc(100%-1.5rem)] rounded-2xl border border-amber-500/20 bg-gradient-to-br from-amber-500/10 to-amber-500/5 px-4 py-3 text-left">
+          <div className="mx-3 mb-3 w-[calc(100%-1.5rem)] rounded-2xl border border-amber-500/20 bg-gradient-to-br from-amber-500/10 to-amber-500/5 px-4 py-3 text-left group-data-[collapsible=icon]:hidden">
             <p className="flex items-center gap-2 text-[13px] font-bold text-amber-700">
               <AlertTriangle className="h-4 w-4" />
               Masa Trial Segera Habis
@@ -639,7 +639,7 @@ export function AppSidebar({ user, ownerOnboardingStatus = null }: AppSidebarPro
           </div>
         ) : null}
         {ownerOnboardingStatus && !ownerOnboardingStatus.isComplete && !isOnboardingCardDismissed ? (
-          <div className="mx-2">
+          <div className="mx-2 group-data-[collapsible=icon]:hidden">
             <div className="mb-1 flex justify-end pr-1">
               <button
                 type="button"

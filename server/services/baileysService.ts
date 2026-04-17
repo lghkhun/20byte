@@ -2093,12 +2093,29 @@ export async function listBaileysRuntimeMedia(orgId: string): Promise<string[]> 
 export async function readBaileysMediaFile(orgId: string, fileName: string): Promise<Buffer> {
   const safeFileName = path.basename(fileName);
   const diskPath = path.join(getMediaFolder(orgId), safeFileName);
-  const fileStats = await stat(diskPath);
+  let fileStats;
+  try {
+    fileStats = await stat(diskPath);
+  } catch (error) {
+    const code = (error as NodeJS.ErrnoException | null)?.code;
+    if (code === "ENOENT" || code === "ENOTDIR") {
+      throw new ServiceError(404, "MEDIA_FILE_NOT_FOUND", "Media file does not exist.");
+    }
+    throw error;
+  }
   if (!fileStats.isFile()) {
     throw new ServiceError(404, "MEDIA_FILE_NOT_FOUND", "Media file does not exist.");
   }
 
-  return readFile(diskPath);
+  try {
+    return await readFile(diskPath);
+  } catch (error) {
+    const code = (error as NodeJS.ErrnoException | null)?.code;
+    if (code === "ENOENT" || code === "ENOTDIR") {
+      throw new ServiceError(404, "MEDIA_FILE_NOT_FOUND", "Media file does not exist.");
+    }
+    throw error;
+  }
 }
 
 export async function writeBaileysAuditLog(actorUserId: string, orgId: string, action: string, entityId: string, meta?: Record<string, unknown>) {

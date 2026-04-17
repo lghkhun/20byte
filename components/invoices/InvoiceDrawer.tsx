@@ -15,7 +15,7 @@ import {
 import { useInvoiceDrawer } from "@/components/invoices/invoice-drawer/useInvoiceDrawer";
 import { Button } from "@/components/ui/button";
 import { Calendar } from "@/components/ui/calendar";
-import { Card, CardContent, CardFooter } from "@/components/ui/card";
+
 import {
   Drawer,
   DrawerClose,
@@ -34,8 +34,8 @@ import {
   DialogTitle
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+
 import { cn } from "@/lib/utils";
 
 type MemberOption = {
@@ -179,6 +179,7 @@ function DueDatePickerField({
   value: string;
   onChange: (next: string) => void;
 }) {
+  const [open, setOpen] = useState(false);
   const selectedDate = useMemo(() => parseInputDate(value), [value]);
   const [currentMonth, setCurrentMonth] = useState<Date>(() => {
     const now = new Date();
@@ -193,80 +194,96 @@ function DueDatePickerField({
   return (
     <div className="space-y-2">
       <span className="text-sm font-medium text-foreground">Tgl. Jatuh Tempo</span>
-      <Popover>
-        <PopoverTrigger asChild>
-          <Button
-            type="button"
-            variant="ghost"
-            className="h-11 w-full justify-between rounded-md border border-border bg-muted/40 px-3 text-left font-normal hover:bg-muted/60"
-          >
-            <span className={cn("truncate", !selectedDate && "text-muted-foreground")}>
-              {selectedDate ? formatDateLabel(selectedDate) : "Pilih tanggal jatuh tempo"}
-            </span>
-            <CalendarDays className="h-4 w-4 text-sky-500" />
-          </Button>
-        </PopoverTrigger>
-        <PopoverContent align="start" className="w-[300px] rounded-2xl border border-border p-0">
-          <Card className="w-full rounded-2xl border-0 shadow-none">
-            <CardContent className="p-0">
-              <Calendar
-                mode="single"
-                selected={selectedDate}
-                onSelect={(date) => onChange(date ? toInputDate(date) : "")}
-                month={currentMonth}
-                onMonthChange={setCurrentMonth}
-                fixedWeeks
-                className="rounded-t-2xl px-4 pb-4 pt-4"
-                classNames={{
-                  month_caption: "relative flex items-center justify-center pb-2",
-                  caption_label: "text-sm font-semibold text-foreground",
-                  button_previous:
-                    "absolute left-0 inline-flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground transition hover:bg-muted hover:text-foreground",
-                  button_next:
-                    "absolute right-0 inline-flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground transition hover:bg-muted hover:text-foreground",
-                  weekdays: "mb-1 grid grid-cols-7",
-                  weekday:
-                    "flex h-8 items-center justify-center text-xs font-medium text-muted-foreground",
-                  week: "grid grid-cols-7",
-                  day: "flex items-center justify-center",
-                  day_button:
-                    "inline-flex h-8 w-8 items-center justify-center rounded-md text-sm font-normal text-foreground transition hover:bg-muted",
-                  selected: "rounded-md bg-muted font-medium text-foreground hover:bg-muted",
-                  today: "rounded-md bg-muted/70 text-foreground",
-                  outside: "text-muted-foreground opacity-45"
-                }}
-              />
-            </CardContent>
-            <CardFooter className="flex flex-wrap gap-2 border-t px-4 py-3">
+      <button
+        type="button"
+        onClick={() => setOpen(true)}
+        className={cn(
+          "flex h-11 w-full items-center justify-between rounded-md border border-border bg-muted/40 px-3 text-left text-sm transition hover:bg-muted/60",
+        )}
+      >
+        <span className={cn("truncate", !selectedDate && "text-muted-foreground")}>
+          {selectedDate ? formatDateLabel(selectedDate) : "Pilih tanggal jatuh tempo"}
+        </span>
+        <CalendarDays className="h-4 w-4 shrink-0 text-sky-500" />
+      </button>
+
+      <Dialog open={open} onOpenChange={setOpen}>
+        <DialogContent className="flex w-auto max-w-[min(380px,calc(100vw-2rem))] flex-col gap-0 overflow-hidden rounded-[10px] p-0">
+          <DialogHeader className="border-b border-border/60 px-5 py-3.5">
+            <DialogTitle className="text-base">Pilih Tanggal Jatuh Tempo</DialogTitle>
+          </DialogHeader>
+          <div className="flex justify-center p-3">
+            <Calendar
+              mode="single"
+              selected={selectedDate}
+              onSelect={(date) => {
+                onChange(date ? toInputDate(date) : "");
+                if (date) setOpen(false);
+              }}
+              month={currentMonth}
+              onMonthChange={setCurrentMonth}
+              fixedWeeks
+              classNames={{
+                month_caption: "relative flex items-center justify-center pb-2",
+                caption_label: "text-sm font-semibold text-foreground",
+                button_previous:
+                  "absolute left-0 inline-flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground transition hover:bg-muted hover:text-foreground",
+                button_next:
+                  "absolute right-0 inline-flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground transition hover:bg-muted hover:text-foreground",
+                weekdays: "mb-1 grid grid-cols-7",
+                weekday:
+                  "flex h-8 items-center justify-center text-xs font-medium text-muted-foreground",
+                week: "grid grid-cols-7",
+                day: "flex items-center justify-center",
+                day_button:
+                  "inline-flex h-9 w-9 items-center justify-center rounded-lg text-sm font-normal text-foreground transition hover:bg-muted",
+                selected: "rounded-lg bg-primary text-primary-foreground hover:bg-primary/90",
+                today: "rounded-lg bg-muted/70 text-foreground font-semibold",
+                outside: "text-muted-foreground opacity-45"
+              }}
+            />
+          </div>
+          {/* Quick presets */}
+          <div className="border-t border-border/60 px-4 py-3">
+            <div className="flex flex-wrap gap-1.5">
               {[
-                { label: "Today", value: 0 },
-                { label: "Tomorrow", value: 1 },
-                { label: "In 3 days", value: 3 },
-                { label: "In a week", value: 7 },
-                { label: "In 2 weeks", value: 14 }
+                { label: "Hari ini", value: 0 },
+                { label: "Besok", value: 1 },
+                { label: "3 hari", value: 3 },
+                { label: "1 minggu", value: 7 },
+                { label: "2 minggu", value: 14 }
               ].map((preset) => (
-                <Button
+                <button
                   key={preset.value}
                   type="button"
-                  variant="ghost"
-                  size="sm"
-                  className="h-7 min-w-[82px] flex-1 rounded-lg border border-border bg-background px-2 text-xs"
+                  className="flex-1 rounded-lg border border-border bg-background px-2 py-1.5 text-xs font-medium text-muted-foreground transition hover:bg-muted hover:text-foreground"
                   onClick={() => {
                     const newDate = addDays(new Date(), preset.value);
                     onChange(toInputDate(newDate));
                     setCurrentMonth(new Date(newDate.getFullYear(), newDate.getMonth(), 1));
+                    setOpen(false);
                   }}
                 >
                   {preset.label}
-                </Button>
+                </button>
               ))}
-            </CardFooter>
-          </Card>
-        </PopoverContent>
-      </Popover>
+            </div>
+            {value ? (
+              <button
+                type="button"
+                onClick={() => { onChange(""); setOpen(false); }}
+                className="mt-2 w-full text-center text-xs text-muted-foreground hover:text-foreground"
+              >
+                Hapus tanggal
+              </button>
+            ) : null}
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
+
 
 export function InvoiceDrawer({
   open,

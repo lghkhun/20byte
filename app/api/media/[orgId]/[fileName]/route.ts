@@ -2,6 +2,7 @@ import { type NextRequest, NextResponse } from "next/server";
 import path from "path";
 
 import { requireApiSession } from "@/lib/auth/middleware";
+import { isPrismaDatabaseUnavailableError } from "@/lib/db/prismaError";
 import { prisma } from "@/lib/db/prisma";
 import { readBaileysMediaFile } from "@/server/services/baileysService";
 import { ServiceError } from "@/server/services/serviceError";
@@ -33,16 +34,21 @@ function inferMimeType(fileName: string): string {
 
 export async function GET(
   request: NextRequest,
-  context: { params: Promise<{orgId: string;
-      fileName: string;}> }
+  context: {
+    params: Promise<{
+      orgId: string;
+      fileName: string;
+    }>;
+  }
 ) {
   const auth = requireApiSession(request);
   if (auth.response) {
     return auth.response;
   }
 
-  const orgId = (await context.params).orgId?.trim() ?? "";
-  const fileName = path.basename((await context.params).fileName ?? "");
+  const { orgId: orgIdParam, fileName: fileNameParam } = await context.params;
+  const orgId = orgIdParam?.trim() ?? "";
+  const fileName = path.basename(fileNameParam ?? "");
   if (!orgId || !fileName) {
     return NextResponse.json(
       {
@@ -55,17 +61,33 @@ export async function GET(
     );
   }
 
-  const membership = await prisma.orgMember.findUnique({
-    where: {
-      orgId_userId: {
-        orgId,
-        userId: auth.session.userId
+  let membership: { id: string } | null = null;
+  try {
+    membership = await prisma.orgMember.findUnique({
+      where: {
+        orgId_userId: {
+          orgId,
+          userId: auth.session.userId
+        }
+      },
+      select: {
+        id: true
       }
-    },
-    select: {
-      id: true
+    });
+  } catch (error) {
+    if (isPrismaDatabaseUnavailableError(error)) {
+      return NextResponse.json(
+        {
+          error: {
+            code: "DB_UNAVAILABLE",
+            message: "Database belum tersedia. Pastikan MySQL aktif di 127.0.0.1:3307."
+          }
+        },
+        { status: 503 }
+      );
     }
-  });
+    throw error;
+  }
 
   if (!membership) {
     return NextResponse.json(
@@ -98,6 +120,17 @@ export async function GET(
           }
         },
         { status: error.status }
+      );
+    }
+    if (isPrismaDatabaseUnavailableError(error)) {
+      return NextResponse.json(
+        {
+          error: {
+            code: "DB_UNAVAILABLE",
+            message: "Database belum tersedia. Pastikan MySQL aktif di 127.0.0.1:3307."
+          }
+        },
+        { status: 503 }
       );
     }
 

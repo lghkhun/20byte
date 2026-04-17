@@ -292,7 +292,16 @@ export function MessageBubble({
           >
             {linkPreview.image ? (
               // eslint-disable-next-line @next/next/no-img-element
-              <img src={linkPreview.image} alt={linkPreview.title ?? "Link preview"} className="h-32 w-full object-cover" loading="lazy" />
+              <img
+                src={linkPreview.image}
+                alt={linkPreview.title ?? "Link preview"}
+                className="h-32 w-full object-cover"
+                loading="lazy"
+                referrerPolicy="no-referrer"
+                onError={(event) => {
+                  event.currentTarget.style.display = "none";
+                }}
+              />
             ) : null}
             <div className="space-y-1 px-3 py-2">
               <p className="line-clamp-2 text-xs font-semibold text-foreground">{linkPreview.title || linkPreview.url}</p>

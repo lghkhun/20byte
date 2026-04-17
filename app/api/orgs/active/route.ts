@@ -2,6 +2,7 @@ import { type NextRequest, NextResponse } from "next/server";
 
 import { getActiveOrgIdFromRequest, setActiveOrgCookie } from "@/lib/auth/activeOrg";
 import { requireApiSession } from "@/lib/auth/middleware";
+import { isPrismaDatabaseUnavailableError } from "@/lib/db/prismaError";
 import {
   getActiveOrganizationForUser,
   listOrganizationsForUser,
@@ -56,7 +57,10 @@ export async function GET(request: NextRequest) {
     }
 
     return response;
-  } catch {
+  } catch (error) {
+    if (isPrismaDatabaseUnavailableError(error)) {
+      return errorResponse(503, "DB_UNAVAILABLE", "Database belum tersedia. Pastikan MySQL aktif di 127.0.0.1:3307.");
+    }
     return errorResponse(500, "ACTIVE_ORG_GET_FAILED", "Failed to resolve active business.");
   }
 }
@@ -97,6 +101,9 @@ export async function PUT(request: NextRequest) {
   } catch (error) {
     if (error instanceof ServiceError) {
       return errorResponse(error.status, error.code, error.message);
+    }
+    if (isPrismaDatabaseUnavailableError(error)) {
+      return errorResponse(503, "DB_UNAVAILABLE", "Database belum tersedia. Pastikan MySQL aktif di 127.0.0.1:3307.");
     }
     return errorResponse(500, "ACTIVE_ORG_SET_FAILED", "Failed to update active business.");
   }

@@ -1421,105 +1421,106 @@ export function InvoicesWorkspace() {
   }
 
   return (
-    <section className="flex h-full min-h-0 flex-1 flex-col space-y-3 p-3 md:space-y-4 md:p-5">
-      <div className="space-y-3 px-1 py-1 md:space-y-4">
-        <div className="flex flex-wrap items-center justify-between gap-3 md:gap-4">
-          <div className="flex flex-wrap items-center gap-3 lg:gap-4 2xl:gap-5">
-            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-tr from-primary/20 to-primary/5 text-primary shadow-inner ring-1 ring-primary/20 lg:h-12 lg:w-12 lg:rounded-[18px] 2xl:h-14 2xl:w-14">
-              <FileText className="h-5 w-5 lg:h-6 lg:w-6" />
-            </div>
-            <div>
-              <h1 className="text-xl font-bold tracking-tight text-foreground lg:text-2xl 2xl:text-3xl">
-                Manajemen Invoice
-              </h1>
-              <p className="text-xs text-muted-foreground lg:text-sm">
-                Kelola invoice, pengiriman, pelunasan, dan sinkronisasi stage CRM dari satu
-                workspace.
-              </p>
-            </div>
+    <section className="flex h-full min-h-0 w-full flex-1 flex-col space-y-3 overflow-hidden p-3 md:space-y-4 md:p-5">
+      {/* ── HEADER ── */}
+      <div className="flex items-center justify-between gap-2">
+        <div className="flex min-w-0 items-center gap-2.5 md:gap-4">
+          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-gradient-to-tr from-primary/20 to-primary/5 text-primary shadow-inner ring-1 ring-primary/20 md:h-12 md:w-12 md:rounded-[18px]">
+            <FileText className="h-4 w-4 md:h-6 md:w-6" />
           </div>
-          <Button
-            type="button"
-            className="h-10 rounded-xl px-5 shadow-md shadow-primary/20 transition-all hover:scale-[1.02]"
-            onMouseEnter={() => {
-              void primeCustomerPicker();
-            }}
-            onFocus={() => {
-              void primeCustomerPicker();
-            }}
-            onClick={() => {
-              void primeCustomerPicker();
-              setSelectedCustomerId("");
-              setCustomerSearchText("");
-              setCustomerSearchQuery("");
-              setCustomerOptions([]);
-              setHasMoreCustomers(false);
-              customerPageRef.current = 1;
-              customerQueryRef.current = "";
-              setNewCustomerName("");
-              setNewCustomerPhone("");
-              setIsCreateInvoiceModalOpen(true);
-            }}
-          >
-            Buat Invoice
-          </Button>
-        </div>
-      </div>
-
-      <div className="grid gap-3 lg:grid-cols-3 xl:gap-4">
-        <article className="flex flex-col justify-center rounded-[14px] border border-border/70 bg-card p-3 shadow-sm transition-shadow hover:shadow-md lg:rounded-[16px] lg:p-4 2xl:rounded-[20px] 2xl:p-5">
-          <div className="flex items-center gap-2">
-            <div className="h-1.5 w-1.5 rounded-full bg-emerald-500 lg:h-2 lg:w-2"></div>
-            <p className="text-[10px] font-medium uppercase tracking-[0.12em] text-muted-foreground lg:text-[11px]">
-              Invoice Lunas
+          <div className="min-w-0">
+            <h1 className="truncate text-base font-bold tracking-tight text-foreground md:text-2xl lg:text-3xl">
+              Manajemen Invoice
+            </h1>
+            <p className="hidden text-xs text-muted-foreground md:block md:text-sm">
+              Kelola invoice, pengiriman, pelunasan, dan sinkronisasi stage CRM dari satu workspace.
             </p>
           </div>
-          <p className="mt-1.5 text-xl font-semibold tracking-tight text-foreground lg:mt-2 lg:text-2xl 2xl:mt-2.5 2xl:text-[28px]">
+        </div>
+        <Button
+          type="button"
+          className="h-9 shrink-0 rounded-xl px-3 shadow-md shadow-primary/20 transition-all hover:scale-[1.02] md:h-10 md:px-5"
+          onMouseEnter={() => { void primeCustomerPicker(); }}
+          onFocus={() => { void primeCustomerPicker(); }}
+          onClick={() => {
+            void primeCustomerPicker();
+            setSelectedCustomerId("");
+            setCustomerSearchText("");
+            setCustomerSearchQuery("");
+            setCustomerOptions([]);
+            setHasMoreCustomers(false);
+            customerPageRef.current = 1;
+            customerQueryRef.current = "";
+            setNewCustomerName("");
+            setNewCustomerPhone("");
+            setIsCreateInvoiceModalOpen(true);
+          }}
+        >
+          <span className="hidden sm:inline">Buat Invoice</span>
+          <span className="sm:hidden">+ Buat</span>
+        </Button>
+      </div>
+
+      {/* ── SUMMARY CARDS ── */}
+      <div className="grid grid-cols-2 gap-2 md:grid-cols-3 md:gap-3">
+        {/* Lunas */}
+        <article className="flex items-center gap-3 rounded-xl border border-border/70 bg-card px-3 py-2.5 shadow-sm md:flex-col md:items-start md:rounded-[16px] md:p-4">
+          <div className="flex items-center gap-1.5">
+            <div className="h-2 w-2 shrink-0 rounded-full bg-emerald-500"></div>
+            <p className="text-[10px] font-semibold uppercase tracking-[0.10em] text-emerald-600 dark:text-emerald-400">
+              Lunas
+            </p>
+          </div>
+          <p className="text-xl font-bold tabular-nums text-foreground md:text-2xl">
             {summary.paid}
           </p>
         </article>
-        <article className="flex flex-col justify-center rounded-[14px] border border-border/70 bg-card p-3 shadow-sm transition-shadow hover:shadow-md lg:rounded-[16px] lg:p-4 2xl:rounded-[20px] 2xl:p-5">
-          <div className="flex items-center gap-2">
-            <div className="h-1.5 w-1.5 rounded-full bg-rose-500 lg:h-2 lg:w-2"></div>
-            <p className="text-[10px] font-medium uppercase tracking-[0.12em] text-muted-foreground lg:text-[11px]">
+
+        {/* Belum Lunas */}
+        <article className="flex items-center gap-3 rounded-xl border border-border/70 bg-card px-3 py-2.5 shadow-sm md:flex-col md:items-start md:rounded-[16px] md:p-4">
+          <div className="flex items-center gap-1.5">
+            <div className="h-2 w-2 shrink-0 rounded-full bg-rose-500"></div>
+            <p className="text-[10px] font-semibold uppercase tracking-[0.10em] text-rose-600 dark:text-rose-400">
               Belum Lunas
             </p>
           </div>
-          <p className="mt-1.5 text-xl font-semibold tracking-tight text-foreground lg:mt-2 lg:text-2xl 2xl:mt-2.5 2xl:text-[28px]">
+          <p className="text-xl font-bold tabular-nums text-foreground md:text-2xl">
             {summary.unpaid}
           </p>
         </article>
-        <article className="flex flex-col justify-center rounded-[14px] border border-border/70 bg-card p-3 shadow-sm transition-shadow hover:shadow-md lg:rounded-[16px] lg:p-4 2xl:rounded-[20px] 2xl:p-5">
-          <div className="flex items-center gap-2">
-            <div className="h-1.5 w-1.5 rounded-full bg-blue-500 lg:h-2 lg:w-2"></div>
-            <p className="text-[10px] font-medium uppercase tracking-[0.12em] text-muted-foreground lg:text-[11px]">
+
+        {/* Total Pendapatan — full width di mobile, 1 col di md */}
+        <article className="col-span-2 flex items-center justify-between rounded-xl border border-border/70 bg-card px-3 py-2.5 shadow-sm md:col-span-1 md:flex-col md:items-start md:justify-start md:rounded-[16px] md:p-4">
+          <div className="flex items-center gap-1.5">
+            <div className="h-2 w-2 shrink-0 rounded-full bg-blue-500"></div>
+            <p className="text-[10px] font-semibold uppercase tracking-[0.10em] text-blue-600 dark:text-blue-400">
               Total Pendapatan
             </p>
           </div>
-          <p className="mt-1.5 text-xl font-semibold tracking-tight text-foreground lg:mt-2 lg:text-2xl 2xl:mt-2.5 2xl:text-[28px]">
+          <p className="text-base font-bold tabular-nums text-foreground md:mt-1 md:text-2xl">
             {formatMoney(summary.revenue, "IDR")}
           </p>
         </article>
       </div>
 
-      <section className="flex min-h-0 flex-1 flex-col rounded-[16px] border border-border/80 bg-card p-3 shadow-md shadow-black/5 lg:rounded-2xl lg:p-4 2xl:rounded-[24px] 2xl:p-6">
-        <div className="mb-4 flex flex-wrap items-center justify-between gap-3 2xl:mb-5">
-          <div>
-            <h2 className="text-lg font-semibold tracking-tight text-foreground lg:text-xl 2xl:text-2xl">
+      <section className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-2xl border border-border/80 bg-card shadow-md shadow-black/5">
+        {/* Section header + toolbar — non-scrollable */}
+        <div className="shrink-0 border-b border-border/60 px-3 pb-2 pt-3 md:px-4 md:pt-4">
+          <div className="mb-2.5 flex items-center justify-between gap-2">
+            <h2 className="text-base font-semibold tracking-tight text-foreground md:text-xl">
               Daftar Invoice
             </h2>
-            <p className="text-[11px] text-muted-foreground lg:text-xs 2xl:text-sm">
-              Register invoice {activeBusiness?.name ?? "Bisnis"}
-            </p>
           </div>
-          <div className="flex w-full flex-wrap items-center gap-2 md:w-auto">
-            <label className="relative block w-full md:w-auto">
+
+          {/* Search row */}
+          <div className="flex items-center gap-2">
+            <label className="relative min-w-0 flex-1">
               <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
               <Input
                 value={searchInput}
                 onChange={(event) => setSearchInput(event.target.value)}
-                placeholder="Cari invoice/customer..."
-                className="h-10 rounded-xl pl-10 shadow-sm transition-shadow focus-visible:ring-primary/30"
+                placeholder="Cari invoice..."
+                className="h-9 rounded-xl pl-10 shadow-sm"
               />
             </label>
             <Select
@@ -1529,7 +1530,7 @@ export function InvoicesWorkspace() {
                 setPage(1);
               }}
             >
-              <SelectTrigger className="h-10 w-full rounded-xl bg-background shadow-sm md:w-[180px]">
+              <SelectTrigger className="h-9 w-[120px] shrink-0 rounded-xl bg-background shadow-sm md:w-[160px]">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -1540,18 +1541,20 @@ export function InvoicesWorkspace() {
                 ))}
               </SelectContent>
             </Select>
-
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <Button
                   type="button"
-                  variant="secondary"
-                  className="h-9 rounded-lg border border-border/80 bg-background md:h-10 md:rounded-xl"
+                  variant="ghost"
+                  className="h-9 w-9 shrink-0 rounded-xl border border-border/70 bg-background p-0"
+                  title="Tampilkan / sembunyikan kolom"
                 >
-                  Kolom
+                  <MoreHorizontal className="h-4 w-4" />
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end">
+                <DropdownMenuLabel className="text-xs">Tampilkan Kolom</DropdownMenuLabel>
+                <DropdownMenuSeparator />
                 {table
                   .getAllColumns()
                   .filter((column) => column.getCanHide())
@@ -1571,30 +1574,20 @@ export function InvoicesWorkspace() {
         </div>
 
         {selectedRows.length > 0 ? (
-          <div className="mb-3 flex flex-wrap items-center gap-2 rounded-xl border border-border/80 bg-background/60 px-3 py-2">
-            <p className="text-sm text-muted-foreground">{selectedRows.length} dipilih</p>
-            <Button
-              type="button"
-              size="sm"
-              onClick={() => void handleBulkSend()}
-              disabled={isBulkActing || selectedDraftIds.length === 0}
-            >
-              Kirim Draft ({selectedDraftIds.length})
+          <div className="mx-3 mb-2 flex flex-wrap items-center gap-2 rounded-xl border border-border/80 bg-background/60 px-3 py-2 md:mx-4">
+            <p className="text-xs text-muted-foreground">{selectedRows.length} dipilih</p>
+            <Button type="button" size="sm" onClick={() => void handleBulkSend()} disabled={isBulkActing || selectedDraftIds.length === 0}>
+              Kirim ({selectedDraftIds.length})
             </Button>
-            <Button
-              type="button"
-              size="sm"
-              variant="destructive"
-              onClick={() => void handleBulkDelete()}
-              disabled={isBulkActing || selectedDraftIds.length === 0}
-            >
-              Hapus Draft ({selectedDraftIds.length})
+            <Button type="button" size="sm" variant="destructive" onClick={() => void handleBulkDelete()} disabled={isBulkActing || selectedDraftIds.length === 0}>
+              Hapus ({selectedDraftIds.length})
             </Button>
           </div>
         ) : null}
 
-        <div className="min-h-0 flex-1 overflow-auto rounded-xl border border-border/70 md:rounded-2xl">
-          <Table className="min-w-[920px]">
+        {/* Scrollable table area */}
+        <div className="min-h-0 flex-1 overflow-auto">
+          <Table className="min-w-[640px]">
             <TableHeader>
               {table.getHeaderGroups().map((headerGroup) => (
                 <TableRow key={headerGroup.id}>
@@ -1624,8 +1617,8 @@ export function InvoicesWorkspace() {
                   <TableRow
                     key={row.id}
                     data-state={row.getIsSelected() ? "selected" : undefined}
-                    className={row.original.id === selectedInvoiceId ? "bg-primary/5" : ""}
-                    onDoubleClick={() => {
+                    className={`cursor-pointer ${row.original.id === selectedInvoiceId ? "bg-primary/5" : ""}`}
+                    onClick={() => {
                       setSelectedInvoiceId(row.original.id);
                       setIsDetailModalOpen(true);
                       void loadInvoiceDetail(row.original.id);
@@ -1652,49 +1645,52 @@ export function InvoicesWorkspace() {
           </Table>
         </div>
 
-        <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
-          <p className="text-sm text-muted-foreground">{totalInvoices} invoice</p>
-          <div className="flex items-center gap-2">
-            <Select
-              value={String(pageSize)}
-              onValueChange={(value) => {
-                setPageSize(Number(value));
-                setPage(1);
-              }}
-            >
-              <SelectTrigger className="h-9 w-[120px] rounded-lg">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="10">10 baris</SelectItem>
-                <SelectItem value="20">20 baris</SelectItem>
-                <SelectItem value="50">50 baris</SelectItem>
-                <SelectItem value="100">100 baris</SelectItem>
-              </SelectContent>
-            </Select>
-            <span className="text-xs text-muted-foreground md:text-sm">
-              Halaman {page} / {totalPages}
-            </span>
-            <Button
-              type="button"
-              variant="secondary"
-              size="sm"
-              className="border border-border/80 bg-background"
-              onClick={() => setPage((current) => Math.max(1, current - 1))}
-              disabled={page <= 1}
-            >
-              Sebelumnya
-            </Button>
-            <Button
-              type="button"
-              variant="secondary"
-              size="sm"
-              className="border border-border/80 bg-background"
-              onClick={() => setPage((current) => Math.min(totalPages, current + 1))}
-              disabled={page >= totalPages}
-            >
-              Berikutnya
-            </Button>
+        {/* Pagination */}
+        <div className="shrink-0 border-t border-border/60 px-3 py-2.5 md:px-4">
+          <div className="flex items-center justify-between gap-2">
+            <p className="text-xs text-muted-foreground">{totalInvoices} invoice</p>
+            <div className="flex items-center gap-1.5">
+              <Select
+                value={String(pageSize)}
+                onValueChange={(value) => {
+                  setPageSize(Number(value));
+                  setPage(1);
+                }}
+              >
+                <SelectTrigger className="h-8 w-[90px] rounded-lg text-xs">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="10">10 baris</SelectItem>
+                  <SelectItem value="20">20 baris</SelectItem>
+                  <SelectItem value="50">50 baris</SelectItem>
+                  <SelectItem value="100">100 baris</SelectItem>
+                </SelectContent>
+              </Select>
+              <Button
+                type="button"
+                variant="secondary"
+                size="sm"
+                className="h-8 border border-border/80 bg-background px-3 text-xs"
+                onClick={() => setPage((current) => Math.max(1, current - 1))}
+                disabled={page <= 1}
+              >
+                ‹
+              </Button>
+              <span className="min-w-[40px] text-center text-xs text-muted-foreground">
+                {page}/{totalPages}
+              </span>
+              <Button
+                type="button"
+                variant="secondary"
+                size="sm"
+                className="h-8 border border-border/80 bg-background px-3 text-xs"
+                onClick={() => setPage((current) => Math.min(totalPages, current + 1))}
+                disabled={page >= totalPages}
+              >
+                ›
+              </Button>
+            </div>
           </div>
         </div>
       </section>
@@ -2006,31 +2002,34 @@ export function InvoicesWorkspace() {
       </Drawer>
 
       <Dialog open={isCreateInvoiceModalOpen} onOpenChange={setIsCreateInvoiceModalOpen}>
-        <DialogContent className="sm:max-w-[640px]">
-          <DialogHeader>
-            <DialogTitle>Buat Invoice dari Halaman Invoice</DialogTitle>
-            <DialogDescription>
-              Pilih customer dari database (search-select). Sistem akan gunakan/buat conversation
-              otomatis agar invoice tetap terhubung ke CRM.
+        <DialogContent className="flex max-h-[92dvh] flex-col gap-0 overflow-hidden rounded-[10px] p-0 sm:max-w-[560px]">
+          {/* Sticky header */}
+          <DialogHeader className="shrink-0 border-b border-border/60 px-5 py-4">
+            <DialogTitle>Buat Invoice</DialogTitle>
+            <DialogDescription className="text-xs">
+              Pilih customer dari database. Sistem akan membuat/menggunakan conversation secara otomatis.
             </DialogDescription>
           </DialogHeader>
 
-          <div className="space-y-4">
-            <div className="space-y-2">
-              <p className="text-sm font-medium text-foreground">Cari & Pilih Pelanggan</p>
-              <Input
-                value={customerSearchText}
-                onChange={(event) => {
-                  setCustomerSearchText(event.target.value);
-                  setSelectedCustomerId("");
-                }}
-                placeholder="Cari nama pelanggan atau nomor WhatsApp..."
-                className="h-10"
-              />
-              {isLoadingCustomers ? (
-                <p className="text-xs text-muted-foreground">Mencari pelanggan...</p>
-              ) : null}
-              <div className="max-h-52 overflow-auto rounded-xl border border-border/70">
+          {/* Scrollable body */}
+          <div className="min-h-0 flex-1 overflow-y-auto px-5 py-4">
+            <div className="space-y-3">
+              {/* Search input */}
+              <div className="relative">
+                <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                <Input
+                  value={customerSearchText}
+                  onChange={(event) => {
+                    setCustomerSearchText(event.target.value);
+                    setSelectedCustomerId("");
+                  }}
+                  placeholder="Cari nama atau nomor WhatsApp..."
+                  className="h-10 rounded-xl pl-10"
+                />
+              </div>
+
+              {/* Customer list */}
+              <div className="overflow-hidden rounded-xl border border-border/70">
                 {customerFetchError ? (
                   <div className="space-y-2 px-3 py-3">
                     <p className="text-sm text-destructive">{customerFetchError}</p>
@@ -2057,28 +2056,28 @@ export function InvoicesWorkspace() {
                     ))}
                   </div>
                 ) : customerOptions.length === 0 ? (
-                  <p className="px-3 py-3 text-sm text-muted-foreground">
-                    Pelanggan tidak ditemukan.
-                  </p>
+                  <p className="px-3 py-3 text-sm text-muted-foreground">Pelanggan tidak ditemukan.</p>
                 ) : (
                   <div className="divide-y divide-border/60">
                     {customerOptions.map((customer) => (
                       <button
                         key={customer.id}
                         type="button"
-                        className={`flex w-full items-start justify-between px-3 py-2 text-left ${selectedCustomerId === customer.id ? "bg-primary/10" : "hover:bg-accent/40"}`}
-                        onClick={() => {
-                          setSelectedCustomerId(customer.id);
-                        }}
+                        className={`flex w-full items-center justify-between gap-2 px-3 py-2.5 text-left transition-colors ${selectedCustomerId === customer.id ? "bg-primary/10" : "hover:bg-accent/40"}`}
+                        onClick={() => { setSelectedCustomerId(customer.id); }}
                       >
-                        <div>
-                          <p className="text-sm font-medium text-foreground">
+                        <div className="min-w-0">
+                          <p className="truncate text-sm font-medium text-foreground">
                             {customer.displayName?.trim() || customer.phoneE164}
                           </p>
                           <p className="text-xs text-muted-foreground">{customer.phoneE164}</p>
                         </div>
-                        <span className="text-xs text-muted-foreground">
-                          {customer.latestConversationId ? "sudah ada chat" : "belum ada chat"}
+                        <span className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-medium ${
+                          customer.latestConversationId
+                            ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400"
+                            : "bg-muted text-muted-foreground"
+                        }`}>
+                          {customer.latestConversationId ? "Ada chat" : "Belum ada"}
                         </span>
                       </button>
                     ))}
@@ -2089,29 +2088,28 @@ export function InvoicesWorkspace() {
                     <Button
                       type="button"
                       variant="secondary"
-                      className="h-8 w-full"
+                      className="h-8 w-full text-xs"
                       onClick={() => void loadMoreCustomers()}
                       disabled={isLoadingCustomers}
                     >
-                      {isLoadingCustomers ? "Memuat..." : "Muat Pelanggan Lain"}
+                      {isLoadingCustomers ? "Memuat..." : "Muat lebih banyak"}
                     </Button>
                   </div>
                 ) : null}
               </div>
+
+              {isLoadingCustomers && customerOptions.length > 0 ? (
+                <p className="text-center text-xs text-muted-foreground">Mencari...</p>
+              ) : null}
             </div>
           </div>
 
-          <DialogFooter>
+          {/* Sticky footer */}
+          <DialogFooter className="shrink-0 flex-col gap-2 border-t border-border/60 px-5 py-3 sm:flex-row sm:items-center sm:justify-between">
             <Button
               type="button"
-              variant="secondary"
-              onClick={() => setIsCreateInvoiceModalOpen(false)}
-            >
-              Batal
-            </Button>
-            <Button
-              type="button"
-              variant="ghost"
+              variant="outline"
+              className="w-full sm:w-auto"
               onClick={() => {
                 setSelectedCustomerId("");
                 setNewCustomerName("");
@@ -2122,70 +2120,86 @@ export function InvoicesWorkspace() {
             >
               Buat Manual
             </Button>
-            <Button
-              type="button"
-              onClick={() => void handleCreateInvoiceFromInvoices()}
-              disabled={isPreparingInvoiceDrawer || !selectedCustomer}
-            >
-              {isPreparingInvoiceDrawer ? "Menyiapkan..." : "Lanjutkan"}
-            </Button>
+            <div className="flex w-full gap-2 sm:w-auto">
+              <Button
+                type="button"
+                variant="ghost"
+                className="flex-1 sm:flex-none"
+                onClick={() => setIsCreateInvoiceModalOpen(false)}
+              >
+                Batal
+              </Button>
+              <Button
+                type="button"
+                className="flex-1 sm:flex-none"
+                onClick={() => void handleCreateInvoiceFromInvoices()}
+                disabled={isPreparingInvoiceDrawer || !selectedCustomer}
+              >
+                {isPreparingInvoiceDrawer ? "Menyiapkan..." : "Lanjutkan →"}
+              </Button>
+            </div>
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
+
       <Dialog open={isManualCustomerModalOpen} onOpenChange={setIsManualCustomerModalOpen}>
-        <DialogContent className="sm:max-w-[560px]">
-          <DialogHeader>
+        <DialogContent className="flex max-h-[88dvh] flex-col gap-0 overflow-hidden rounded-[10px] p-0 sm:max-w-[460px]">
+          <DialogHeader className="shrink-0 border-b border-border/60 px-5 py-4">
             <DialogTitle>Buat Pelanggan Manual</DialogTitle>
-            <DialogDescription>
-              Input manual dipakai saat customer belum ada di database.
+            <DialogDescription className="text-xs">
+              Gunakan ini jika customer belum ada di database.
             </DialogDescription>
           </DialogHeader>
 
-          <div className="space-y-3 rounded-xl border border-border/70 p-3">
-            <label className="space-y-1.5">
-              <span className="text-sm font-medium text-foreground">Nama Customer (opsional)</span>
-              <Input
-                value={newCustomerName}
-                onChange={(event) => {
-                  setSelectedCustomerId("");
-                  setNewCustomerName(event.target.value);
-                }}
-                placeholder="Contoh: Budi Propertindo"
-                className="h-10"
-              />
-            </label>
-            <label className="space-y-1.5">
-              <span className="text-sm font-medium text-foreground">Nomor WhatsApp (E.164)</span>
-              <Input
-                value={newCustomerPhone}
-                onChange={(event) => {
-                  setSelectedCustomerId("");
-                  setNewCustomerPhone(event.target.value);
-                }}
-                placeholder="+6281234567890"
-                className="h-10"
-              />
-            </label>
+          <div className="min-h-0 flex-1 overflow-y-auto px-5 py-4">
+            <div className="space-y-3">
+              <label className="block space-y-1.5">
+                <span className="text-sm font-medium text-foreground">Nama Customer <span className="text-muted-foreground">(opsional)</span></span>
+                <Input
+                  value={newCustomerName}
+                  onChange={(event) => {
+                    setSelectedCustomerId("");
+                    setNewCustomerName(event.target.value);
+                  }}
+                  placeholder="Contoh: Budi Santoso"
+                  className="h-10 rounded-xl"
+                />
+              </label>
+              <label className="block space-y-1.5">
+                <span className="text-sm font-medium text-foreground">Nomor WhatsApp <span className="text-rose-500">*</span></span>
+                <Input
+                  value={newCustomerPhone}
+                  onChange={(event) => {
+                    setSelectedCustomerId("");
+                    setNewCustomerPhone(event.target.value);
+                  }}
+                  placeholder="+6281234567890"
+                  className="h-10 rounded-xl"
+                />
+              </label>
+            </div>
           </div>
 
-          <DialogFooter>
+          <DialogFooter className="shrink-0 flex-row gap-2 border-t border-border/60 px-5 py-3">
             <Button
               type="button"
-              variant="secondary"
+              variant="ghost"
+              className="flex-1"
               onClick={() => setIsManualCustomerModalOpen(false)}
             >
               Batal
             </Button>
             <Button
               type="button"
+              className="flex-1"
               onClick={() => {
                 setIsManualCustomerModalOpen(false);
                 void handleCreateInvoiceFromInvoices();
               }}
               disabled={isPreparingInvoiceDrawer || !newCustomerPhone.trim()}
             >
-              {isPreparingInvoiceDrawer ? "Menyiapkan..." : "Lanjutkan Manual"}
+              {isPreparingInvoiceDrawer ? "Menyiapkan..." : "Lanjutkan →"}
             </Button>
           </DialogFooter>
         </DialogContent>
