@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { parsePlatformMemberEnabled } from "@/app/api/sa/platform-members/route";
+import { parsePlatformMemberEnabled } from "@/app/api/sa/platform-members/routeGuards";
 import { parseOptionalBooleanField } from "@/server/services/platformCouponService";
 import { ServiceError } from "@/server/services/serviceError";
 
