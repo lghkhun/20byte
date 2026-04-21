@@ -18,6 +18,10 @@ HEALTH_DELAY="${HEALTH_DELAY:-5}"
 SKIP_GIT_SYNC="${SKIP_GIT_SYNC:-0}"
 KEEP_OLD_WEB="${KEEP_OLD_WEB:-0}"
 DOCKER_PRUNE_AFTER_DEPLOY="${DOCKER_PRUNE_AFTER_DEPLOY:-1}"
+DEPLOY_GIT_HARD_SYNC="${DEPLOY_GIT_HARD_SYNC:-0}"
+
+active_color="legacy"
+switched_upstream="0"
 
 as_root() {
   if [ "$(id -u)" -eq 0 ]; then
@@ -109,6 +113,38 @@ ensure_active_color_dir() {
   mkdir -p "$dir_path"
 }
 
+rollback_upstream_on_failure() {
+  status=$?
+  if [ "$status" -eq 0 ]; then
+    return 0
+  fi
+
+  if [ "$switched_upstream" != "1" ]; then
+    return "$status"
+  fi
+
+  if [ "$active_color" != "blue" ] && [ "$active_color" != "green" ]; then
+    echo "[deploy] deployment failed after cutover; previous active color unknown, manual rollback required"
+    return "$status"
+  fi
+
+  previous_port="$(port_for_color "$active_color")"
+  echo "[deploy] deployment failed after cutover; rolling back nginx upstream to $active_color ($previous_port)"
+  write_upstream_snippet "$previous_port"
+  if as_root nginx -t; then
+    as_root systemctl reload nginx
+    ensure_active_color_dir
+    printf '%s\n' "$active_color" >"$ACTIVE_COLOR_FILE"
+    echo "[deploy] rollback complete: active production color restored to $active_color"
+  else
+    echo "[deploy] rollback failed: nginx configuration test failed, manual intervention required"
+  fi
+
+  return "$status"
+}
+
+trap 'rollback_upstream_on_failure' EXIT
+
 stop_legacy_container_if_present() {
   name="$1"
   if as_root docker ps -a --format '{{.Names}}' | grep -qx "$name"; then
@@ -126,8 +162,14 @@ mkdir -p "$ROOT_DIR/.deploy"
 if [ "$SKIP_GIT_SYNC" != "1" ]; then
   echo "[deploy] syncing git branch origin/$BRANCH"
   git fetch origin "$BRANCH"
-  git reset --hard "origin/$BRANCH"
-  git clean -fd
+  if [ "$DEPLOY_GIT_HARD_SYNC" = "1" ]; then
+    echo "[deploy] impact: hard git sync will discard uncommitted files on VPS working tree"
+    git reset --hard "origin/$BRANCH"
+    git clean -fd
+  else
+    git checkout "$BRANCH"
+    git merge --ff-only "origin/$BRANCH"
+  fi
 fi
 
 echo "[deploy] validating docker compose config..."
@@ -156,6 +198,7 @@ echo "[deploy] switching nginx upstream to $inactive_color"
 write_upstream_snippet "$inactive_port"
 as_root nginx -t
 as_root systemctl reload nginx
+switched_upstream="1"
 
 ensure_active_color_dir
 printf '%s\n' "$inactive_color" >"$ACTIVE_COLOR_FILE"
@@ -180,6 +223,7 @@ echo "[deploy] current status:"
 compose ps
 
 if [ "$DOCKER_PRUNE_AFTER_DEPLOY" = "1" ]; then
+  echo "[deploy] impact: docker prune removes dangling images and old builder cache"
   echo "[deploy] pruning dangling docker images"
   as_root "$DOCKER_BIN" image prune -f >/dev/null || true
   echo "[deploy] pruning docker builder cache older than 24h"
@@ -187,3 +231,4 @@ if [ "$DOCKER_PRUNE_AFTER_DEPLOY" = "1" ]; then
 fi
 
 echo "[deploy] active production color is now $inactive_color"
+trap - EXIT

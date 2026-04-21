@@ -167,7 +167,8 @@ function ImagePreview({ message }: { message: MessageItem }) {
           className={`rounded-xl border border-border bg-black/10 ${bubbleMediaClass(
             message.mimeType === "image/webp" ? "portrait" : orientation
           )}`}
-          onLoadingComplete={(image) => {
+          onLoad={(event) => {
+            const image = event.currentTarget;
             setOrientation(resolveOrientation(image.naturalWidth, image.naturalHeight));
           }}
           onError={() => setFailed(true)}

@@ -1,0 +1,26 @@
+{
+  "id": "endpoints/endpoints-webhook",
+  "title": "Webhook",
+  "description": "PUT /webhook",
+  "source": "@site/docs/endpoints/webhook.md",
+  "sourceDirName": "endpoints",
+  "slug": "/endpoints/endpoints-webhook",
+  "permalink": "/endpoints/endpoints-webhook",
+  "draft": false,
+  "unlisted": false,
+  "tags": [],
+  "version": "current",
+  "frontMatter": {
+    "id": "endpoints-webhook",
+    "title": "Webhook"
+  },
+  "sidebar": "apiSidebar",
+  "previous": {
+    "title": "Schedules",
+    "permalink": "/endpoints/endpoints-schedules"
+  },
+  "next": {
+    "title": "Payload Reference",
+    "permalink": "/payloads"
+  }
+}

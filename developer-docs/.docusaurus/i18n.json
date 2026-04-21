@@ -1,0 +1,20 @@
+{
+  "defaultLocale": "id",
+  "locales": [
+    "id"
+  ],
+  "path": "i18n",
+  "currentLocale": "id",
+  "localeConfigs": {
+    "id": {
+      "label": "Indonesia",
+      "direction": "ltr",
+      "htmlLang": "id",
+      "calendar": "gregory",
+      "path": "id",
+      "translate": false,
+      "url": "https://docs.20byte.com",
+      "baseUrl": "/"
+    }
+  }
+}

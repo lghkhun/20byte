@@ -18,7 +18,7 @@ function MetaBadgeLogo() {
     <svg
       aria-hidden="true"
       viewBox="0 0 24 24"
-      className="h-3.5 w-3.5 shrink-0"
+      className="h-3 w-3 shrink-0"
       fill="none"
       xmlns="http://www.w3.org/2000/svg"
     >
@@ -71,7 +71,7 @@ export function ConversationRow({ density, conversation, isSelected, nowMs, onSe
     ? {
         label: "Shortlink",
         className:
-          "rounded border border-indigo-500/40 bg-indigo-500/10 px-1.5 py-0.5 text-[10px] font-medium text-indigo-700 dark:text-indigo-300",
+          "rounded border border-emerald-500/40 bg-emerald-500/10 px-1.5 py-0.5 text-[10px] font-semibold text-emerald-700 dark:text-emerald-300",
         isMeta: false
       }
     : sourceBadge;
@@ -84,116 +84,128 @@ export function ConversationRow({ density, conversation, isSelected, nowMs, onSe
     <button
       type="button"
       onClick={() => onSelect(conversation.id)}
-      className={
+      className={`group relative w-full text-left transition-all duration-200 active:scale-[0.98] ${
         isSelected
-          ? `w-full border-l-2 border-primary bg-primary/[0.07] px-4 sm:px-5 ${density === "compact" ? "py-3" : "py-4"} text-left transition-all duration-150`
-          : `w-full border-l-2 border-transparent px-4 sm:px-5 ${density === "compact" ? "py-3" : "py-4"} text-left transition-all duration-150 hover:bg-accent/40`
-      }
+          ? "bg-emerald-500/[0.04] dark:bg-emerald-500/[0.08]"
+          : "bg-transparent hover:bg-muted/40"
+      } ${density === "compact" ? "py-3 px-4" : "py-4 px-4 sm:px-5"}`}
     >
-      <div className="flex items-start gap-3 relative">
-        {avatarSrc ? (
-          <div className={`relative ${density === "compact" ? "h-9 w-9" : "h-11 w-11"} shrink-0 overflow-hidden rounded-full border border-border/70 shadow-sm`}>
-            <Image
-              src={avatarSrc}
-              alt={conversation.customerDisplayName ?? conversation.customerPhoneE164}
-              fill
-              unoptimized
-              className="object-cover"
-              onError={() => setAvatarError(true)}
-            />
-            <span
-              className={`absolute -bottom-0.5 -right-0.5 h-3.5 w-3.5 rounded-full border-2 border-card shadow-sm ${
-                avatarPresenceActive ? "bg-emerald-500" : "bg-slate-300"
-              }`}
-              title={avatarPresenceActive ? "Active recently" : "No recent activity"}
-            />
-          </div>
-        ) : (
-          <div
-            className={`relative flex ${density === "compact" ? "h-9 w-9 text-xs" : "h-11 w-11 text-sm"} shrink-0 items-center justify-center rounded-full font-semibold shadow-sm ${toAvatarTone(
-              `${conversation.customerPhoneE164}:${conversation.customerDisplayName ?? ""}`
-            )}`}
-          >
-            {toInitials(conversation.customerDisplayName, conversation.customerPhoneE164)}
-            <span
-              className={`absolute -bottom-0.5 -right-0.5 h-3.5 w-3.5 rounded-full border-2 border-card shadow-sm ${
-                avatarPresenceActive ? "bg-emerald-500" : "bg-slate-300"
-              }`}
-              title={avatarPresenceActive ? "Active recently" : "No recent activity"}
-            />
-          </div>
-        )}
+      {/* Active Sidebar Indicator */}
+      {isSelected && (
+        <div className="absolute left-0 top-2 bottom-2 w-1 rounded-r-full bg-emerald-500 shadow-[0_0_12px_rgba(16,185,129,0.4)]" />
+      )}
 
-        {isGroup && (
-          <div className="absolute top-7 left-7 flex h-5 w-5 items-center justify-center rounded-full bg-background p-1 shadow-sm ring-1 ring-border shadow-indigo-500/20">
-            <svg
-              xmlns="http://www.w3.org/2000/svg"
-              fill="none"
-              viewBox="0 0 24 24"
-              strokeWidth={2.5}
-              stroke="currentColor"
-              className="h-3 w-3 text-indigo-600"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                d="M15 19.128a9.38 9.38 0 0 0 2.625.372 9.337 9.337 0 0 0 4.121-.952 4.125 4.125 0 0 0-7.533-2.493M15 19.128v-.003c0-1.113-.285-2.16-.786-3.07M15 19.128v.106A12.318 12.318 0 0 1 8.624 21c-2.331 0-4.512-.645-6.374-1.766l-.001-.109a6.375 6.375 0 0 1 11.964-3.07M12 6.375a3.375 3.375 0 1 1-6.75 0 3.375 3.375 0 0 1 6.75 0Zm8.25 2.25a2.625 2.625 0 1 1-5.25 0 2.625 2.625 0 0 1 5.25 0Z"
+      <div className="flex items-start gap-3.5 relative">
+        {/* Avatar Section */}
+        <div className="relative shrink-0">
+          {avatarSrc ? (
+            <div className={`relative ${density === "compact" ? "h-10 w-10" : "h-12 w-12"} overflow-hidden rounded-full border border-border/80 shadow-sm transition-transform group-hover:scale-105`}>
+              <Image
+                src={avatarSrc}
+                alt={conversation.customerDisplayName ?? conversation.customerPhoneE164}
+                fill
+                unoptimized
+                className="object-cover"
+                onError={() => setAvatarError(true)}
               />
-            </svg>
-          </div>
-        )}
+            </div>
+          ) : (
+            <div
+              className={`flex ${density === "compact" ? "h-10 w-10 text-xs" : "h-12 w-12 text-sm"} shrink-0 items-center justify-center rounded-full font-bold shadow-sm transition-transform group-hover:scale-105 ${toAvatarTone(
+                `${conversation.customerPhoneE164}:${conversation.customerDisplayName ?? ""}`
+              )}`}
+            >
+              {toInitials(conversation.customerDisplayName, conversation.customerPhoneE164)}
+            </div>
+          )}
 
+          {/* Activity/Presence Indicator */}
+          <span
+            className={`absolute -bottom-0.5 -right-0.5 h-3.5 w-3.5 rounded-full border-2 border-background shadow-sm ${
+              avatarPresenceActive ? "bg-emerald-500" : "bg-zinc-300 dark:bg-zinc-600"
+            }`}
+            title={avatarPresenceActive ? "Active recently" : "No recent activity"}
+          />
+
+          {/* Group Icon Badge */}
+          {isGroup && (
+            <div className="absolute -top-1 -left-1 flex h-5 w-5 items-center justify-center rounded-full bg-indigo-500 text-white shadow-md ring-2 ring-background">
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                fill="none"
+                viewBox="0 0 24 24"
+                strokeWidth={3}
+                stroke="currentColor"
+                className="h-3 w-3"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  d="M15 19.128a9.38 9.38 0 0 0 2.625.372 9.337 9.337 0 0 0 4.121-.952 4.125 4.125 0 0 0-7.533-2.493M15 19.128v-.003c0-1.113-.285-2.16-.786-3.07M15 19.128v.106A12.318 12.318 0 0 1 8.624 21c-2.331 0-4.512-.645-6.374-1.766l-.001-.109a6.375 6.375 0 0 1 11.964-3.07M12 6.375a3.375 3.375 0 1 1-6.75 0 3.375 3.375 0 0 1 6.75 0Zm8.25 2.25a2.625 2.625 0 1 1-5.25 0 2.625 2.625 0 0 1 5.25 0Z"
+                />
+              </svg>
+            </div>
+          )}
+        </div>
+
+        {/* Content Section */}
         <div className="min-w-0 flex-1">
-          <div className="flex items-start justify-between gap-2">
-            <span className="truncate text-sm font-semibold text-foreground">
+          <div className="flex items-center justify-between gap-2">
+            <h3 className={`truncate text-sm font-bold tracking-tight ${isSelected ? "text-emerald-700 dark:text-emerald-400" : "text-foreground"}`}>
               {resolvedConversationName}
+            </h3>
+            <span className="shrink-0 text-[10px] font-medium uppercase tracking-wider text-muted-foreground/80">
+              {formatTimestamp(activityTimestamp, nowMs)}
             </span>
-            <span className="text-[11px] text-muted-foreground">{formatTimestamp(activityTimestamp, nowMs)}</span>
           </div>
-          <div className={`${density === "compact" ? "mt-1" : "mt-1.5"} flex items-center gap-1`}>
-            <span className="line-clamp-1 text-xs text-muted-foreground font-medium">
+
+          <div className="mt-1 flex items-center justify-between gap-3">
+            <p className={`line-clamp-1 text-[13px] leading-tight transition-colors ${conversation.unreadCount > 0 ? "font-bold text-foreground" : "text-muted-foreground"}`}>
               {isGroup && (
-                <span className="text-foreground/70">~{senderLabel}: </span>
+                <span className="text-foreground/60 font-medium">~{senderLabel}: </span>
               )}
               {conversation.lastMessagePreview ?? "No message preview yet"}
-            </span>
+            </p>
           </div>
-          <div className={`${density === "compact" ? "mt-2" : "mt-2.5"} flex items-center justify-between gap-2`}>
-            <div className="flex min-w-0 items-center gap-2">
+
+          <div className="mt-2.5 flex items-center justify-between gap-2">
+            <div className="flex min-w-0 items-center gap-1.5">
               {displaySourceBadge ? (
-                <span className={displaySourceBadge.className} title={tooltipText}>
+                <span className={`${displaySourceBadge.className} flex items-center gap-1 scale-[0.9] origin-left`} title={tooltipText}>
                   {displaySourceBadge.isMeta ? <MetaBadgeLogo /> : null}
-                  <span>{displaySourceBadge.label}</span>
+                  <span className="truncate">{displaySourceBadge.label}</span>
                 </span>
               ) : null}
               {conversation.assignedToMemberName ? (
-                <span className="truncate text-[11px] text-muted-foreground max-w-[100px]" title={conversation.assignedToMemberName}>
-                  {conversation.assignedToMemberName}
-                </span>
+                <div className="flex items-center gap-1 truncate text-[11px] text-muted-foreground/70" title={conversation.assignedToMemberName}>
+                  <div className="h-1 w-1 rounded-full bg-border" />
+                  <span className="truncate max-w-[80px]">{conversation.assignedToMemberName}</span>
+                </div>
               ) : null}
             </div>
-            <div className="flex items-center gap-2">
-              <span
-                className={`h-2 w-2 rounded-full ${conversation.status === "OPEN" ? "bg-emerald-500" : "bg-slate-300"}`}
-                title={conversation.status === "OPEN" ? "Conversation open" : "Conversation closed"}
-                aria-label={conversation.status === "OPEN" ? "Conversation open" : "Conversation closed"}
-              />
+
+            <div className="flex items-center gap-2 shrink-0">
               {isLatestMessageProofReady ? (
-                <span
-                  className="inline-flex h-2 w-2 rounded-full bg-emerald-500 ring-2 ring-emerald-100"
-                  title="Latest message is ready for payment proof"
-                  aria-label="Latest message is ready for payment proof"
-                />
+                <div
+                  className="flex h-5 w-5 items-center justify-center rounded-full bg-emerald-100 dark:bg-emerald-950/40"
+                  title="Proof ready"
+                >
+                  <div className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                </div>
               ) : null}
+              
               {conversation.unreadCount > 0 ? (
                 <span
-                  className="inline-flex min-w-6 items-center justify-center rounded-full bg-primary px-2 py-0.5 text-xs font-semibold text-primary-foreground"
-                  title={`${conversation.unreadCount} unread message${conversation.unreadCount > 1 ? "s" : ""}`}
-                  aria-label={`${conversation.unreadCount} unread message${conversation.unreadCount > 1 ? "s" : ""}`}
+                  className="flex h-5 min-w-[20px] items-center justify-center rounded-full bg-emerald-600 px-1.5 text-[10px] font-bold text-white shadow-sm shadow-emerald-500/20"
                 >
                   {conversation.unreadCount > 99 ? "99+" : conversation.unreadCount}
                 </span>
-              ) : null}
+              ) : (
+                <div
+                  className={`h-2 w-2 rounded-full border transition-colors ${conversation.status === "OPEN" ? "bg-emerald-500 border-emerald-600/20" : "bg-zinc-200 border-zinc-300 dark:bg-zinc-700 dark:border-zinc-600"}`}
+                  title={conversation.status === "OPEN" ? "Open" : "Closed"}
+                />
+              )}
             </div>
           </div>
         </div>

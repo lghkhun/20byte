@@ -995,6 +995,11 @@ export function CrmContextPanel({
                           src={item.safeMediaUrl ?? ""}
                           alt={item.fileName ?? "media"}
                           className="h-full w-full object-cover transition group-hover:scale-[1.02]"
+                          loading="lazy"
+                          referrerPolicy="no-referrer"
+                          onError={(event) => {
+                            event.currentTarget.style.display = "none";
+                          }}
                         />
                       ) : (
                         <video

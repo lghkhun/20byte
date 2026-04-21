@@ -49,7 +49,11 @@ export function NavMain({
 
   return (
     <SidebarGroup>
-      <SidebarGroupLabel>Platform</SidebarGroupLabel>
+      <SidebarGroupLabel className="mb-1 flex items-center gap-2 text-[10px] font-bold uppercase tracking-widest text-sidebar-foreground/40">
+        <span className="h-px flex-1 bg-sidebar-border/60" />
+        Platform
+        <span className="h-px flex-1 bg-sidebar-border/60" />
+      </SidebarGroupLabel>
       <SidebarMenu>
         {items.map((item) => (
           <Collapsible key={item.title} asChild defaultOpen={item.isActive}>

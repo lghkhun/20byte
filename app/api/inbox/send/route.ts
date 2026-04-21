@@ -4,8 +4,10 @@ import { consumeRateLimit } from "@/lib/redis/rateLimit";
 import { requireApiSession } from "@/lib/auth/middleware";
 import { resolvePrimaryOrganizationIdForUser } from "@/server/services/organizationService";
 import { storeBaileysMediaBuffer } from "@/server/services/baileysService";
+import { getConversationWithCustomer, requireInboxMembership } from "@/server/services/message/outboundShared";
 import { sendOutboundMessage } from "@/server/services/messageService";
 import { ServiceError } from "@/server/services/serviceError";
+import { createPublicSendSchedule } from "@/server/services/whatsappPublicApiService";
 
 type SendMessageRequest = {
   orgId?: unknown;
@@ -22,6 +24,7 @@ type SendMessageRequest = {
   templateCategory?: unknown;
   templateLanguageCode?: unknown;
   templateComponents?: unknown;
+  scheduleAt?: unknown;
 };
 
 type ParsedAttachment = {
@@ -112,6 +115,24 @@ function parseOptionalFileSize(value: unknown): number | undefined {
   return undefined;
 }
 
+function parseOptionalScheduleAt(value: unknown): Date | undefined {
+  if (typeof value !== "string") {
+    return undefined;
+  }
+
+  const trimmed = value.trim();
+  if (!trimmed) {
+    return undefined;
+  }
+
+  const parsed = new Date(trimmed);
+  if (Number.isNaN(parsed.getTime())) {
+    return undefined;
+  }
+
+  return parsed;
+}
+
 function inferAttachmentType(mimeType: string): "IMAGE" | "VIDEO" | "AUDIO" | "DOCUMENT" {
   if (mimeType.startsWith("image/")) {
     return "IMAGE";
@@ -156,6 +177,7 @@ async function parseBody(request: NextRequest): Promise<{
         replyToMessageId: formData.get("replyToMessageId"),
         type: formData.get("type") ?? attachment?.type,
         text: formData.get("text"),
+        scheduleAt: formData.get("scheduleAt"),
         mimeType: attachment?.mimeType,
         fileName: attachment?.fileName
       },
@@ -219,6 +241,51 @@ export async function POST(request: NextRequest) {
           fileSize: number;
         }
       | undefined;
+
+    const scheduleAt = parseOptionalScheduleAt(body.scheduleAt);
+    if (body.scheduleAt !== undefined && !scheduleAt) {
+      return errorResponse(400, "INVALID_SCHEDULE_AT", "scheduleAt must be a valid datetime.");
+    }
+
+    if (scheduleAt) {
+      if (type !== "TEXT") {
+        return errorResponse(400, "SCHEDULE_TEXT_ONLY", "Scheduled send currently supports TEXT only.");
+      }
+      const text = parseOptionalNonEmptyString(body.text);
+      if (!text) {
+        return errorResponse(400, "INVALID_MESSAGE_TEXT", "Message text is required.");
+      }
+      const conversationId = typeof body.conversationId === "string" ? body.conversationId.trim() : "";
+      if (!conversationId) {
+        return errorResponse(400, "MISSING_CONVERSATION_ID", "conversationId is required.");
+      }
+      if (scheduleAt.getTime() <= Date.now()) {
+        return errorResponse(400, "SCHEDULE_AT_MUST_BE_FUTURE", "scheduleAt must be in the future.");
+      }
+
+      await requireInboxMembership(auth.session.userId, orgId);
+      const conversation = await getConversationWithCustomer(orgId, conversationId);
+      const target = (conversation.waChatJid?.trim() || conversation.customer.phoneE164).trim();
+      const schedule = await createPublicSendSchedule({
+        orgId,
+        actorUserId: auth.session.userId,
+        targetType: target.endsWith("@g.us") ? "group" : "contact",
+        to: target,
+        messageType: "text",
+        text,
+        dueAt: scheduleAt.toISOString()
+      });
+
+      return NextResponse.json(
+        {
+          data: {
+            schedule
+          },
+          meta: {}
+        },
+        { status: 201 }
+      );
+    }
 
     if (attachment) {
       const stored = await storeBaileysMediaBuffer({

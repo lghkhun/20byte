@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Check, Loader2, MessageCircleMore, Search, X } from "lucide-react";
+import { CalendarClock, Check, Loader2, MessageCircleMore, Search, X } from "lucide-react";
 
 import { ChatHeader } from "@/components/inbox/chat/ChatHeader";
 import { ChatMessagesSkeleton } from "@/components/inbox/chat/ChatMessagesSkeleton";
@@ -25,7 +25,10 @@ type ChatWindowProps = {
   isConversationSelected: boolean;
   isCustomerTyping: boolean;
   error: string | null;
-  onSendText: (text: string, options?: { replyToMessageId?: string | null; replyPreviewText?: string | null }) => Promise<void>;
+  onSendText: (
+    text: string,
+    options?: { replyToMessageId?: string | null; replyPreviewText?: string | null; scheduleAt?: string | null }
+  ) => Promise<{ scheduledDueAt?: string | null } | void>;
   onSendAttachment: (attachment: {
     file: File;
     fileName: string;
@@ -122,6 +125,7 @@ export function ChatWindow({
   const [resolveError, setResolveError] = useState<string | null>(null);
   const [draftByConversation, setDraftByConversation] = useState<Record<string, string>>({});
   const [replyTarget, setReplyTarget] = useState<{ id: string; text: string; author?: string | null } | null>(null);
+  const [scheduledBannerText, setScheduledBannerText] = useState<string | null>(null);
   const lastMessageId = messages.length > 0 ? messages[messages.length - 1]?.id ?? null : null;
   const trimmedSearchQuery = searchQuery.trim();
   const normalizedSearchQuery = trimmedSearchQuery.toLowerCase();
@@ -180,6 +184,10 @@ export function ChatWindow({
     setIsLoadingForwardTargets(false);
     setForwardError(null);
     setIsForwarding(false);
+  }, [conversation?.id]);
+
+  useEffect(() => {
+    setScheduledBannerText(null);
   }, [conversation?.id]);
 
   useEffect(() => {
@@ -524,8 +532,23 @@ export function ChatWindow({
     }));
   }
 
-  async function handleSendText(text: string, options?: { replyToMessageId?: string | null; replyPreviewText?: string | null }) {
-    await onSendText(text, options);
+  async function handleSendText(
+    text: string,
+    options?: { replyToMessageId?: string | null; replyPreviewText?: string | null; scheduleAt?: string | null }
+  ) {
+    const result = await onSendText(text, options);
+    const dueAt = result?.scheduledDueAt;
+    if (options?.scheduleAt && dueAt) {
+      setScheduledBannerText(
+        `Pesan terjadwal: ${new Date(dueAt).toLocaleString("id-ID", {
+          day: "2-digit",
+          month: "short",
+          year: "numeric",
+          hour: "2-digit",
+          minute: "2-digit"
+        })}`
+      );
+    }
   }
 
   async function jumpToMatchedMessage(messageId: string) {
@@ -769,6 +792,23 @@ export function ChatWindow({
           >
             Terbaru
           </Button>
+        </div>
+      ) : null}
+
+      {isConversationSelected && scheduledBannerText ? (
+        <div className="pointer-events-none absolute left-1/2 top-[68px] z-[4] -translate-x-1/2">
+          <div className="pointer-events-auto flex items-center gap-2 rounded-full border border-emerald-500/35 bg-emerald-500/12 px-3 py-1.5 text-[11px] font-medium text-emerald-900 shadow-md backdrop-blur-md dark:text-emerald-50">
+            <CalendarClock className="h-3.5 w-3.5" />
+            <span>{scheduledBannerText}</span>
+            <button
+              type="button"
+              className="inline-flex h-5 w-5 items-center justify-center rounded-full text-emerald-900/70 transition hover:bg-emerald-500/20 hover:text-emerald-900 dark:text-emerald-100/80 dark:hover:text-emerald-50"
+              onClick={() => setScheduledBannerText(null)}
+              aria-label="Tutup notifikasi jadwal"
+            >
+              <X className="h-3 w-3" />
+            </button>
+          </div>
         </div>
       ) : null}
 

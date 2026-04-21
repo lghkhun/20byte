@@ -232,12 +232,12 @@ export function MessageBubble({
       <article
         className={
           isOutbound
-            ? `max-w-[90%] sm:max-w-[78%] rounded-[20px] rounded-br-[4px] border border-primary/20 bg-gradient-to-br from-primary/[0.15] to-primary/[0.05] shadow-sm backdrop-blur-sm ${
+            ? `max-w-[88%] sm:max-w-[78%] rounded-[20px] rounded-br-[4px] border border-primary/25 bg-gradient-to-br from-primary/[0.18] to-primary/[0.08] shadow-sm backdrop-blur-sm ${
                 density === "compact" ? "px-3 py-2.5" : "px-4 py-3"
-              } ${isEmphasized ? "inbox-pop-in" : ""} transition-all duration-150 relative overflow-hidden group`
-            : `max-w-[90%] sm:max-w-[78%] rounded-[20px] rounded-bl-[4px] border border-border/60 bg-gradient-to-br from-card/95 to-muted/40 shadow-sm backdrop-blur-sm ${
+              } ${isEmphasized ? "inbox-pop-in ring-2 ring-primary/40 shadow-[0_0_15px_rgba(16,185,129,0.25)]" : ""} transition-all duration-150 relative overflow-hidden group`
+            : `max-w-[88%] sm:max-w-[78%] rounded-[20px] rounded-bl-[4px] border border-border/70 bg-gradient-to-br from-card/98 to-muted/40 shadow-sm backdrop-blur-sm ${
                 density === "compact" ? "px-3 py-2.5" : "px-4 py-3"
-              } ${isEmphasized ? "inbox-pop-in" : ""} transition-all duration-150 relative overflow-hidden group`
+              } ${isEmphasized ? "inbox-pop-in ring-2 ring-primary/30 shadow-[0_0_15px_rgba(16,185,129,0.15)]" : ""} transition-all duration-150 relative overflow-hidden group`
         }
       >
         {message.type === "SYSTEM" ? <div className="mb-2 inline-flex rounded-full border border-primary/30 bg-primary/10 px-2 py-0.5 text-[10px] uppercase tracking-wider text-primary">System Notice</div> : null}
@@ -246,21 +246,24 @@ export function MessageBubble({
         ) : null}
 
         {message.templateName ? (
-          <p className="mb-1 text-xs text-muted-foreground">
-            Template: {message.templateName}
-            {message.templateCategory ? ` (${message.templateCategory})` : ""}
+          <p className="mb-1.5 flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-widest text-muted-foreground/80">
+            <span className="h-1 w-1 rounded-full bg-border" />
+            {message.templateName}
+            {message.templateCategory ? <span className="text-muted-foreground/50 font-medium lowercase">({message.templateCategory})</span> : ""}
           </p>
         ) : null}
 
         {message.replyToMessageId || message.replyToWaMessageId ? (
-          <div className="mb-2 rounded-lg border border-border/70 bg-background/60 px-2.5 py-1.5">
-            <p className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
-              {isOutbound ? "Membalas" : "Balasan"}
-            </p>
-            {isGroupChat && message.replyPreviewSenderName ? (
-              <p className="mb-0.5 text-[11px] font-semibold text-foreground/80">~ {message.replyPreviewSenderName}</p>
-            ) : null}
-            <p className="line-clamp-2 break-words text-xs text-foreground/90">
+          <div className="mb-2 rounded-xl border border-primary/10 bg-background/50 px-3 py-2">
+            <div className="flex items-center justify-between gap-2">
+              <p className="text-[10px] font-bold uppercase tracking-wider text-primary/80">
+                {isOutbound ? "Membalas" : "Balasan"}
+              </p>
+              {isGroupChat && message.replyPreviewSenderName ? (
+                <p className="text-[11px] font-bold text-foreground/70">~ {message.replyPreviewSenderName}</p>
+              ) : null}
+            </div>
+            <p className="mt-0.5 line-clamp-2 break-words text-[13px] leading-tight text-foreground/80 italic">
               {message.replyPreviewText?.trim() || "Pesan yang dibalas"}
             </p>
           </div>
@@ -289,7 +292,16 @@ export function MessageBubble({
           >
             {linkPreview.image ? (
               // eslint-disable-next-line @next/next/no-img-element
-              <img src={linkPreview.image} alt={linkPreview.title ?? "Link preview"} className="h-32 w-full object-cover" loading="lazy" />
+              <img
+                src={linkPreview.image}
+                alt={linkPreview.title ?? "Link preview"}
+                className="h-32 w-full object-cover"
+                loading="lazy"
+                referrerPolicy="no-referrer"
+                onError={(event) => {
+                  event.currentTarget.style.display = "none";
+                }}
+              />
             ) : null}
             <div className="space-y-1 px-3 py-2">
               <p className="line-clamp-2 text-xs font-semibold text-foreground">{linkPreview.title || linkPreview.url}</p>
@@ -320,16 +332,22 @@ export function MessageBubble({
           </div>
         ) : null}
 
-        <div className="mt-1 flex items-center justify-end gap-1 text-[11px] text-muted-foreground">
+        <div className="mt-1.5 flex items-center justify-end gap-1 text-[10px] font-medium tabular-nums text-muted-foreground/80">
           <span>{formatTime(message.createdAt)}</span>
           {deliveryIndicator ? (
-            <span className={`font-semibold ${deliveryIndicator.className}`} title={deliveryIndicator.title}>
-              {deliveryIndicator.icon}
+            <span className={`flex items-center font-bold scale-[1.1] ${deliveryIndicator.className}`} title={deliveryIndicator.title}>
+              {deliveryIndicator.icon === "✓✓" ? (
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="M2 13L9 20L22 7"/><path d="M16 7L9 14L2 7"/></svg>
+              ) : deliveryIndicator.icon === "✓" ? (
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="M20 6L9 17L4 12"/></svg>
+              ) : (
+                deliveryIndicator.icon
+              )}
             </span>
           ) : null}
         </div>
 
-        <div className="absolute right-1.5 top-1.5 opacity-0 transition-opacity group-hover:opacity-100">
+        <div className="absolute right-1 top-1 opacity-70 transition-opacity group-hover:opacity-100 lg:opacity-0">
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <Button type="button" size="icon" variant="ghost" className="h-6 w-6 rounded-full text-muted-foreground/90">

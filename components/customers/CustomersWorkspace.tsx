@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { ArrowDown, ArrowUp, CalendarDays, ChevronDown, Inbox, Lock, Plus, Search, SlidersHorizontal, UserRound, Users } from "lucide-react";
+import { ArrowDown, ArrowUp, CalendarDays, ChevronDown, Filter, Inbox, Lock, Plus, Search, SlidersHorizontal, UserRound, Users, X } from "lucide-react";
 
 import { BUSINESS_CATEGORY_OPTIONS, FOLLOW_UP_OPTIONS, LEAD_STATUS_OPTIONS, formatLeadSettingLabel } from "@/lib/crm/leadSettingsConfig";
 import { subscribeToOrgMessageEvents } from "@/lib/ably/client";
@@ -230,6 +230,11 @@ const CUSTOMERS_MONEY_FORMATTER = new Intl.NumberFormat("id-ID", {
   currency: "IDR",
   maximumFractionDigits: 0
 });
+const CUSTOMERS_DATE_ONLY_FORMATTER = new Intl.DateTimeFormat("id-ID", {
+  day: "2-digit",
+  month: "long",
+  year: "numeric"
+});
 
 const DEFAULT_FROZEN_FIELDS: FrozenFieldState = {
   name: false,
@@ -412,6 +417,80 @@ function writeTableConfigToStorage(config: { columnOrder: ColumnKey[]; frozenCol
   window.localStorage.setItem(LEADS_TABLE_CONFIG_STORAGE_KEY, JSON.stringify(config));
 }
 
+/**
+ * DatePickerField — Custom date picker using shadcn Calendar inside a Dialog.
+ * Works reliably on mobile without relying on native browser date inputs.
+ */
+function DatePickerField({
+  value,
+  onChange,
+  disabled = false,
+  placeholder = "Pilih tanggal",
+  inputClassName = "",
+}: {
+  value: string; // "yyyy-mm-dd" or empty string
+  onChange: (date: string) => void;
+  disabled?: boolean;
+  placeholder?: string;
+  inputClassName?: string;
+}) {
+  const [open, setOpen] = useState(false);
+  const selectedDate = value ? new Date(`${value}T00:00:00`) : undefined;
+  const isValidDate = selectedDate instanceof Date && !Number.isNaN(selectedDate.getTime());
+  const displayValue = isValidDate ? CUSTOMERS_DATE_ONLY_FORMATTER.format(selectedDate) : null;
+
+  return (
+    <>
+      <button
+        type="button"
+        disabled={disabled}
+        onClick={() => setOpen(true)}
+        className={`flex h-10 w-full items-center justify-between rounded-xl border border-input bg-muted/20 px-3 py-2 text-left text-sm transition-colors hover:bg-muted/40 disabled:cursor-not-allowed disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${inputClassName}`}
+      >
+        <span className={displayValue ? "text-foreground" : "text-muted-foreground"}>
+          {displayValue ?? placeholder}
+        </span>
+        <CalendarDays className="h-4 w-4 shrink-0 text-muted-foreground" />
+      </button>
+
+      <Dialog open={open} onOpenChange={setOpen}>
+        <DialogContent className="flex w-auto max-w-[min(380px,calc(100vw-2rem))] flex-col gap-0 overflow-hidden rounded-[10px] p-0">
+          <DialogHeader className="border-b border-border/60 px-5 py-3.5">
+            <DialogTitle className="text-base">Pilih Tanggal</DialogTitle>
+          </DialogHeader>
+          <div className="flex justify-center p-3">
+            <Calendar
+              mode="single"
+              selected={isValidDate ? selectedDate : undefined}
+              onSelect={(date) => {
+                if (date) {
+                  const y = date.getFullYear();
+                  const m = String(date.getMonth() + 1).padStart(2, "0");
+                  const d = String(date.getDate()).padStart(2, "0");
+                  onChange(`${y}-${m}-${d}`);
+                  setOpen(false);
+                }
+              }}
+              initialFocus
+            />
+          </div>
+          {isValidDate ? (
+            <div className="border-t border-border/60 px-5 py-3">
+              <button
+                type="button"
+                onClick={() => { onChange(""); setOpen(false); }}
+                className="w-full text-center text-sm text-muted-foreground hover:text-foreground"
+              >
+                Hapus tanggal
+              </button>
+            </div>
+          ) : null}
+        </DialogContent>
+      </Dialog>
+    </>
+  );
+}
+
 export function CustomersWorkspace() {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -502,6 +581,8 @@ export function CustomersWorkspace() {
 
   const [frozenFields, setFrozenFields] = useState<FrozenFieldState>(DEFAULT_FROZEN_FIELDS);
   const [isFrozenDialogOpen, setIsFrozenDialogOpen] = useState(false);
+  const [isMobile, setIsMobile] = useState(false);
+  const [isMobileFilterOpen, setIsMobileFilterOpen] = useState(false);
   const activeBusiness = useMemo(() => orgs[0] ?? null, [orgs]);
 
   const updateRealtimeStatus = useCallback((nextStatus: RealtimeSubscriptionStatus) => {
@@ -862,6 +943,14 @@ export function CustomersWorkspace() {
       setError(toErrorMessage(loadError, "Failed to load organizations."));
     });
   }, [loadOrganizations]);
+
+  useEffect(() => {
+    const mq = window.matchMedia("(max-width: 767px)");
+    setIsMobile(mq.matches);
+    const handler = (e: MediaQueryListEvent) => setIsMobile(e.matches);
+    mq.addEventListener("change", handler);
+    return () => mq.removeEventListener("change", handler);
+  }, []);
 
   useEffect(() => {
     if (!hasLoadedOrganizations) {
@@ -1527,17 +1616,20 @@ export function CustomersWorkspace() {
     setPage(1);
   }, []);
 
+  // On mobile, disable frozen columns so the table can scroll freely without cramped layout
+  const effectiveFrozenColumns = useMemo(() => (isMobile ? [] : frozenColumns), [isMobile, frozenColumns]);
+
   const stickyOffsetMap = useMemo(() => {
     const offsets = new Map<ColumnKey, number>();
     let left = SELECT_COLUMN_WIDTH + STICKY_COLUMN_BORDER_WIDTH;
     for (const key of tableColumnOrder) {
-      if (frozenColumns.includes(key)) {
+      if (effectiveFrozenColumns.includes(key)) {
         offsets.set(key, left);
         left += COLUMN_WIDTHS[key] + STICKY_COLUMN_BORDER_WIDTH;
       }
     }
     return offsets;
-  }, [frozenColumns, tableColumnOrder]);
+  }, [effectiveFrozenColumns, tableColumnOrder]);
 
   const setFollowUpDate = useCallback(async (lead: LeadRow, date: Date | undefined) => {
     if (!date) {
@@ -1746,7 +1838,8 @@ export function CustomersWorkspace() {
       <TableRow key={lead.id} className="cursor-pointer align-top transition-colors hover:bg-accent/40" onClick={() => void openLeadDrawer(lead.id)}>
         <TableCell
           onClick={(event) => event.stopPropagation()}
-          className="relative sticky left-0 z-20 border-r border-border bg-background after:absolute after:-right-px after:top-0 after:h-full after:w-px after:bg-border after:content-['']"
+          onPointerDown={(event) => event.stopPropagation()}
+          className={isMobile ? "border-r border-border bg-background" : "relative sticky left-0 z-20 border-r border-border bg-background after:absolute after:-right-px after:top-0 after:h-full after:w-px after:bg-border after:content-['']"}
           style={{ width: SELECT_COLUMN_WIDTH, minWidth: SELECT_COLUMN_WIDTH, maxWidth: SELECT_COLUMN_WIDTH }}
         >
           <Checkbox
@@ -1756,7 +1849,7 @@ export function CustomersWorkspace() {
           />
         </TableCell>
         {tableColumnOrder.map((columnKey) => {
-          const isFrozen = frozenColumns.includes(columnKey);
+          const isFrozen = effectiveFrozenColumns.includes(columnKey);
           const left = stickyOffsetMap.get(columnKey);
           return (
             <TableCell
@@ -1782,8 +1875,9 @@ export function CustomersWorkspace() {
     ));
   }, [
     assigneeFilter,
-    frozenColumns,
+    effectiveFrozenColumns,
     getColumnCell,
+    isMobile,
     isLoading,
     openLeadDrawer,
     pipelineStageFilter,
@@ -1798,137 +1892,247 @@ export function CustomersWorkspace() {
     visibleLeads
   ]);
 
+  // Compute active filter count for mobile badge
+  const activeFilterCount = [
+    assigneeFilter !== "__all__",
+    statusFilter !== "__all__",
+    pipelineStageFilter !== "__all__",
+    sourceFilter !== "__all__"
+  ].filter(Boolean).length;
+
   return (
     <section className="flex h-full min-h-0 flex-1 overflow-hidden">
       <div className="flex h-full min-h-0 w-full flex-col rounded-2xl border border-border/70 bg-card/95 p-3 shadow-sm md:p-5">
-        <div className="flex flex-wrap items-center justify-between gap-3 md:gap-4">
-          <div className="flex items-center gap-3 md:gap-4">
-            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-gradient-to-tr from-primary/20 to-primary/5 text-primary shadow-inner ring-1 ring-primary/20 md:h-12 md:w-12 md:rounded-[18px]">
-              <Users className="h-5 w-5 md:h-6 md:w-6" />
+
+        {/* ── HEADER ─────────────────────────────────────────────── */}
+        <div className="flex items-center justify-between gap-2">
+          {/* Left: icon + title (compact on mobile) */}
+          <div className="flex min-w-0 items-center gap-2.5 md:gap-4">
+            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-gradient-to-tr from-primary/20 to-primary/5 text-primary shadow-inner ring-1 ring-primary/20 md:h-12 md:w-12 md:rounded-[18px]">
+              <Users className="h-4 w-4 md:h-6 md:w-6" />
             </div>
-            <div>
-              <h1 className="text-xl font-semibold tracking-tight text-foreground md:text-3xl">Customer Management</h1>
-              <p className="text-xs text-muted-foreground md:text-sm">Kelola database customer, status lead, dan pipeline dari satu workspace.</p>
+            <div className="min-w-0">
+              <h1 className="truncate text-base font-semibold tracking-tight text-foreground md:text-3xl">Customer Management</h1>
+              <p className="hidden text-xs text-muted-foreground md:block md:text-sm">Kelola database customer, status lead, dan pipeline dari satu workspace.</p>
             </div>
           </div>
-          <div className="flex w-full flex-wrap items-center justify-end gap-2 md:w-auto">
-            <Button
-              type="button"
-              className="h-10 gap-2 rounded-xl bg-primary px-5 font-medium text-primary-foreground shadow-md shadow-primary/20 hover:bg-primary/95"
-              onClick={() => {
-                setError(null);
-                setSuccess(null);
-                setIsAddModalOpen(true);
-              }}
-            >
-              <Plus className="h-4 w-4" />
-              Add New
-            </Button>
-          </div>
+          {/* Right: Add button */}
+          <Button
+            type="button"
+            className="h-9 shrink-0 gap-1.5 rounded-xl bg-primary px-3 font-medium text-primary-foreground shadow-md shadow-primary/20 hover:bg-primary/95 md:h-10 md:px-5"
+            onClick={() => {
+              setError(null);
+              setSuccess(null);
+              setIsAddModalOpen(true);
+            }}
+          >
+            <Plus className="h-4 w-4" />
+            <span className="hidden sm:inline">Add New</span>
+          </Button>
         </div>
 
-        <div className="mt-4 grid grid-cols-1 gap-3 rounded-2xl border border-border bg-card p-3 shadow-sm lg:grid-cols-[minmax(280px,1fr)_auto_auto_auto_auto]">
-          <div className="flex min-w-0 items-center gap-2">
-            <Button type="button" size="sm" variant="outline" className="h-10 shrink-0 rounded-xl px-4" onClick={openTableLayoutDialog}>
-              <SlidersHorizontal className="mr-2 h-4 w-4" />
-              Table Layout
+        {/* ── TOOLBAR ────────────────────────────────────────────── */}
+        <div className="mt-3">
+          {/* Search row (always visible) */}
+          <div className="flex items-center gap-2">
+            {/* Table layout button – icon-only on mobile */}
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              className="h-10 shrink-0 rounded-xl px-3 md:px-4"
+              onClick={openTableLayoutDialog}
+              title="Table Layout"
+            >
+              <SlidersHorizontal className="h-4 w-4" />
+              <span className="ml-2 hidden md:inline">Table Layout</span>
             </Button>
+
+            {/* Search */}
             <div className="relative min-w-0 flex-1">
               <Search className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
               <Input
                 placeholder="Search leads..."
                 value={searchInput}
                 onChange={(event) => setSearchInput(event.target.value)}
-                className="h-10 rounded-xl bg-background pl-10"
+                className="h-10 rounded-xl bg-background pl-10 pr-4"
               />
+              {searchInput ? (
+                <button
+                  type="button"
+                  onClick={() => { setSearchInput(""); setSearchQuery(""); }}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                >
+                  <X className="h-3.5 w-3.5" />
+                </button>
+              ) : null}
             </div>
+
+            {/* Filter toggle button – mobile only */}
+            <Button
+              type="button"
+              size="sm"
+              variant={isMobileFilterOpen || activeFilterCount > 0 ? "default" : "outline"}
+              className="relative h-10 shrink-0 rounded-xl px-3 md:hidden"
+              onClick={() => setIsMobileFilterOpen((v) => !v)}
+              title="Filters"
+            >
+              <Filter className="h-4 w-4" />
+              {activeFilterCount > 0 ? (
+                <span className="absolute -right-1.5 -top-1.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-primary text-[10px] font-bold text-primary-foreground">
+                  {activeFilterCount}
+                </span>
+              ) : null}
+            </Button>
           </div>
 
-          <Select
-            value={assigneeFilter}
-            onValueChange={(value) => {
-              setAssigneeFilter(value);
-              setPage(1);
-            }}
-          >
-            <SelectTrigger className="h-10 w-full min-w-[160px] rounded-xl bg-background">
-              <SelectValue placeholder="Assignee" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="__all__">All Assignee</SelectItem>
-              {assignees.map((assignee) => (
-                <SelectItem key={assignee.memberId} value={assignee.memberId}>
-                  {assignee.name}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+          {/* Desktop filters – always visible on md+ */}
+          <div className="mt-3 hidden gap-3 md:grid md:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_minmax(0,1fr)_minmax(0,1fr)]">
+            <Select
+              value={assigneeFilter}
+              onValueChange={(value) => { setAssigneeFilter(value); setPage(1); }}
+            >
+              <SelectTrigger className="h-10 rounded-xl bg-background">
+                <SelectValue placeholder="Assignee" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="__all__">All Assignee</SelectItem>
+                {assignees.map((assignee) => (
+                  <SelectItem key={assignee.memberId} value={assignee.memberId}>{assignee.name}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
 
-          <Select
-            value={statusFilter}
-            onValueChange={(value) => {
-              setStatusFilter(value);
-              setPage(1);
-            }}
-          >
-            <SelectTrigger className="h-10 w-full min-w-[160px] rounded-xl bg-background">
-              <SelectValue placeholder="Status" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="__all__">All Status</SelectItem>
-              {LEAD_STATUS_OPTIONS.map((status) => (
-                <SelectItem key={status} value={status}>
-                  {formatLabel(status)}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+            <Select
+              value={statusFilter}
+              onValueChange={(value) => { setStatusFilter(value); setPage(1); }}
+            >
+              <SelectTrigger className="h-10 rounded-xl bg-background">
+                <SelectValue placeholder="Status" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="__all__">All Status</SelectItem>
+                {LEAD_STATUS_OPTIONS.map((status) => (
+                  <SelectItem key={status} value={status}>{formatLabel(status)}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
 
-          <Select
-            value={pipelineStageFilter}
-            onValueChange={(value) => {
-              setPipelineStageFilter(value);
-              setPage(1);
-            }}
-          >
-            <SelectTrigger className="h-10 w-full min-w-[180px] rounded-xl bg-background">
-              <SelectValue placeholder="Pipeline Stage" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="__all__">All Pipeline Stages</SelectItem>
-              <SelectItem value="__none__">Unassigned</SelectItem>
-              {pipelineStages.map((stage) => (
-                <SelectItem key={stage.stageId} value={stage.stageId}>
-                  {stage.stageName}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+            <Select
+              value={pipelineStageFilter}
+              onValueChange={(value) => { setPipelineStageFilter(value); setPage(1); }}
+            >
+              <SelectTrigger className="h-10 rounded-xl bg-background">
+                <SelectValue placeholder="Pipeline Stage" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="__all__">All Pipeline Stages</SelectItem>
+                <SelectItem value="__none__">Unassigned</SelectItem>
+                {pipelineStages.map((stage) => (
+                  <SelectItem key={stage.stageId} value={stage.stageId}>{stage.stageName}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
 
-          <Select
-            value={sourceFilter}
-            onValueChange={(value) => {
-              setSourceFilter(value);
-              setPage(1);
-            }}
-          >
-            <SelectTrigger className="h-10 w-full min-w-[170px] rounded-xl bg-background">
-              <SelectValue placeholder="Customer Source" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="__all__">All Source</SelectItem>
-              {sources.map((source) => (
-                <SelectItem key={source} value={source}>
-                  {formatLabel(source)}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          {selectedIds.length > 0 ? <p className="col-span-full text-xs text-muted-foreground">{selectedIds.length} selected</p> : null}
+            <Select
+              value={sourceFilter}
+              onValueChange={(value) => { setSourceFilter(value); setPage(1); }}
+            >
+              <SelectTrigger className="h-10 rounded-xl bg-background">
+                <SelectValue placeholder="Source" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="__all__">All Source</SelectItem>
+                {sources.map((source) => (
+                  <SelectItem key={source} value={source}>{formatLabel(source)}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
+          {/* Mobile collapsible filter panel */}
+          {isMobileFilterOpen ? (
+            <div className="mt-2 grid grid-cols-2 gap-2 rounded-xl border border-border/60 bg-card/80 p-3 shadow-sm md:hidden">
+              <Select
+                value={assigneeFilter}
+                onValueChange={(value) => { setAssigneeFilter(value); setPage(1); }}
+              >
+                <SelectTrigger className="h-9 rounded-lg bg-background text-xs">
+                  <SelectValue placeholder="Assignee" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="__all__">All Assignee</SelectItem>
+                  {assignees.map((assignee) => (
+                    <SelectItem key={assignee.memberId} value={assignee.memberId}>{assignee.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+
+              <Select
+                value={statusFilter}
+                onValueChange={(value) => { setStatusFilter(value); setPage(1); }}
+              >
+                <SelectTrigger className="h-9 rounded-lg bg-background text-xs">
+                  <SelectValue placeholder="Status" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="__all__">All Status</SelectItem>
+                  {LEAD_STATUS_OPTIONS.map((status) => (
+                    <SelectItem key={status} value={status}>{formatLabel(status)}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+
+              <Select
+                value={pipelineStageFilter}
+                onValueChange={(value) => { setPipelineStageFilter(value); setPage(1); }}
+              >
+                <SelectTrigger className="h-9 rounded-lg bg-background text-xs">
+                  <SelectValue placeholder="Pipeline Stage" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="__all__">All Pipeline Stages</SelectItem>
+                  <SelectItem value="__none__">Unassigned</SelectItem>
+                  {pipelineStages.map((stage) => (
+                    <SelectItem key={stage.stageId} value={stage.stageId}>{stage.stageName}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+
+              <Select
+                value={sourceFilter}
+                onValueChange={(value) => { setSourceFilter(value); setPage(1); }}
+              >
+                <SelectTrigger className="h-9 rounded-lg bg-background text-xs">
+                  <SelectValue placeholder="Source" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="__all__">All Source</SelectItem>
+                  {sources.map((source) => (
+                    <SelectItem key={source} value={source}>{formatLabel(source)}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+
+              {activeFilterCount > 0 ? (
+                <button
+                  type="button"
+                  onClick={() => { resetListFilters(); setIsMobileFilterOpen(false); }}
+                  className="col-span-2 flex items-center justify-center gap-1.5 rounded-lg border border-border/60 py-1.5 text-xs text-muted-foreground hover:text-foreground"
+                >
+                  <X className="h-3 w-3" />
+                  Reset all filters
+                </button>
+              ) : null}
+            </div>
+          ) : null}
+
+          {/* Bulk action row */}
           {selectedIds.length > 0 ? (
-            <div className="flex flex-wrap items-center gap-2">
+            <div className="mt-2 flex flex-wrap items-center gap-2">
+              <p className="text-xs text-muted-foreground">{selectedIds.length} selected</p>
               <Select value={bulkAction || "__none__"} onValueChange={(value) => setBulkAction(value === "__none__" ? "" : (value as BulkAction))}>
-                <SelectTrigger className="h-8 w-[160px] rounded-md">
+                <SelectTrigger className="h-8 w-[150px] rounded-md text-xs">
                   <SelectValue placeholder="Bulk Action" />
                 </SelectTrigger>
                 <SelectContent>
@@ -1942,15 +2146,13 @@ export function CustomersWorkspace() {
 
               {bulkAction === "SET_STATUS" ? (
                 <Select value={bulkValue || "__none__"} onValueChange={(value) => setBulkValue(value === "__none__" ? "" : value)}>
-                  <SelectTrigger className="h-8 w-[180px] rounded-md">
+                  <SelectTrigger className="h-8 w-[160px] rounded-md text-xs">
                     <SelectValue placeholder="Lead Status" />
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="__none__">Lead Status</SelectItem>
                     {LEAD_STATUS_OPTIONS.map((status) => (
-                      <SelectItem key={status} value={status}>
-                        {formatLabel(status)}
-                      </SelectItem>
+                      <SelectItem key={status} value={status}>{formatLabel(status)}</SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
@@ -1958,15 +2160,13 @@ export function CustomersWorkspace() {
 
               {bulkAction === "SET_FOLLOW_UP" ? (
                 <Select value={bulkValue || "__none__"} onValueChange={(value) => setBulkValue(value === "__none__" ? "" : value)}>
-                  <SelectTrigger className="h-8 w-[180px] rounded-md">
+                  <SelectTrigger className="h-8 w-[160px] rounded-md text-xs">
                     <SelectValue placeholder="Follow-up" />
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="__none__">Follow-up</SelectItem>
                     {FOLLOW_UP_OPTIONS.map((followup) => (
-                      <SelectItem key={followup} value={followup}>
-                        {formatLabel(followup)}
-                      </SelectItem>
+                      <SelectItem key={followup} value={followup}>{formatLabel(followup)}</SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
@@ -1974,15 +2174,13 @@ export function CustomersWorkspace() {
 
               {bulkAction === "ASSIGN" ? (
                 <Select value={bulkValue || "__none__"} onValueChange={(value) => setBulkValue(value === "__none__" ? "" : value)}>
-                  <SelectTrigger className="h-8 w-[180px] rounded-md">
+                  <SelectTrigger className="h-8 w-[160px] rounded-md text-xs">
                     <SelectValue placeholder="Assignee" />
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="__none__">Assignee</SelectItem>
                     {assignees.map((assignee) => (
-                      <SelectItem key={assignee.memberId} value={assignee.memberId}>
-                        {assignee.name}
-                      </SelectItem>
+                      <SelectItem key={assignee.memberId} value={assignee.memberId}>{assignee.name}</SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
@@ -2001,9 +2199,8 @@ export function CustomersWorkspace() {
           ) : null}
         </div>
 
-        <div className="mt-1 flex items-center justify-between gap-2">
-          {isInlineUpdating ? <p className="text-xs text-muted-foreground">Updating lead...</p> : isRefreshingLeads ? <p className="text-xs text-muted-foreground">Refreshing leads...</p> : <span />}
-          <p className="text-xs text-muted-foreground md:hidden">Swipe horizontally to see all columns.</p>
+        <div className="mt-1.5 flex items-center justify-between gap-2">
+          {isInlineUpdating ? <p className="text-xs text-muted-foreground">Updating lead...</p> : isRefreshingLeads ? <p className="text-xs text-muted-foreground">Refreshing...</p> : <span />}
         </div>
 
         <div className="mt-3 min-h-0 flex-1 overflow-hidden rounded-xl border border-border/70 bg-background/40">
@@ -2012,13 +2209,13 @@ export function CustomersWorkspace() {
               <TableHeader>
                 <TableRow>
                   <TableHead
-                    className="relative sticky left-0 top-0 z-40 border-b border-border bg-muted font-semibold text-foreground/80 after:absolute after:-right-px after:top-0 after:h-full after:w-px after:bg-border after:content-['']"
+                    className={isMobile ? "sticky top-0 z-20 border-b border-border bg-muted font-semibold text-foreground/80" : "relative sticky left-0 top-0 z-40 border-b border-border bg-muted font-semibold text-foreground/80 after:absolute after:-right-px after:top-0 after:h-full after:w-px after:bg-border after:content-['']"}
                     style={{ width: SELECT_COLUMN_WIDTH, minWidth: SELECT_COLUMN_WIDTH, maxWidth: SELECT_COLUMN_WIDTH }}
                   >
                     <Checkbox checked={allPageSelected} onCheckedChange={(checked) => toggleSelectAllRows(Boolean(checked))} aria-label="Select all rows" />
                   </TableHead>
                   {tableColumnOrder.map((columnKey) => {
-                    const isFrozen = frozenColumns.includes(columnKey);
+                    const isFrozen = effectiveFrozenColumns.includes(columnKey);
                     const left = stickyOffsetMap.get(columnKey);
                     return (
                       <TableHead
@@ -2088,119 +2285,119 @@ export function CustomersWorkspace() {
       </div>
 
       <Dialog open={isAddModalOpen} onOpenChange={setIsAddModalOpen}>
-        <DialogContent className="sm:max-w-[720px]">
-          <DialogHeader>
+        <DialogContent className="flex max-h-[92dvh] flex-col gap-0 overflow-hidden rounded-[10px] p-0 sm:max-w-[720px]">
+          {/* Sticky header */}
+          <DialogHeader className="shrink-0 border-b border-border/60 px-5 py-4">
             <DialogTitle>Add New Lead</DialogTitle>
             <DialogDescription>Create lead via modal form. CreatedOn follows first contact time.</DialogDescription>
           </DialogHeader>
-          <div className="grid gap-3 py-1 md:grid-cols-2">
-            <div className="space-y-1">
-              <p className="text-xs text-muted-foreground">Name</p>
-              <Input placeholder="Name" value={addName} onChange={(event) => setAddName(event.target.value)} />
-            </div>
-            <div className="space-y-1">
-              <p className="text-xs text-muted-foreground">WhatsApp</p>
-              <Input placeholder="+628..." value={addPhone} onChange={(event) => setAddPhone(event.target.value)} />
-            </div>
-            <div className="space-y-1">
-              <p className="text-xs text-muted-foreground">Status Lead</p>
-              <Select value={addStatus} onValueChange={setAddStatus}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Status Lead" />
-                </SelectTrigger>
-                <SelectContent>
-                  {LEAD_STATUS_OPTIONS.map((status) => (
-                    <SelectItem key={status} value={status}>
-                      {formatLabel(status)}
-                    </SelectItem>
+          {/* Scrollable body */}
+          <div className="min-h-0 flex-1 overflow-y-auto px-5 py-4">
+            <div className="grid gap-3 md:grid-cols-2">
+              <div className="space-y-1">
+                <p className="text-xs text-muted-foreground">Name</p>
+                <Input placeholder="Name" value={addName} onChange={(event) => setAddName(event.target.value)} />
+              </div>
+              <div className="space-y-1">
+                <p className="text-xs text-muted-foreground">WhatsApp</p>
+                <Input placeholder="+628..." value={addPhone} onChange={(event) => setAddPhone(event.target.value)} />
+              </div>
+              <div className="space-y-1">
+                <p className="text-xs text-muted-foreground">Status Lead</p>
+                <Select value={addStatus} onValueChange={setAddStatus}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Status Lead" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {LEAD_STATUS_OPTIONS.map((status) => (
+                      <SelectItem key={status} value={status}>{formatLabel(status)}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-1">
+                <p className="text-xs text-muted-foreground">Follow-up Tag</p>
+                <Select value={addFollowUp} onValueChange={setAddFollowUp}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Follow-up" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {FOLLOW_UP_OPTIONS.map((followup) => (
+                      <SelectItem key={followup} value={followup}>{formatLabel(followup)}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-1">
+                <p className="text-xs text-muted-foreground">Follow-up Date</p>
+                <DatePickerField
+                  value={addFollowUpDate}
+                  onChange={setAddFollowUpDate}
+                />
+              </div>
+              <div className="space-y-1">
+                <p className="text-xs text-muted-foreground">Follow-up Time</p>
+                <Input type="time" value={addFollowUpTime} onChange={(event) => setAddFollowUpTime(event.target.value)} className="[color-scheme:auto]" />
+              </div>
+              <div className="space-y-1">
+                <p className="text-xs text-muted-foreground">Source</p>
+                <Select value={addSource} onValueChange={setAddSource}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Source" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="INBOX">Inbox</SelectItem>
+                    <SelectItem value="ADS">Ads</SelectItem>
+                    <SelectItem value="IG">IG</SelectItem>
+                    <SelectItem value="HCOS">HCOS</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-1">
+                <p className="text-xs text-muted-foreground">Business Category</p>
+                <Input
+                  list="business-category-options"
+                  placeholder="Business Category"
+                  value={addCategory}
+                  onChange={(event) => setAddCategory(event.target.value)}
+                />
+                <datalist id="business-category-options">
+                  {BUSINESS_CATEGORY_OPTIONS.map((category) => (
+                    <option key={category} value={category} />
                   ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="space-y-1">
-              <p className="text-xs text-muted-foreground">Follow-up Tag</p>
-              <Select value={addFollowUp} onValueChange={setAddFollowUp}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Follow-up" />
-                </SelectTrigger>
-                <SelectContent>
-                  {FOLLOW_UP_OPTIONS.map((followup) => (
-                    <SelectItem key={followup} value={followup}>
-                      {formatLabel(followup)}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="space-y-1">
-              <p className="text-xs text-muted-foreground">Follow-up Date</p>
-              <Input type="date" value={addFollowUpDate} onChange={(event) => setAddFollowUpDate(event.target.value)} />
-            </div>
-            <div className="space-y-1">
-              <p className="text-xs text-muted-foreground">Follow-up Time</p>
-              <Input type="time" value={addFollowUpTime} onChange={(event) => setAddFollowUpTime(event.target.value)} />
-            </div>
-            <div className="space-y-1">
-              <p className="text-xs text-muted-foreground">Source</p>
-              <Select value={addSource} onValueChange={setAddSource}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Source" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="INBOX">Inbox</SelectItem>
-                  <SelectItem value="ADS">Ads</SelectItem>
-                  <SelectItem value="IG">IG</SelectItem>
-                  <SelectItem value="HCOS">HCOS</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="space-y-1">
-              <p className="text-xs text-muted-foreground">Business Category</p>
-              <Input
-                list="business-category-options"
-                placeholder="Business Category"
-                value={addCategory}
-                onChange={(event) => setAddCategory(event.target.value)}
-              />
-              <datalist id="business-category-options">
-                {BUSINESS_CATEGORY_OPTIONS.map((category) => (
-                  <option key={category} value={category} />
-                ))}
-              </datalist>
-            </div>
-            <div className="space-y-1">
-              <p className="text-xs text-muted-foreground">Detail</p>
-              <Input placeholder="Detail" value={addDetail} onChange={(event) => setAddDetail(event.target.value)} />
-            </div>
-            <div className="space-y-1">
-              <p className="text-xs text-muted-foreground">Project Value (IDR)</p>
-              <Input placeholder="Project Value (IDR)" value={addProjectValue} onChange={(event) => setAddProjectValue(event.target.value)} />
-            </div>
-            <div className="space-y-1">
-              <p className="text-xs text-muted-foreground">Assign To</p>
-              <Select value={addAssignee || "__none__"} onValueChange={(value) => setAddAssignee(value === "__none__" ? "" : value)}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Assign to" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="__none__">Unassigned</SelectItem>
-                  {assignees.map((assignee) => (
-                    <SelectItem key={assignee.memberId} value={assignee.memberId}>
-                      {assignee.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="space-y-1 md:col-span-2">
-              <p className="text-xs text-muted-foreground">Notes</p>
-              <Textarea placeholder="Notes" value={addRemarks} onChange={(event) => setAddRemarks(event.target.value)} />
+                </datalist>
+              </div>
+              <div className="space-y-1">
+                <p className="text-xs text-muted-foreground">Detail</p>
+                <Input placeholder="Detail" value={addDetail} onChange={(event) => setAddDetail(event.target.value)} />
+              </div>
+              <div className="space-y-1">
+                <p className="text-xs text-muted-foreground">Project Value (IDR)</p>
+                <Input placeholder="Project Value (IDR)" value={addProjectValue} onChange={(event) => setAddProjectValue(event.target.value)} />
+              </div>
+              <div className="space-y-1">
+                <p className="text-xs text-muted-foreground">Assign To</p>
+                <Select value={addAssignee || "__none__"} onValueChange={(value) => setAddAssignee(value === "__none__" ? "" : value)}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Assign to" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="__none__">Unassigned</SelectItem>
+                    {assignees.map((assignee) => (
+                      <SelectItem key={assignee.memberId} value={assignee.memberId}>{assignee.name}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-1 md:col-span-2">
+                <p className="text-xs text-muted-foreground">Notes</p>
+                <Textarea placeholder="Notes" value={addRemarks} onChange={(event) => setAddRemarks(event.target.value)} />
+              </div>
             </div>
           </div>
-          <DialogFooter>
-            <Button type="button" variant="ghost" onClick={() => setIsAddModalOpen(false)}>
-              Cancel
-            </Button>
+          {/* Sticky footer */}
+          <DialogFooter className="shrink-0 border-t border-border/60 px-5 py-3">
+            <Button type="button" variant="ghost" onClick={() => setIsAddModalOpen(false)}>Cancel</Button>
             <Button type="button" onClick={() => void handleCreateLead()} disabled={isSavingAdd}>
               {isSavingAdd ? "Saving..." : "Create Lead"}
             </Button>
@@ -2209,14 +2406,14 @@ export function CustomersWorkspace() {
       </Dialog>
 
       <Dialog open={isTableLayoutDialogOpen} onOpenChange={setIsTableLayoutDialogOpen}>
-        <DialogContent className="sm:max-w-[640px]">
-          <DialogHeader>
+        <DialogContent className="flex max-h-[88dvh] flex-col gap-0 overflow-hidden rounded-[10px] p-0 sm:max-w-[640px]">
+          <DialogHeader className="shrink-0 border-b border-border/60 px-5 py-4">
             <DialogTitle>Table Layout</DialogTitle>
             <DialogDescription>Freeze columns and reorder them to match your workflow.</DialogDescription>
           </DialogHeader>
-          <div className="max-h-[60vh] space-y-2 overflow-y-auto py-1">
+          <div className="min-h-0 flex-1 space-y-2 overflow-y-auto px-5 py-3">
             {draftTableColumnOrder.map((columnKey, index) => (
-              <div key={columnKey} className="flex items-center gap-2 rounded-lg border border-border/70 px-3 py-2">
+              <div key={columnKey} className="flex items-center gap-2 rounded-xl border border-border/70 px-3 py-2.5">
                 <Checkbox checked={draftFrozenColumns.includes(columnKey)} onCheckedChange={(checked) => toggleDraftFrozenColumn(columnKey, Boolean(checked))} />
                 <p className="flex-1 text-sm font-medium">{COLUMN_LABELS[columnKey]}</p>
                 <Button type="button" size="icon" variant="ghost" className="h-8 w-8" onClick={() => moveDraftColumn(columnKey, "up")} disabled={index === 0}>
@@ -2235,9 +2432,9 @@ export function CustomersWorkspace() {
               </div>
             ))}
           </div>
-          <DialogFooter>
-            <Button type="button" variant="outline" onClick={handleSaveTableLayout}>
-              Save
+          <DialogFooter className="shrink-0 border-t border-border/60 px-5 py-3">
+            <Button type="button" className="w-full sm:w-auto" onClick={handleSaveTableLayout}>
+              Save Layout
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -2396,19 +2593,17 @@ export function CustomersWorkspace() {
                     </div>
                     <div className="space-y-1">
                       <p className="pl-1 text-[11px] font-bold uppercase tracking-wider text-muted-foreground/70">Follow-up Date</p>
-                      <Input
-                        type="date"
+                      <DatePickerField
                         value={selectedLead.followUpAt ? selectedLead.followUpAt.slice(0, 10) : ""}
                         disabled={frozenFields.followUpStatus}
-                        className="h-10 rounded-xl bg-muted/20 focus-visible:bg-transparent"
-                        onChange={(event) => {
-                          const value = event.target.value;
-                          if (!value) {
+                        inputClassName="bg-muted/20 focus-visible:bg-transparent"
+                        onChange={(dateStr) => {
+                          if (!dateStr) {
                             updateSelectedLead("followUpAt", null);
                             return;
                           }
                           const base = selectedLead.followUpAt ? new Date(selectedLead.followUpAt) : new Date();
-                          const next = new Date(`${value}T${String(base.getHours()).padStart(2, "0")}:${String(base.getMinutes()).padStart(2, "0")}:00`);
+                          const next = new Date(`${dateStr}T${String(base.getHours()).padStart(2, "0")}:${String(base.getMinutes()).padStart(2, "0")}:00`);
                           updateSelectedLead("followUpAt", Number.isNaN(next.getTime()) ? null : next.toISOString());
                         }}
                       />
@@ -2423,7 +2618,7 @@ export function CustomersWorkspace() {
                             : "09:00"
                         }
                         disabled={frozenFields.followUpStatus || !selectedLead.followUpAt}
-                        className="h-10 rounded-xl bg-muted/20 focus-visible:bg-transparent"
+                        className="h-10 cursor-pointer rounded-xl bg-muted/20 focus-visible:bg-transparent [color-scheme:auto]"
                         onChange={(event) => {
                           if (!selectedLead.followUpAt) return;
                           const [hourText, minuteText] = event.target.value.split(":");

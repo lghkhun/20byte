@@ -11,6 +11,13 @@ type PlatformMemberRequest = {
   enabled?: unknown;
 };
 
+export function parsePlatformMemberEnabled(value: unknown): boolean {
+  if (typeof value !== "boolean") {
+    throw new ServiceError(400, "INVALID_ENABLED", "enabled must be a boolean.");
+  }
+  return value;
+}
+
 export async function POST(request: NextRequest) {
   const auth = requireApiSession(request);
   if (auth.response) {
@@ -25,7 +32,15 @@ export async function POST(request: NextRequest) {
   }
 
   const userId = typeof body.userId === "string" ? body.userId : "";
-  const enabled = Boolean(body.enabled);
+  let enabled = false;
+  try {
+    enabled = parsePlatformMemberEnabled(body.enabled);
+  } catch (error) {
+    if (error instanceof ServiceError) {
+      return errorResponse(error.status, error.code, error.message);
+    }
+    return errorResponse(400, "INVALID_ENABLED", "enabled must be a boolean.");
+  }
 
   try {
     await requireSuperadmin(auth.session.userId, auth.session.email);

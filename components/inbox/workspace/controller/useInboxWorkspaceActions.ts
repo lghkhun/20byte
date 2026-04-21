@@ -5,6 +5,7 @@ import { useCallback } from "react";
 import type { MessageItem } from "@/components/inbox/types";
 import type { AssignConversationResponse, DeleteConversationResponse, SendMessageResponse, UpdateConversationStatusResponse } from "@/components/inbox/workspace/types";
 import { recordInboxTelemetry } from "@/components/inbox/workspace/controller/inboxTelemetry";
+import { notifySuccess } from "@/lib/ui/notify";
 
 import { useInboxWorkspaceCrmInvoiceActions } from "./useInboxWorkspaceCrmInvoiceActions";
 import type { InboxWorkspaceLoaders } from "./useInboxWorkspaceLoaders";
@@ -216,21 +217,24 @@ export function useInboxWorkspaceActions(state: InboxWorkspaceState, loaders: In
   ]);
 
   const sendTextMessage = useCallback(
-    async (text: string, options?: { replyToMessageId?: string | null; replyPreviewText?: string | null }) => {
+    async (text: string, options?: { replyToMessageId?: string | null; replyPreviewText?: string | null; scheduleAt?: string | null }) => {
       if (!orgId || !selectedConversationId) {
         return;
       }
 
       const conversationId = selectedConversationId;
+      const scheduleAt = options?.scheduleAt?.trim() ?? "";
       const startedAt = performance.now();
       setMessageError(null);
-      const optimisticMessageId = appendOptimisticOutboundMessage({
-        conversationId,
-        type: "TEXT",
-        text,
-        replyToMessageId: options?.replyToMessageId ?? null,
-        replyPreviewText: options?.replyPreviewText ?? null
-      });
+      const optimisticMessageId = scheduleAt
+        ? null
+        : appendOptimisticOutboundMessage({
+            conversationId,
+            type: "TEXT",
+            text,
+            replyToMessageId: options?.replyToMessageId ?? null,
+            replyPreviewText: options?.replyPreviewText ?? null
+          });
       const response = await fetch("/api/inbox/send", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -238,19 +242,48 @@ export function useInboxWorkspaceActions(state: InboxWorkspaceState, loaders: In
           conversationId,
           type: "TEXT",
           text,
-          replyToMessageId: options?.replyToMessageId ?? undefined
+          replyToMessageId: options?.replyToMessageId ?? undefined,
+          scheduleAt: scheduleAt || undefined
         })
       });
 
       const payload = (await response.json().catch(() => null)) as SendMessageResponse | null;
       if (!response.ok) {
+        const errorMessage = payload?.error?.message ?? "Gagal mengirim pesan.";
         recordInboxTelemetry("send_latency_ms", Number((performance.now() - startedAt).toFixed(1)), {
           orgId,
           conversationId
         });
-        removeOptimisticMessage(optimisticMessageId);
-        setMessageError(payload?.error?.message ?? "Gagal mengirim pesan.");
+        if (optimisticMessageId) {
+          removeOptimisticMessage(optimisticMessageId);
+        }
+        setMessageError(errorMessage);
         await reconcileAfterSend(conversationId, { refreshMessages: true });
+        throw new Error(errorMessage);
+      }
+
+      if (scheduleAt) {
+        recordInboxTelemetry("send_latency_ms", Number((performance.now() - startedAt).toFixed(1)), {
+          orgId,
+          conversationId
+        });
+        const dueAt = payload?.data?.schedule?.dueAt;
+        notifySuccess(
+          dueAt
+            ? `Pesan dijadwalkan untuk ${new Date(dueAt).toLocaleString("id-ID", {
+                day: "2-digit",
+                month: "short",
+                year: "numeric",
+                hour: "2-digit",
+                minute: "2-digit"
+              })}.`
+            : "Pesan berhasil dijadwalkan."
+        );
+        await reconcileAfterSend(conversationId, { refreshMessages: false });
+        return { scheduledDueAt: dueAt ?? scheduleAt };
+      }
+
+      if (!optimisticMessageId) {
         return;
       }
 
@@ -267,6 +300,7 @@ export function useInboxWorkspaceActions(state: InboxWorkspaceState, loaders: In
         conversationId
       });
       await reconcileAfterSend(conversationId, { refreshMessages: false });
+      return {};
     },
     [appendOptimisticOutboundMessage, orgId, reconcileAfterSend, removeOptimisticMessage, resolveOptimisticMessage, selectedConversationId, setMessageError]
   );

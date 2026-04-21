@@ -1,0 +1,26 @@
+{
+  "id": "endpoints/endpoints-messages",
+  "title": "Messages",
+  "description": "POST /messages/send",
+  "source": "@site/docs/endpoints/messages.md",
+  "sourceDirName": "endpoints",
+  "slug": "/endpoints/endpoints-messages",
+  "permalink": "/endpoints/endpoints-messages",
+  "draft": false,
+  "unlisted": false,
+  "tags": [],
+  "version": "current",
+  "frontMatter": {
+    "id": "endpoints-messages",
+    "title": "Messages"
+  },
+  "sidebar": "apiSidebar",
+  "previous": {
+    "title": "Authentication",
+    "permalink": "/authentication"
+  },
+  "next": {
+    "title": "Groups",
+    "permalink": "/endpoints/endpoints-groups"
+  }
+}

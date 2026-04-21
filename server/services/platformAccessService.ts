@@ -2,10 +2,13 @@ import { prisma } from "@/lib/db/prisma";
 import { getSuperadminEmailAllowlist } from "@/lib/env";
 import { ServiceError } from "@/server/services/serviceError";
 
-export async function isSuperadmin(userId: string, email: string): Promise<boolean> {
+export function isSuperadminAllowlistedEmail(email: string, allowlist = getSuperadminEmailAllowlist()): boolean {
   const normalizedEmail = email.trim().toLowerCase();
-  const allowlist = getSuperadminEmailAllowlist();
-  if (allowlist.has(normalizedEmail)) {
+  return Boolean(normalizedEmail) && allowlist.has(normalizedEmail);
+}
+
+export async function isSuperadmin(userId: string, email: string): Promise<boolean> {
+  if (isSuperadminAllowlistedEmail(email)) {
     return true;
   }
 

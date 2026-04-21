@@ -11,6 +11,7 @@ type CheckoutRequest = {
   orgId?: unknown;
   paymentMethod?: unknown;
   planMonths?: unknown;
+  couponCode?: unknown;
 };
 
 export async function POST(request: NextRequest) {
@@ -42,6 +43,7 @@ export async function POST(request: NextRequest) {
       actorUserId: auth.session.userId,
       orgId,
       paymentMethod: typeof body.paymentMethod === "string" ? body.paymentMethod : undefined,
+      couponCode: typeof body.couponCode === "string" ? body.couponCode : undefined,
       planMonths:
         typeof body.planMonths === "number"
           ? body.planMonths

@@ -1,0 +1,22 @@
+{
+  "id": "migration-woowa",
+  "title": "Migrasi dari Woo-WA",
+  "description": "Tujuan mapping ini adalah mempermudah migrasi kapabilitas lama ke endpoint modern 20byte.",
+  "source": "@site/docs/migration-woowa.md",
+  "sourceDirName": ".",
+  "slug": "/migration-woowa",
+  "permalink": "/migration-woowa",
+  "draft": false,
+  "unlisted": false,
+  "tags": [],
+  "version": "current",
+  "frontMatter": {
+    "id": "migration-woowa",
+    "title": "Migrasi dari Woo-WA"
+  },
+  "sidebar": "apiSidebar",
+  "previous": {
+    "title": "Error Codes",
+    "permalink": "/error-codes"
+  }
+}

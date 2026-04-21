@@ -8,6 +8,7 @@ import { AlertCircle, CheckCircle2, Link2, Menu, MessageCircle, RefreshCw, Shiel
 import { useModalAccessibility } from "@/lib/a11y/useModalAccessibility";
 import { fetchJsonCached, invalidateFetchCache } from "@/lib/client/fetchCache";
 import { fetchOrganizationsCached } from "@/lib/client/orgsCache";
+import { WhatsAppPublicApiPanel } from "@/components/settings/WhatsAppPublicApiPanel";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useSettingsHeaderAction } from "@/components/settings/settings-header-actions";
@@ -611,112 +612,118 @@ export function WhatsAppConnectionSettings() {
   }
 
   return (
-    <section className="space-y-5">
-      <div className="grid gap-4 xl:grid-cols-[minmax(0,1.1fr)_minmax(320px,0.9fr)]">
-        <div className="rounded-[28px] border border-border/70 bg-[linear-gradient(180deg,hsl(var(--card)),hsl(var(--card))/0.96),radial-gradient(circle_at_top_left,hsl(var(--primary)/0.08),transparent_38%)] p-5 shadow-sm">
-          <div className="flex items-center justify-between gap-3">
+    <section className="space-y-6">
+      <div className="grid gap-5 xl:grid-cols-[minmax(0,1.1fr)_minmax(320px,0.9fr)]">
+        <div className="rounded-[28px] border border-border/70 bg-gradient-to-b from-card to-card/90 p-5 md:p-6 shadow-[0_2px_10px_-4px_rgba(0,0,0,0.02)] relative overflow-hidden group">
+          <div className="flex items-center justify-between gap-3 relative z-10">
             <div>
-              <p className="text-xs font-medium uppercase tracking-[0.24em] text-muted-foreground">Business</p>
-              <h2 className="mt-2 text-lg font-semibold text-foreground">{activeBusiness?.name ?? "No business found"}</h2>
+              <p className="text-[11px] font-bold uppercase tracking-[0.24em] text-muted-foreground/80">Business</p>
+              <h2 className="mt-1.5 text-[20px] font-bold tracking-tight text-foreground">{activeBusiness?.name ?? "No business found"}</h2>
             </div>
-            <div className="rounded-xl border border-border bg-background px-3 py-2 text-sm text-foreground">
+            <div className="rounded-xl border border-border/60 bg-background/50 px-3 py-1.5 text-[13px] font-semibold text-foreground shadow-sm">
               {activeBusiness?.role ?? "OWNER"}
             </div>
           </div>
 
-          <div className="mt-5 grid gap-3 md:grid-cols-2">
-            <div className="rounded-2xl border border-border/80 bg-background/60 p-4">
-              <p className="text-xs text-muted-foreground">Status</p>
-              <div className="mt-2">
+          <div className="mt-6 grid gap-4 md:grid-cols-2 relative z-10">
+            <div className="rounded-2xl border border-border/60 bg-gradient-to-br from-background/80 to-muted/20 p-5 shadow-sm transition-all hover:border-primary/20 hover:shadow-md">
+              <p className="text-[13px] font-semibold text-muted-foreground">Status</p>
+              <div className="mt-3">
                 <span
-                  className={`inline-flex rounded-full border px-2.5 py-1 text-xs font-semibold ${
+                  className={`inline-flex rounded-full px-3 py-1 text-[13px] font-semibold shadow-sm ${
                     effectiveConnectionStatus === "CONNECTED"
-                      ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400"
+                      ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 ring-1 ring-inset ring-emerald-500/20"
                       : effectiveConnectionStatus === "PAIRING"
-                        ? "border-amber-500/30 bg-amber-500/10 text-amber-600 dark:text-amber-400"
-                        : "border-border bg-background text-foreground"
+                        ? "bg-amber-500/10 text-amber-600 dark:text-amber-400 ring-1 ring-inset ring-amber-500/20"
+                        : "bg-muted text-muted-foreground ring-1 ring-inset ring-border/50"
                   }`}
                 >
                   {effectiveConnectionStatus}
                 </span>
               </div>
             </div>
-            <div className="rounded-2xl border border-border/80 bg-background/60 p-4">
-              <p className="text-xs text-muted-foreground">Connected Number</p>
-              <p className="mt-2 text-sm font-semibold text-foreground">{connectionContext?.connectedAccount?.displayPhone ?? "-"}</p>
-              {connectionContext?.connectedAccount ? (
-                <Button size="sm" variant="ghost" className="mt-2 h-auto px-0 text-primary" onClick={() => void handleOpenReport()}>
-                  Lihat Report
-                </Button>
-              ) : null}
+            <div className="rounded-2xl border border-border/60 bg-gradient-to-br from-background/80 to-muted/20 p-5 shadow-sm transition-all hover:border-primary/20 hover:shadow-md flex flex-col justify-between items-start">
+              <p className="text-[13px] font-semibold text-muted-foreground">Connected Number</p>
+              <div className="mt-1 flex w-full items-center justify-between">
+                <p className="text-[16px] font-bold text-foreground font-mono">{connectionContext?.connectedAccount?.displayPhone ?? "-"}</p>
+                {connectionContext?.connectedAccount ? (
+                  <Button size="sm" variant="ghost" className="h-8 rounded-xl px-2.5 text-primary hover:bg-primary/10" onClick={() => void handleOpenReport()}>
+                    Lihat Report
+                  </Button>
+                ) : null}
+              </div>
             </div>
           </div>
 
-          <div className="mt-5 rounded-[24px] border border-border/80 bg-background/60 p-4">
-            <div className="flex items-center justify-between gap-3">
+          <div className="mt-6 rounded-[24px] border border-border/60 bg-gradient-to-br from-background/80 to-muted/20 p-5 shadow-sm relative z-10">
+            <div className="flex items-start justify-between gap-3">
               <div>
-                <h3 className="text-sm font-semibold text-foreground">Session Health</h3>
-                <p className="text-xs text-muted-foreground">Pantau status koneksi sebelum testing real device.</p>
+                <h3 className="text-[16px] font-bold text-foreground">Session Health</h3>
+                <p className="mt-1 text-[13px] font-medium text-muted-foreground/80">Pantau status koneksi sebelum testing real device.</p>
               </div>
               <div className="flex flex-wrap items-center gap-2">
                 {effectiveConnectionStatus === "CONNECTED" ? (
-                  <span className="inline-flex items-center gap-1 rounded-full border border-emerald-500/30 bg-emerald-500/10 px-2.5 py-1 text-xs font-medium text-emerald-600 dark:text-emerald-400">
-                    <CheckCircle2 className="h-3.5 w-3.5" />
+                  <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-500/10 px-3 py-1 text-[13px] font-semibold text-emerald-600 dark:text-emerald-400 ring-1 ring-inset ring-emerald-500/20 shadow-sm">
+                    <CheckCircle2 className="h-4 w-4" />
                     Connected
                   </span>
                 ) : null}
                 {effectiveConnectionStatus === "DISCONNECTED" ? (
-                  <Button size="sm" variant="secondary" onClick={() => void handleOpenModal()} disabled={isRequestingConnect}>
+                  <Button size="sm" variant="secondary" className="rounded-xl h-8 text-[13px]" onClick={() => void handleOpenModal()} disabled={isRequestingConnect}>
                     Reconnect
                   </Button>
                 ) : null}
               </div>
             </div>
 
-            <div className="mt-4 grid gap-3 md:grid-cols-2">
-              <div className="rounded-2xl border border-border/80 bg-card/80 p-4">
-                <p className="text-xs uppercase tracking-[0.22em] text-muted-foreground">Session ID</p>
-                <p className="mt-2 rounded-xl border border-border/80 bg-background px-3 py-2 font-mono text-sm text-foreground">
-                  {shortSessionLabel(connectionContext?.connectedAccount?.id ?? activeBusiness?.id ?? "")}
-                </p>
-                <p className="mt-2 text-xs text-muted-foreground">Disimpan secara lokal untuk MVP Baileys.</p>
+            <div className="mt-5 grid gap-4 md:grid-cols-2">
+              <div className="rounded-2xl border border-border/50 bg-background/50 p-4">
+                <p className="text-[11px] font-bold uppercase tracking-[0.22em] text-muted-foreground/80">Session ID</p>
+                <div className="mt-2.5 rounded-xl border border-border/60 bg-background px-3 py-2 shadow-sm">
+                   <p className="font-mono text-[14px] font-medium text-foreground break-all">
+                    {shortSessionLabel(connectionContext?.connectedAccount?.id ?? activeBusiness?.id ?? "")}
+                   </p>
+                </div>
+                <p className="mt-2.5 text-[12px] font-medium text-muted-foreground/70">Disimpan secara lokal untuk MVP Baileys.</p>
               </div>
 
-              <div className="rounded-2xl border border-border/80 bg-card/80 p-4">
-                <p className="text-xs uppercase tracking-[0.22em] text-muted-foreground">Encrypted Channel</p>
-                <div className="mt-2 flex items-center gap-2 text-sm text-muted-foreground">
-                  <ShieldCheck className="h-4 w-4 text-primary" />
-                  End-to-end encrypted by WhatsApp multi-device
+              <div className="rounded-2xl border border-border/50 bg-background/50 p-4 flex flex-col justify-center">
+                <p className="text-[11px] font-bold uppercase tracking-[0.22em] text-muted-foreground/80">Encrypted Channel</p>
+                <div className="mt-3 flex items-start gap-2.5 text-[13px] font-medium leading-relaxed text-muted-foreground/80">
+                  <ShieldCheck className="h-4 w-4 text-emerald-500 shrink-0 mt-0.5" />
+                  <span>End-to-end encrypted by WhatsApp multi-device</span>
                 </div>
               </div>
             </div>
 
             {connectionContext?.lastError ? (
-              <p className="mt-4 rounded-xl border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
+              <p className="mt-5 rounded-xl border border-destructive/20 bg-destructive/10 px-4 py-3 text-[13px] font-medium text-destructive shadow-sm">
                 {connectionContext.lastError}
               </p>
             ) : null}
           </div>
         </div>
 
-        <div className="rounded-[28px] border border-border/70 bg-[linear-gradient(180deg,hsl(var(--card)),hsl(var(--card))/0.96),radial-gradient(circle_at_top_right,hsl(var(--primary)/0.07),transparent_38%)] p-5 shadow-sm">
-          <div className="flex items-center justify-between gap-3">
+        <div className="rounded-[28px] border border-border/70 bg-gradient-to-b from-card to-card/90 p-5 md:p-6 shadow-[0_2px_10px_-4px_rgba(0,0,0,0.02)] relative overflow-hidden group">
+          <div className="flex items-start justify-between gap-3 relative z-10">
             <div>
-              <h2 className="text-lg font-semibold text-foreground">Quick Verification</h2>
-              <p className="text-sm text-muted-foreground">Kirim test message setelah perangkat berhasil terhubung.</p>
+              <h2 className="text-[20px] font-bold tracking-tight text-foreground">Quick Verification</h2>
+              <p className="mt-1.5 text-[13px] font-medium leading-relaxed text-muted-foreground/80">Kirim test message setelah perangkat berhasil terhubung.</p>
             </div>
-            <Button variant="secondary" onClick={() => void handleDisconnect()} disabled={!activeBusiness || isDisconnecting}>
+            <Button variant="secondary" size="sm" className="rounded-xl h-9 whitespace-nowrap" onClick={() => void handleDisconnect()} disabled={!activeBusiness || isDisconnecting}>
               {isDisconnecting ? "Disconnecting..." : "Disconnect"}
             </Button>
           </div>
 
-          <div className="mt-5 space-y-3">
+          <div className="mt-6 flex flex-col sm:flex-row items-center gap-3 relative z-10 w-full">
             <Input
+              className="h-10 rounded-xl border-border/60 bg-background/50 focus-visible:ring-primary shadow-sm flex-1 w-full"
               value={testPhoneE164}
               onChange={(event) => setTestPhoneE164(event.target.value)}
-              placeholder="Target phone in E.164 format (+628...)"
+              placeholder="Target phone (+628...)"
             />
             <Button
+              className="h-10 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white shadow-sm shrink-0 px-5 w-full sm:w-auto"
               onClick={() => void handleSendTestMessage()}
               disabled={!activeBusiness || isSendingTestMessage || effectiveConnectionStatus !== "CONNECTED"}
             >
@@ -724,9 +731,9 @@ export function WhatsAppConnectionSettings() {
             </Button>
           </div>
 
-          <div className="mt-4 rounded-2xl border border-border/80 bg-background/60 p-4">
-            <p className="text-xs uppercase tracking-[0.22em] text-muted-foreground">Readiness</p>
-            <p className="mt-2 text-sm text-foreground">
+          <div className="mt-6 rounded-2xl border border-border/60 bg-gradient-to-br from-background/80 to-muted/20 p-5 shadow-sm relative z-10">
+            <p className="text-[11px] font-bold uppercase tracking-[0.22em] text-muted-foreground/80">Readiness</p>
+            <p className="mt-2.5 text-[13.5px] font-medium leading-relaxed text-foreground">
               {effectiveConnectionStatus === "CONNECTED"
                 ? "Perangkat sudah online. Anda bisa refresh status sekali lalu kirim pesan uji."
                 : effectiveConnectionStatus === "PAIRING"
@@ -737,11 +744,13 @@ export function WhatsAppConnectionSettings() {
             </p>
           </div>
 
-          {isLoading || isLoadingConnection ? <p className="mt-4 text-sm text-muted-foreground">Loading connection state...</p> : null}
-          {error ? <p className="mt-4 rounded-xl border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">{error}</p> : null}
-          {info ? <p className="mt-4 rounded-xl border border-primary/30 bg-primary/10 px-3 py-2 text-sm text-primary">{info}</p> : null}
+          {isLoading || isLoadingConnection ? <p className="mt-5 text-[13px] font-medium text-muted-foreground animate-pulse relative z-10">Loading connection state...</p> : null}
+          {error ? <p className="mt-5 rounded-xl border border-destructive/20 bg-destructive/10 px-4 py-3 text-[13px] font-medium text-destructive shadow-sm relative z-10">{error}</p> : null}
+          {info ? <p className="mt-5 rounded-xl border border-emerald-500/20 bg-emerald-500/10 px-4 py-3 text-[13px] font-medium text-emerald-600 dark:text-emerald-400 shadow-sm relative z-10">{info}</p> : null}
         </div>
       </div>
+
+      <WhatsAppPublicApiPanel activeBusiness={activeBusiness} />
 
       {isModalOpen ? (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/72 px-4 py-8" role="dialog" aria-modal="true" aria-label="Tautkan perangkat WhatsApp">

@@ -162,7 +162,13 @@ async function fetchPreview(url: URL): Promise<LinkPreviewPayload> {
     });
 
     if (!response.ok) {
-      throw new Error(`HTTP_${response.status}`);
+      return {
+        url: url.toString(),
+        title: null,
+        description: null,
+        image: null,
+        siteName: url.hostname
+      };
     }
 
     const contentType = response.headers.get("content-type")?.toLowerCase() ?? "";
@@ -230,6 +236,18 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json({ data: { preview: payload } }, { status: 200 });
   } catch {
-    return errorResponse(502, "LINK_PREVIEW_FETCH_FAILED", "Failed to fetch URL preview.");
+    const fallback: LinkPreviewPayload = {
+      url: parsed.toString(),
+      title: null,
+      description: null,
+      image: null,
+      siteName: parsed.hostname
+    };
+    prunePreviewCache();
+    previewCache.set(cacheKey, {
+      expiresAt: Date.now() + PREVIEW_TTL_MS,
+      payload: fallback
+    });
+    return NextResponse.json({ data: { preview: fallback } }, { status: 200 });
   }
 }

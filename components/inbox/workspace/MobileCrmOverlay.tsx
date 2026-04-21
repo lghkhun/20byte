@@ -6,7 +6,6 @@ import { CrmContextPanel } from "@/components/inbox/CrmContextPanel";
 import type { CrmActivityItem, CrmInvoiceItem } from "@/components/inbox/crm/types";
 import type { ConversationItem, MessageItem } from "@/components/inbox/types";
 import { useModalAccessibility } from "@/lib/a11y/useModalAccessibility";
-import { Button } from "@/components/ui/button";
 
 type MobileCrmOverlayProps = {
   open: boolean;
@@ -30,15 +29,6 @@ type MobileCrmOverlayProps = {
   invoiceActionError: string | null;
   invoiceActionSuccess: string | null;
 };
-
-const MOBILE_CRM_ANCHORS = [
-  ["Profile", "crm-profile"],
-  ["Lead", "crm-lead-settings"],
-  ["Notes", "crm-notes"],
-  ["Media", "crm-media"],
-  ["Invoices", "crm-invoices"],
-  ["Timeline", "crm-timeline"]
-] as const;
 
 export function MobileCrmOverlay(props: MobileCrmOverlayProps) {
   const {
@@ -77,63 +67,81 @@ export function MobileCrmOverlay(props: MobileCrmOverlayProps) {
     return null;
   }
 
-  const scrollToAnchor = (anchorId: string) => {
-    const container = scrollRef.current;
-    if (!container) return;
-    const target = container.querySelector<HTMLElement>(`#${anchorId}`);
-    if (!target) return;
-    container.scrollTo({ top: Math.max(0, target.offsetTop - 92), behavior: "smooth" });
-  };
-
   return (
-    <div className="fixed inset-0 z-40 bg-black/55 p-3 backdrop-blur-sm 2xl:hidden" role="dialog" aria-modal="true" aria-label="CRM context panel">
+    /* Backdrop */
+    <div
+      className="fixed inset-0 z-40 2xl:hidden"
+      role="dialog"
+      aria-modal="true"
+      aria-label="CRM context panel"
+    >
+      {/* Dimmed background — tap to close */}
       <div
-        ref={scrollRef}
-        className="inbox-scroll inbox-slide-up relative h-full overflow-auto rounded-3xl p-3"
-      >
-        <div className="sticky top-0 z-[2] -mx-3 -mt-3 space-y-2 border-b border-border bg-card/95 px-3 pb-2 pt-3 backdrop-blur-sm">
-          <div className="flex items-center justify-between">
-            <h3 className="text-sm font-semibold text-foreground">CRM Context</h3>
-            <Button ref={closeButtonRef} type="button" variant="ghost" size="sm" className="h-8" onClick={onClose}>
-              Close
-            </Button>
-          </div>
-          <div className="inbox-scroll flex gap-1 overflow-x-auto pb-1">
-            {MOBILE_CRM_ANCHORS.map(([label, anchorId]) => (
-              <Button
-                key={anchorId}
-                type="button"
-                variant="secondary"
-                size="sm"
-                className="h-7 shrink-0 rounded-full px-2.5 text-[11px]"
-                onClick={() => scrollToAnchor(anchorId)}
-              >
-                {label}
-              </Button>
-            ))}
-          </div>
+        className="absolute inset-0 bg-black/50 backdrop-blur-[2px]"
+        onClick={onClose}
+      />
+
+      {/* Bottom sheet */}
+      <div className="absolute inset-x-0 bottom-0 flex max-h-[88dvh] flex-col overflow-hidden rounded-t-[28px] border-t border-border/60 bg-background shadow-2xl dark:bg-zinc-900">
+        {/* Drag handle */}
+        <div className="flex shrink-0 justify-center pb-1 pt-3">
+          <div className="h-1 w-10 rounded-full bg-border/70" />
         </div>
 
-        <CrmContextPanel
-          conversation={conversation}
-          messages={messages}
-          activeOrgRole={activeOrgRole}
-          isLoading={isLoadingConversation}
-          isAssigning={isAssigning}
-          assignError={assignError}
-          invoices={invoices}
-          activity={activity}
-          isLoadingCrm={isLoadingCrm}
-          crmError={crmError}
-          onOpenInvoiceDrawer={onOpenInvoiceDrawer}
-          onSendInvoice={onSendInvoice}
-          onMarkInvoicePaid={onMarkInvoicePaid}
-          onRefreshConversation={onRefreshConversation}
-          isSendingInvoice={isSendingInvoice}
-          isMarkingInvoicePaid={isMarkingInvoicePaid}
-          invoiceActionError={invoiceActionError}
-          invoiceActionSuccess={invoiceActionSuccess}
-        />
+        {/* Header */}
+        <div className="flex shrink-0 items-center justify-between px-5 pb-3">
+          <div>
+            <h3 className="text-[15px] font-bold text-foreground">CRM</h3>
+            {conversation?.customerDisplayName ? (
+              <p className="max-w-[200px] truncate text-[12px] text-muted-foreground">
+                {conversation.customerDisplayName}
+              </p>
+            ) : null}
+          </div>
+          <button
+            ref={closeButtonRef}
+            type="button"
+            onClick={onClose}
+            className="flex h-8 w-8 items-center justify-center rounded-full bg-muted/60 text-muted-foreground transition hover:bg-muted hover:text-foreground active:scale-95"
+            aria-label="Tutup panel CRM"
+          >
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M18 6 6 18M6 6l12 12"/>
+            </svg>
+          </button>
+        </div>
+
+        {/* Divider */}
+        <div className="h-px shrink-0 bg-border/50" />
+
+        {/* Scrollable content — no anchor tabs, just scroll freely */}
+        <div
+          ref={scrollRef}
+          className="inbox-scroll flex-1 overflow-y-auto overscroll-contain"
+        >
+          <CrmContextPanel
+            conversation={conversation}
+            messages={messages}
+            activeOrgRole={activeOrgRole}
+            isLoading={isLoadingConversation}
+            isAssigning={isAssigning}
+            assignError={assignError}
+            invoices={invoices}
+            activity={activity}
+            isLoadingCrm={isLoadingCrm}
+            crmError={crmError}
+            onOpenInvoiceDrawer={onOpenInvoiceDrawer}
+            onSendInvoice={onSendInvoice}
+            onMarkInvoicePaid={onMarkInvoicePaid}
+            onRefreshConversation={onRefreshConversation}
+            isSendingInvoice={isSendingInvoice}
+            isMarkingInvoicePaid={isMarkingInvoicePaid}
+            invoiceActionError={invoiceActionError}
+            invoiceActionSuccess={invoiceActionSuccess}
+          />
+          {/* Bottom spacer for comfortable scrolling above nav bar */}
+          <div className="h-10 w-full" />
+        </div>
       </div>
     </div>
   );

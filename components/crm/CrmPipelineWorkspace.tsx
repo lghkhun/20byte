@@ -2,7 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { FileText, Mailbox, MoreHorizontal, UserRound, Workflow, X } from "lucide-react";
+import { FileText, Loader2, Mailbox, MoreHorizontal, UserRound, Workflow, X } from "lucide-react";
 
 import {
   BUSINESS_CATEGORY_OPTIONS,
@@ -230,10 +230,45 @@ type BoardCacheEntry = {
 };
 
 const BOARD_CACHE_TTL_MS = 20_000;
-const DEFAULT_BOARD_CARD_LIMIT = 80;
-const BOARD_CARD_LIMIT_STEP = 40;
+const DEFAULT_COLUMN_CARD_LIMIT = 20;
+const COLUMN_CARD_LIMIT_STEP = 20;
+const UNASSIGNED_COL_KEY = "__unassigned__";
 const PERF_STORAGE_KEY = "perf.crm.pipeline.v1";
 const PERF_MAX_SAMPLES = 120;
+
+// Infinity scroll sentinel per column
+function InfiniteScrollSentinel({
+  onVisible,
+  isLoading
+}: {
+  onVisible: () => void;
+  isLoading?: boolean;
+}) {
+  const ref = useRef<HTMLDivElement>(null);
+  const callbackRef = useRef(onVisible);
+  callbackRef.current = onVisible;
+
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries[0]?.isIntersecting) {
+          callbackRef.current();
+        }
+      },
+      { threshold: 0.1 }
+    );
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, []);
+
+  return (
+    <div ref={ref} className="flex h-8 shrink-0 items-center justify-center">
+      {isLoading ? <Loader2 className="h-3.5 w-3.5 animate-spin text-muted-foreground" /> : null}
+    </div>
+  );
+}
 
 function mapRealtimeConnectionState(state: RealtimeConnectionState): RealtimeSubscriptionStatus {
   if (state === "connected") {
@@ -278,13 +313,18 @@ export function CrmPipelineWorkspace() {
   const [orgs, setOrgs] = useState<OrgItem[]>([]);
   const [hasLoadedOrganizations, setHasLoadedOrganizations] = useState(false);
   const [board, setBoard] = useState<KanbanBoard | null>(null);
-  const [boardCardLimit, setBoardCardLimit] = useState(DEFAULT_BOARD_CARD_LIMIT);
+  // Per-column limits for client-side infinity scroll
+  const [columnLimits, setColumnLimits] = useState<Record<string, number>>({});
   const [isLoadingBoard, setIsLoadingBoard] = useState(true);
   const [, setIsRefreshingBoard] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isSavingMove, setIsSavingMove] = useState(false);
   const [draggedConversationId, setDraggedConversationId] = useState<string | null>(null);
   const [dragOverStageId, setDragOverStageId] = useState<string | null>(null);
+  // Touch drag state
+  const touchDragCardRef = useRef<string | null>(null);
+  const touchDragGhostRef = useRef<HTMLDivElement | null>(null);
+  const touchStartPosRef = useRef<{ x: number; y: number } | null>(null);
   const [isLeadDrawerOpen, setIsLeadDrawerOpen] = useState(false);
   const [isLeadLoading, setIsLeadLoading] = useState(false);
   const [isLeadSaving, setIsLeadSaving] = useState(false);
@@ -336,13 +376,13 @@ export function CrmPipelineWorkspace() {
 
       const pipelineId =
         pipelineIdOverride ?? nextBoard?.pipeline?.id ?? boardRef.current?.pipeline?.id ?? "";
-      const cacheKey = `${orgId}::${pipelineId || "__default__"}::scope:${chatScope}::limit:${boardCardLimit}`;
+      const cacheKey = `${orgId}::${pipelineId || "__default__"}::scope:${chatScope}`;
       boardCacheRef.current.set(cacheKey, {
         board: nextBoard,
         cachedAt: Date.now()
       });
     },
-    [activeBusiness?.id, boardCardLimit, chatScope]
+    [activeBusiness?.id, chatScope]
   );
 
   const loadBoard = useCallback(
@@ -360,7 +400,9 @@ export function CrmPipelineWorkspace() {
         return;
       }
       const startedAt = performance.now();
-      const cacheKey = `${orgId}::${pipelineId || "__default__"}::scope:${chatScope}::limit:${boardCardLimit}`;
+      // Load a large limit upfront; per-column slicing is done client-side
+      const serverLimit = 400;
+      const cacheKey = `${orgId}::${pipelineId || "__default__"}::scope:${chatScope}`;
       const cached = boardCacheRef.current.get(cacheKey);
       if (cached) {
         setBoard(cached.board);
@@ -393,8 +435,8 @@ export function CrmPipelineWorkspace() {
         boardAbortControllerRef.current = abortController;
         try {
           const query = pipelineId
-            ? `?pipelineId=${encodeURIComponent(pipelineId)}&status=OPEN&chatScope=${encodeURIComponent(chatScope)}&orgId=${encodeURIComponent(orgId)}&cardLimit=${encodeURIComponent(String(boardCardLimit))}`
-            : `?status=OPEN&chatScope=${encodeURIComponent(chatScope)}&orgId=${encodeURIComponent(orgId)}&cardLimit=${encodeURIComponent(String(boardCardLimit))}`;
+            ? `?pipelineId=${encodeURIComponent(pipelineId)}&status=OPEN&chatScope=${encodeURIComponent(chatScope)}&orgId=${encodeURIComponent(orgId)}&cardLimit=${encodeURIComponent(String(serverLimit))}`
+            : `?status=OPEN&chatScope=${encodeURIComponent(chatScope)}&orgId=${encodeURIComponent(orgId)}&cardLimit=${encodeURIComponent(String(serverLimit))}`;
           let attempts = 0;
           let resolved = false;
           while (attempts < 2 && !resolved) {
@@ -424,6 +466,8 @@ export function CrmPipelineWorkspace() {
               const nextBoard = payload?.data?.board ?? null;
               writeBoardCache(nextBoard, pipelineId);
               setBoard(nextBoard);
+              // Reset per-column limits on fresh load
+              setColumnLimits({});
               recordPerf("crm.board.load", startedAt, true);
               resolved = true;
             } catch (error) {
@@ -469,7 +513,6 @@ export function CrmPipelineWorkspace() {
     },
     [
       activeBusiness?.id,
-      boardCardLimit,
       chatScope,
       hasLoadedOrganizations,
       recordPerf,
@@ -784,9 +827,8 @@ export function CrmPipelineWorkspace() {
     boardRef.current = board;
   }, [board]);
 
-  useEffect(() => {
-    setBoardCardLimit(DEFAULT_BOARD_CARD_LIMIT);
-  }, [activeBusiness?.id]);
+
+
 
   useEffect(() => {
     if (!hasLoadedOrganizations) {
@@ -1189,27 +1231,110 @@ export function CrmPipelineWorkspace() {
   );
   const isCompact = true;
   const totalBoardColumns = (board?.columns.length ?? 0) + 1;
-  const canLoadMoreCards = Boolean(
-    boardCardLimit < 320 &&
-    (board?.unassigned.hasMore || board?.columns.some((column) => column.hasMore))
-  );
+
+  // Helper: get visible limit for a column key
+  function getColLimit(key: string): number {
+    return columnLimits[key] ?? DEFAULT_COLUMN_CARD_LIMIT;
+  }
+  function expandColLimit(key: string, total: number) {
+    setColumnLimits((prev) => ({
+      ...prev,
+      [key]: Math.min((prev[key] ?? DEFAULT_COLUMN_CARD_LIMIT) + COLUMN_CARD_LIMIT_STEP, total)
+    }));
+  }
+
+  // Touch drag handlers
+  function handleTouchStart(e: React.TouchEvent, conversationId: string) {
+    const touch = e.touches[0];
+    if (!touch) return;
+
+    // ⚠️ Capture BEFORE setTimeout — React nullifies synthetic event props after handler returns
+    const target = e.currentTarget as HTMLElement;
+    const startX = touch.clientX;
+    const startY = touch.clientY;
+    touchStartPosRef.current = { x: startX, y: startY };
+
+    // Delay 250ms to distinguish tap vs drag
+    const timer = globalThis.setTimeout(() => {
+      touchDragCardRef.current = conversationId;
+      setDraggedConversationId(conversationId);
+      // Create ghost element
+      const rect = target.getBoundingClientRect();
+      const ghost = target.cloneNode(true) as HTMLDivElement;
+      ghost.style.cssText = `position:fixed;top:${rect.top}px;left:${rect.left}px;width:${rect.width}px;opacity:0.85;pointer-events:none;z-index:9999;transform:scale(1.03);transition:transform 80ms;border-radius:16px;box-shadow:0 8px 32px -8px rgba(0,0,0,0.25)`;
+      document.body.appendChild(ghost);
+      touchDragGhostRef.current = ghost;
+    }, 250);
+
+    // Store timer id on the element for cancellation on touchEnd
+    target.dataset["dragTimer"] = String(timer);
+  }
+
+  function handleTouchMove(e: React.TouchEvent) {
+    if (!touchDragCardRef.current) return;
+    e.preventDefault();
+    const touch = e.touches[0];
+    if (!touch) return;
+    const ghost = touchDragGhostRef.current;
+    if (ghost) {
+      const dx = touch.clientX - (touchStartPosRef.current?.x ?? touch.clientX);
+      const dy = touch.clientY - (touchStartPosRef.current?.y ?? touch.clientY);
+      ghost.style.transform = `translate(${dx}px,${dy}px) scale(1.03)`;
+      // Hit-test which column we are over
+      ghost.style.display = "none";
+      const el = document.elementFromPoint(touch.clientX, touch.clientY);
+      ghost.style.display = "";
+      const colEl = el?.closest<HTMLElement>("[data-stage-id]");
+      const hoveredStageId = colEl?.dataset["stageId"] ?? null;
+      setDragOverStageId(hoveredStageId);
+    }
+  }
+
+  function handleTouchEnd(e: React.TouchEvent) {
+    // Clear delay timer
+    const timer = (e.currentTarget as HTMLElement).dataset["dragTimer"];
+    if (timer) clearTimeout(Number(timer));
+
+    const cardId = touchDragCardRef.current;
+    if (!cardId) return;
+
+    const touch = e.changedTouches[0];
+    if (touch) {
+      const ghost = touchDragGhostRef.current;
+      if (ghost) ghost.style.display = "none";
+      const el = document.elementFromPoint(touch.clientX, touch.clientY);
+      if (ghost) ghost.style.display = "";
+      const colEl = el?.closest<HTMLElement>("[data-stage-id]");
+      const targetStageId = colEl?.dataset["stageId"] ?? null;
+      if (targetStageId) {
+        void moveConversation(cardId, targetStageId);
+      }
+    }
+
+    // Cleanup ghost
+    const ghost = touchDragGhostRef.current;
+    if (ghost) {
+      ghost.remove();
+      touchDragGhostRef.current = null;
+    }
+    touchDragCardRef.current = null;
+    touchStartPosRef.current = null;
+    setDraggedConversationId(null);
+    setDragOverStageId(null);
+  }
 
   return (
     <TooltipProvider delayDuration={120}>
       <section className="flex h-full min-h-0 flex-1 flex-col overflow-hidden">
-        <div className="flex items-center gap-3 px-3 pb-2 pt-3 md:gap-4 md:px-4 md:pt-4">
-          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-gradient-to-tr from-primary/20 to-primary/5 text-primary shadow-inner ring-1 ring-primary/20 md:h-12 md:w-12 md:rounded-[18px]">
-            <Workflow className="h-5 w-5 md:h-6 md:w-6" />
+        {/* ── HEADER ── */}
+        <div className="flex shrink-0 items-center gap-2.5 px-3 pb-2 pt-3 md:gap-4 md:px-4 md:pt-4">
+          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-gradient-to-tr from-primary/20 to-primary/5 text-primary shadow-inner ring-1 ring-primary/20 md:h-11 md:w-11">
+            <Workflow className="h-4 w-4 md:h-5 md:w-5" />
           </div>
-          <div>
-            <h1 className="text-xl font-semibold tracking-tight text-foreground md:text-3xl">
-              CRM Pipeline
-            </h1>
-            <p className="text-xs text-muted-foreground md:text-sm">
-              Kelola pergerakan lead antar stage CRM secara cepat dalam satu workspace.
-            </p>
-          </div>
-          <div className="ml-auto w-[220px]">
+          <h1 className="truncate text-base font-bold tracking-tight text-foreground md:text-2xl">
+            CRM Pipeline
+          </h1>
+          <div className="ml-auto shrink-0">
             <Select
               value={chatScope}
               onValueChange={(value) => {
@@ -1217,13 +1342,13 @@ export function CrmPipelineWorkspace() {
                 void loadBoard(board?.pipeline?.id ?? "", { force: true });
               }}
             >
-              <SelectTrigger className="h-10 rounded-xl border-border/80 bg-background shadow-sm">
+              <SelectTrigger className="h-9 w-[130px] rounded-xl border-border/80 bg-background shadow-sm md:w-[200px]">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="ALL">Semua Percakapan</SelectItem>
-                <SelectItem value="CUSTOMER_ONLY">Personal Saja</SelectItem>
-                <SelectItem value="GROUP_ONLY">Grup Saja</SelectItem>
+                <SelectItem value="ALL">Semua</SelectItem>
+                <SelectItem value="CUSTOMER_ONLY">Personal</SelectItem>
+                <SelectItem value="GROUP_ONLY">Grup</SelectItem>
               </SelectContent>
             </Select>
           </div>
@@ -1277,10 +1402,10 @@ export function CrmPipelineWorkspace() {
                 <div
                   className={cn(
                     "grid h-full min-h-0 min-w-full items-stretch",
-                    isCompact ? "gap-3" : "gap-4"
+                    isCompact ? "gap-2.5 md:gap-3" : "gap-4"
                   )}
                   style={{
-                    gridTemplateColumns: `repeat(${totalBoardColumns}, minmax(320px, 1fr))`
+                    gridTemplateColumns: `repeat(${totalBoardColumns}, minmax(260px, 1fr))`
                   }}
                 >
                   <article
@@ -1300,60 +1425,74 @@ export function CrmPipelineWorkspace() {
                     <div
                       className={cn(
                         "inbox-scroll flex-1 overflow-y-auto pr-1",
-                        isCompact ? "space-y-3" : "space-y-4"
+                        isCompact ? "space-y-2.5" : "space-y-4"
                       )}
                     >
-                      {board.unassigned.cards.map((card) => (
+                      {board.unassigned.cards.slice(0, getColLimit(UNASSIGNED_COL_KEY)).map((card) => (
                         <div
                           key={card.id}
                           draggable
                           onDragStart={() => setDraggedConversationId(card.id)}
                           onDragEnd={() => setDraggedConversationId(null)}
+                          onTouchStart={(e) => handleTouchStart(e, card.id)}
+                          onTouchMove={handleTouchMove}
+                          onTouchEnd={handleTouchEnd}
                           className={cn(
-                            "cursor-grab rounded-2xl border border-border/60 bg-card shadow-[0_2px_10px_-4px_rgba(0,0,0,0.05)] transition-shadow hover:shadow-[0_4px_16px_-4px_rgba(0,0,0,0.08)] active:cursor-grabbing",
-                            isCompact ? "p-3.5" : "p-4"
+                            "cursor-grab select-none rounded-2xl border border-border/60 bg-card shadow-[0_2px_10px_-4px_rgba(0,0,0,0.05)] transition-shadow hover:shadow-[0_4px_16px_-4px_rgba(0,0,0,0.08)] active:cursor-grabbing",
+                            isCompact ? "p-3" : "p-4",
+                            draggedConversationId === card.id && "opacity-40"
                           )}
                         >
                           <p className="truncate text-sm font-semibold tracking-tight text-foreground">
                             {card.customerName}
                           </p>
-                          <p className="truncate pt-1 text-[12px] text-muted-foreground">
+                          <p className="truncate pt-0.5 text-[11px] text-muted-foreground">
                             {card.customerPhoneE164}
                           </p>
-                          <p className="mt-2 line-clamp-3 text-[12px] leading-relaxed text-muted-foreground/90">
+                          <p className="mt-1.5 line-clamp-2 text-[11px] leading-relaxed text-muted-foreground/90">
                             {card.lastMessagePreview ?? "Belum ada pesan"}
                           </p>
-                          <div className="mt-3 flex items-center justify-end gap-1">
-                            <CardIconActionButton
-                              label="Open Inbox"
-                              className="h-7 w-7"
-                              onClick={() =>
-                                router.push(`/inbox?conversationId=${encodeURIComponent(card.id)}`)
-                              }
-                            >
-                              <Mailbox className="h-3.5 w-3.5" />
-                            </CardIconActionButton>
-                            <CardIconActionButton
-                              label="Lihat Customer"
-                              className="h-7 w-7"
-                              onClick={() => {
-                                void openLeadDrawer(card);
-                              }}
-                            >
-                              <UserRound className="h-3.5 w-3.5" />
-                            </CardIconActionButton>
-                            <CardIconActionButton
-                              label="Create Invoice"
-                              className="h-7 w-7"
-                              onClick={() => openInvoiceDrawerForCard(card)}
-                            >
-                              <FileText className="h-3.5 w-3.5" />
-                            </CardIconActionButton>
+                          <div className="mt-2.5 flex items-center justify-between gap-1">
+                            <span className="text-[9px] font-medium uppercase tracking-widest text-muted-foreground/60">
+                              {formatLastActivity(card.lastMessageAt)}
+                            </span>
+                            <div className="flex items-center gap-0.5">
+                              <CardIconActionButton
+                                label="Inbox"
+                                className="h-8 w-8 md:h-6 md:w-6"
+                                onClick={() =>
+                                  router.push(`/inbox?conversationId=${encodeURIComponent(card.id)}`)
+                                }
+                              >
+                                <Mailbox className="h-3.5 w-3.5" />
+                              </CardIconActionButton>
+                              <CardIconActionButton
+                                label="Customer"
+                                className="h-8 w-8 md:h-6 md:w-6"
+                                onClick={() => { void openLeadDrawer(card); }}
+                              >
+                                <UserRound className="h-3.5 w-3.5" />
+                              </CardIconActionButton>
+                              <CardIconActionButton
+                                label="Invoice"
+                                className="h-8 w-8 md:h-6 md:w-6"
+                                onClick={() => openInvoiceDrawerForCard(card)}
+                              >
+                                <FileText className="h-3.5 w-3.5" />
+                              </CardIconActionButton>
+                            </div>
                           </div>
                         </div>
                       ))}
                       {board.unassigned.cards.length === 0 ? (
                         <p className="text-xs text-muted-foreground">Belum ada kartu.</p>
+                      ) : null}
+                      {/* Infinity scroll sentinel */}
+                      {getColLimit(UNASSIGNED_COL_KEY) < board.unassigned.cards.length ? (
+                        <InfiniteScrollSentinel
+                          isLoading={false}
+                          onVisible={() => expandColLimit(UNASSIGNED_COL_KEY, board.unassigned.cards.length)}
+                        />
                       ) : null}
                     </div>
                   </article>
@@ -1361,6 +1500,7 @@ export function CrmPipelineWorkspace() {
                   {board.columns.map((column) => (
                     <article
                       key={column.stageId}
+                      data-stage-id={column.stageId}
                       onDragOver={(event) => {
                         event.preventDefault();
                         setDragOverStageId(column.stageId);
@@ -1405,18 +1545,22 @@ export function CrmPipelineWorkspace() {
                       <div
                         className={cn(
                           "inbox-scroll flex-1 overflow-y-auto pr-1",
-                          isCompact ? "space-y-3" : "space-y-4"
+                          isCompact ? "space-y-2.5" : "space-y-4"
                         )}
                       >
-                        {column.cards.map((card) => (
+                        {column.cards.slice(0, getColLimit(column.stageId)).map((card) => (
                           <div
                             key={card.id}
                             draggable
                             onDragStart={() => setDraggedConversationId(card.id)}
                             onDragEnd={() => setDraggedConversationId(null)}
+                            onTouchStart={(e) => handleTouchStart(e, card.id)}
+                            onTouchMove={handleTouchMove}
+                            onTouchEnd={handleTouchEnd}
                             className={cn(
-                              "group flex cursor-grab flex-col rounded-2xl border border-border/60 bg-card shadow-[0_2px_10px_-4px_rgba(0,0,0,0.05)] transition-shadow hover:shadow-[0_4px_16px_-4px_rgba(0,0,0,0.08)] active:cursor-grabbing",
-                              isCompact ? "p-3.5" : "p-4"
+                              "group flex cursor-grab select-none flex-col rounded-2xl border border-border/60 bg-card shadow-[0_2px_10px_-4px_rgba(0,0,0,0.05)] transition-shadow hover:shadow-[0_4px_16px_-4px_rgba(0,0,0,0.08)] active:cursor-grabbing",
+                              isCompact ? "p-3" : "p-4",
+                              draggedConversationId === card.id && "opacity-40"
                             )}
                           >
                             <div className="flex items-start justify-between gap-2">
@@ -1424,42 +1568,49 @@ export function CrmPipelineWorkspace() {
                                 <p className="truncate text-sm font-semibold tracking-tight text-foreground">
                                   {card.customerName}
                                 </p>
-                                <p className="truncate pt-px text-[12px] text-muted-foreground">
+                                <p className="truncate pt-px text-[11px] text-muted-foreground">
                                   {card.customerPhoneE164}
                                 </p>
                               </div>
                               {card.unreadCount > 0 ? (
-                                <span className="shrink-0 rounded-full border border-primary/20 bg-primary/10 px-2 py-0.5 text-[10px] font-bold text-primary">
-                                  {card.unreadCount} BARU
+                                <span className="shrink-0 rounded-full border border-primary/20 bg-primary/10 px-1.5 py-0.5 text-[9px] font-bold text-primary">
+                                  {card.unreadCount}
                                 </span>
                               ) : null}
                             </div>
 
-                            <p className="mt-2 line-clamp-3 text-[12px] leading-relaxed text-muted-foreground/90">
+                            <p className="mt-1.5 line-clamp-2 text-[11px] leading-relaxed text-muted-foreground/90">
                               {card.lastMessagePreview ?? "Belum ada pesan"}
                             </p>
 
-                            <div className="mt-2.5 flex items-center gap-2 text-[10px] font-medium uppercase tracking-wider text-muted-foreground/80">
-                              <span className="rounded bg-muted/40 px-1.5 py-0.5">
-                                Inv: {card.invoiceCount}
-                              </span>
-                              <span className="rounded bg-muted/40 px-1.5 py-0.5">
-                                Belum Lunas: {card.unpaidInvoiceCount}
-                              </span>
-                            </div>
+                            {(card.invoiceCount > 0 || card.unpaidInvoiceCount > 0) ? (
+                              <div className="mt-2 flex items-center gap-1.5 text-[9px] font-semibold uppercase tracking-wider">
+                                {card.invoiceCount > 0 ? (
+                                  <span className="rounded-md bg-muted/50 px-1.5 py-0.5 text-muted-foreground">
+                                    {card.invoiceCount} inv
+                                  </span>
+                                ) : null}
+                                {card.unpaidInvoiceCount > 0 ? (
+                                  <span className="rounded-md bg-rose-500/10 px-1.5 py-0.5 text-rose-600 dark:text-rose-400">
+                                    {card.unpaidInvoiceCount} belum lunas
+                                  </span>
+                                ) : null}
+                              </div>
+                            ) : null}
 
-                            <div className="mt-auto flex items-center justify-between gap-2 pt-3">
-                              <p className="text-[10px] font-medium uppercase tracking-widest text-muted-foreground/70">
+                            <div className="mt-auto flex items-center justify-between gap-1 pt-2.5">
+                              <p className="text-[9px] font-medium uppercase tracking-widest text-muted-foreground/60">
                                 {formatLastActivity(card.lastMessageAt)}
                               </p>
-                              <div className="flex items-center gap-1 opacity-0 transition-opacity focus-within:opacity-100 group-hover:opacity-100 md:opacity-100">
+                              {/* Actions — always visible on mobile, hover on desktop */}
+                              <div className="flex items-center gap-0.5 opacity-100 transition-opacity group-hover:opacity-100 md:opacity-0 md:focus-within:opacity-100 md:group-hover:opacity-100">
                                 <DropdownMenu>
                                   <DropdownMenuTrigger asChild>
                                     <Button
                                       type="button"
                                       size="sm"
                                       variant="ghost"
-                                      className="h-6 w-6 p-0"
+                                      className="h-8 w-8 p-0 md:h-6 md:w-6"
                                       title="Pindahkan kartu"
                                     >
                                       <span className="sr-only">Pindahkan kartu</span>
@@ -1484,7 +1635,8 @@ export function CrmPipelineWorkspace() {
                                   </DropdownMenuContent>
                                 </DropdownMenu>
                                 <CardIconActionButton
-                                  label="Open Inbox"
+                                  label="Inbox"
+                                  className="h-8 w-8 md:h-6 md:w-6"
                                   onClick={() =>
                                     router.push(
                                       `/inbox?conversationId=${encodeURIComponent(card.id)}`
@@ -1494,15 +1646,15 @@ export function CrmPipelineWorkspace() {
                                   <Mailbox className="h-3.5 w-3.5" />
                                 </CardIconActionButton>
                                 <CardIconActionButton
-                                  label="Lihat Customer"
-                                  onClick={() => {
-                                    void openLeadDrawer(card);
-                                  }}
+                                  label="Customer"
+                                  className="h-8 w-8 md:h-6 md:w-6"
+                                  onClick={() => { void openLeadDrawer(card); }}
                                 >
                                   <UserRound className="h-3.5 w-3.5" />
                                 </CardIconActionButton>
                                 <CardIconActionButton
-                                  label="Create Invoice"
+                                  label="Invoice"
+                                  className="h-8 w-8 md:h-6 md:w-6"
                                   onClick={() => openInvoiceDrawerForCard(card)}
                                 >
                                   <FileText className="h-3.5 w-3.5" />
@@ -1516,29 +1668,18 @@ export function CrmPipelineWorkspace() {
                             Belum ada kartu di tahap ini.
                           </p>
                         ) : null}
+                        {/* Infinity scroll sentinel per column */}
+                        {getColLimit(column.stageId) < column.cards.length ? (
+                          <InfiniteScrollSentinel
+                            isLoading={false}
+                            onVisible={() => expandColLimit(column.stageId, column.cards.length)}
+                          />
+                        ) : null}
                       </div>
                     </article>
                   ))}
                 </div>
               </div>
-
-              {canLoadMoreCards ? (
-                <div className="px-3 pb-1 md:px-4">
-                  <Button
-                    type="button"
-                    variant="secondary"
-                    size="sm"
-                    onClick={() => {
-                      setBoardCardLimit((current) =>
-                        Math.min(320, current + BOARD_CARD_LIMIT_STEP)
-                      );
-                    }}
-                    className="h-8"
-                  >
-                    Muat lebih banyak kartu
-                  </Button>
-                </div>
-              ) : null}
 
               {activePipeline?.stages.length === 0 ? (
                 <p className="px-1 text-sm text-muted-foreground">

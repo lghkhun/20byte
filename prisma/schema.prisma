@@ -133,12 +133,30 @@ enum WalletWithdrawStatus {
   CANCELED
 }
 
+enum WhatsAppPublicScheduleStatus {
+  PENDING
+  SENT
+  FAILED
+  CANCELED
+}
+
 enum AccountSetupTokenPurpose {
   SET_PASSWORD
 }
 
 enum PlatformRole {
   SUPERADMIN
+}
+
+enum PlatformCouponDiscountType {
+  FIXED
+  PERCENT
+}
+
+enum PlatformCouponTarget {
+  BILLING
+  BUSINESS_PROVISIONING
+  ALL
 }
 
 model Org {
@@ -190,6 +208,10 @@ model Org {
   walletLedgers      OrgWalletLedger[]
   walletWithdrawRequests OrgWalletWithdrawRequest[]
   provisioningOrders OwnerBusinessProvisioningOrder[]
+  whatsappApiKey     OrgWhatsAppApiKey?
+  whatsappPublicWebhook OrgWhatsAppPublicWebhook?
+  whatsappPublicSchedules OrgWhatsAppPublicSchedule[]
+  whatsappPublicWebhookEvents OrgWhatsAppPublicWebhookEvent[]
 
   @@index([createdAt])
 }
@@ -239,6 +261,8 @@ model User {
   setupTokens               AccountSetupToken[]
   platformMembership        PlatformMember?
   provisioningOrders        OwnerBusinessProvisioningOrder[]
+  createdWhatsAppApiKeys    OrgWhatsAppApiKey[]
+  createdWhatsAppPublicSchedules OrgWhatsAppPublicSchedule[]
 
   @@index([phoneE164])
 }
@@ -864,10 +888,14 @@ model BillingCharge {
   expiredAt         DateTime?
   paidAt            DateTime?
   createdByUserId   String?
+  appliedCouponCode String?
+  couponDiscountCents Int             @default(0)
+  couponSnapshotJson String?          @db.LongText
   createdAt         DateTime          @default(now())
   updatedAt         DateTime          @updatedAt
 
   org               Org               @relation(fields: [orgId], references: [id])
+  couponRedemption  PlatformCouponRedemption?
 
   @@index([orgId, createdAt])
   @@index([orgId, status, createdAt])
@@ -890,14 +918,101 @@ model OwnerBusinessProvisioningOrder {
   expiredAt         DateTime?
   paidAt            DateTime?
   createdOrgId      String?            @unique
+  appliedCouponCode String?
+  couponDiscountCents Int              @default(0)
+  couponSnapshotJson String?           @db.LongText
   createdAt         DateTime           @default(now())
   updatedAt         DateTime           @updatedAt
 
   user              User               @relation(fields: [userId], references: [id])
   createdOrg        Org?               @relation(fields: [createdOrgId], references: [id])
+  couponRedemption  PlatformCouponRedemption?
 
   @@index([userId, createdAt])
   @@index([status, createdAt])
+}
+
+model OrgWhatsAppApiKey {
+  id                String   @id @default(cuid())
+  orgId              String   @unique
+  keyPrefix          String
+  keyHash            String   @unique @db.Char(64)
+  lastFour           String   @db.Char(4)
+  createdByUserId    String
+  rotatedAt          DateTime?
+  revokedAt          DateTime?
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  org                Org      @relation(fields: [orgId], references: [id])
+  createdByUser      User     @relation(fields: [createdByUserId], references: [id])
+
+  @@index([orgId, revokedAt, createdAt])
+}
+
+model OrgWhatsAppPublicWebhook {
+  id                String   @id @default(cuid())
+  orgId              String   @unique
+  url                String?
+  secretEnc          String?
+  enabled            Boolean  @default(false)
+  eventFiltersJson   String?  @db.LongText
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  org                Org      @relation(fields: [orgId], references: [id])
+}
+
+model OrgWhatsAppPublicSchedule {
+  id                String                     @id @default(cuid())
+  orgId              String
+  createdByUserId    String?
+  status             WhatsAppPublicScheduleStatus @default(PENDING)
+  targetType         String                     // "contact" | "group"
+  target             String
+  messageType        String                     // "text" | "media_url"
+  text               String?                    @db.LongText
+  mediaUrl           String?                    @db.LongText
+  mimeType           String?
+  fileName           String?
+  dueAt              DateTime
+  sentAt             DateTime?
+  canceledAt         DateTime?
+  failedAt           DateTime?
+  waMessageId        String?
+  failureCode        String?
+  failureMessage     String?                    @db.Text
+  retryCount         Int                        @default(0)
+  nextRetryAt        DateTime?
+  createdAt          DateTime                   @default(now())
+  updatedAt          DateTime                   @updatedAt
+
+  org                Org                        @relation(fields: [orgId], references: [id])
+  createdByUser      User?                      @relation(fields: [createdByUserId], references: [id])
+
+  @@index([orgId, status, dueAt])
+  @@index([status, dueAt])
+  @@index([createdAt])
+}
+
+model OrgWhatsAppPublicWebhookEvent {
+  id                String   @id @default(cuid())
+  eventId            String   @unique
+  orgId              String
+  type               String
+  payloadJson        String   @db.LongText
+  status             String   @default("PENDING")
+  attempts           Int      @default(0)
+  nextAttemptAt      DateTime?
+  deliveredAt        DateTime?
+  lastError          String?  @db.Text
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  org                Org      @relation(fields: [orgId], references: [id])
+
+  @@index([orgId, status, createdAt])
+  @@index([status, nextAttemptAt])
 }
 
 model OrgWalletTopup {
@@ -973,6 +1088,56 @@ model PlatformMember {
   createdAt       DateTime     @default(now())
 
   user            User         @relation(fields: [userId], references: [id])
+}
+
+model PlatformCoupon {
+  id                String                     @id @default(cuid())
+  code              String                     @unique
+  name              String
+  description       String?                    @db.Text
+  discountType      PlatformCouponDiscountType
+  discountValue     Int
+  maxDiscountCents  Int?
+  minSubtotalCents  Int?
+  maxRedemptions    Int?
+  redeemedCount     Int                        @default(0)
+  target            PlatformCouponTarget       @default(ALL)
+  startsAt          DateTime?
+  expiresAt         DateTime?
+  isActive          Boolean                    @default(true)
+  createdByUserId   String?
+  updatedByUserId   String?
+  createdAt         DateTime                   @default(now())
+  updatedAt         DateTime                   @updatedAt
+
+  redemptions       PlatformCouponRedemption[]
+
+  @@index([isActive, code])
+  @@index([target, isActive, expiresAt])
+}
+
+model PlatformCouponRedemption {
+  id                   String                           @id @default(cuid())
+  couponId             String
+  couponCode           String
+  targetType           PlatformCouponTarget
+  orgId                String?
+  userId               String?
+  billingChargeId      String?                          @unique
+  provisioningOrderId  String?                          @unique
+  subtotalCents        Int
+  discountCents        Int
+  finalAmountCents     Int
+  createdAt            DateTime                         @default(now())
+
+  coupon               PlatformCoupon                   @relation(fields: [couponId], references: [id])
+  billingCharge        BillingCharge?                   @relation(fields: [billingChargeId], references: [id])
+  provisioningOrder    OwnerBusinessProvisioningOrder?  @relation(fields: [provisioningOrderId], references: [id])
+
+  @@index([couponId, createdAt])
+  @@index([orgId, createdAt])
+  @@index([userId, createdAt])
+  @@index([targetType, createdAt])
 }
 
 model PlatformAuditLog {

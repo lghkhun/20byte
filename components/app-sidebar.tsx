@@ -3,7 +3,7 @@
 import Image from "next/image";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { AlertTriangle, FileText, LayoutDashboard, Link2, MessageCircle, Shield, Users, Wallet, Workflow } from "lucide-react";
+import { AlertTriangle, FileText, LayoutDashboard, Link2, MessageCircle, Shield, Users, Wallet, Workflow, X } from "lucide-react";
 import QRCode from "qrcode";
 import { useEffect, useMemo, useRef, useState } from "react";
 
@@ -98,6 +98,10 @@ type WalletSummaryPayload = {
   };
 };
 
+const CARD_DISMISS_MS = 24 * 60 * 60 * 1000;
+const ONBOARDING_CARD_DISMISS_STORAGE_KEY = "app-sidebar:onboarding-card-dismiss-until";
+const COMMUNITY_CARD_DISMISS_STORAGE_KEY = "app-sidebar:community-card-dismiss-until";
+
 function formatIdr(cents: number): string {
   return new Intl.NumberFormat("id-ID", {
     style: "currency",
@@ -178,8 +182,68 @@ export function AppSidebar({ user, ownerOnboardingStatus = null }: AppSidebarPro
   const [communityQrDataUrl, setCommunityQrDataUrl] = useState<string | null>(null);
   const [walletBalanceCents, setWalletBalanceCents] = useState<number | null>(null);
   const [isWalletLoading, setIsWalletLoading] = useState(false);
+  const [isOnboardingCardDismissed, setIsOnboardingCardDismissed] = useState(false);
+  const [isCommunityCardDismissed, setIsCommunityCardDismissed] = useState(false);
   const loadingToastIdRef = useRef<string | number | null>(null);
   const billingReminderCacheRef = useRef<{ checkedAt: number; message: string | null } | null>(null);
+
+  useEffect(() => {
+    const syncDismissState = (
+      storageKey: string,
+      setDismissed: (value: boolean) => void
+    ) => {
+      try {
+        const dismissedUntilRaw = window.localStorage.getItem(storageKey);
+        if (!dismissedUntilRaw) {
+          return;
+        }
+
+        const dismissedUntil = Number.parseInt(dismissedUntilRaw, 10);
+        if (Number.isFinite(dismissedUntil) && dismissedUntil > Date.now()) {
+          setDismissed(true);
+          return;
+        }
+
+        window.localStorage.removeItem(storageKey);
+      } catch {
+        // Ignore read error from localStorage and keep card visible.
+      }
+    };
+
+    syncDismissState(ONBOARDING_CARD_DISMISS_STORAGE_KEY, setIsOnboardingCardDismissed);
+    syncDismissState(COMMUNITY_CARD_DISMISS_STORAGE_KEY, setIsCommunityCardDismissed);
+  }, []);
+
+  useEffect(() => {
+    if (!ownerOnboardingStatus?.isComplete) {
+      return;
+    }
+
+    setIsOnboardingCardDismissed(false);
+    try {
+      window.localStorage.removeItem(ONBOARDING_CARD_DISMISS_STORAGE_KEY);
+    } catch {
+      // Ignore write error from localStorage.
+    }
+  }, [ownerOnboardingStatus?.isComplete]);
+
+  const dismissOnboardingCard = () => {
+    setIsOnboardingCardDismissed(true);
+    try {
+      window.localStorage.setItem(ONBOARDING_CARD_DISMISS_STORAGE_KEY, String(Date.now() + CARD_DISMISS_MS));
+    } catch {
+      // Ignore write error from localStorage.
+    }
+  };
+
+  const dismissCommunityCard = () => {
+    setIsCommunityCardDismissed(true);
+    try {
+      window.localStorage.setItem(COMMUNITY_CARD_DISMISS_STORAGE_KEY, String(Date.now() + CARD_DISMISS_MS));
+    } catch {
+      // Ignore write error from localStorage.
+    }
+  };
 
   useEffect(() => {
     let canceled = false;
@@ -488,15 +552,17 @@ export function AppSidebar({ user, ownerOnboardingStatus = null }: AppSidebarPro
           </SidebarMenuItem>
         </SidebarMenu>
       </SidebarHeader>
-      <SidebarContent>
-        <BusinessSwitcher
-          isOwnerRole={isOwnerRole}
-          onActiveOrgChanged={() => {
-            setPendingPath(null);
-          }}
-        />
+      <SidebarContent className="gap-0">
+        <div className="px-3 pt-1 pb-3 group-data-[collapsible=icon]:px-1 group-data-[collapsible=icon]:pt-1 group-data-[collapsible=icon]:pb-2">
+          <BusinessSwitcher
+            isOwnerRole={isOwnerRole}
+            onActiveOrgChanged={() => {
+              setPendingPath(null);
+            }}
+          />
+        </div>
         {isOwnerRole ? (
-          <div className="mx-3 mb-2 group-data-[collapsible=icon]:hidden">
+          <div className="mx-3 mb-3 group-data-[collapsible=icon]:hidden">
             <Link
               href="/finance"
               prefetch={false}
@@ -512,13 +578,13 @@ export function AppSidebar({ user, ownerOnboardingStatus = null }: AppSidebarPro
                 }
                 loadingToastIdRef.current = notifyLoading("Sedang memuat halaman...");
               }}
-              className="block rounded-md border border-emerald-300 bg-emerald-50 px-3 py-2 text-left transition hover:border-emerald-400 hover:bg-emerald-100/70"
+              className="group/wallet block rounded-xl border border-emerald-200 bg-gradient-to-br from-emerald-50 to-emerald-100/60 px-3.5 py-2.5 text-left transition-all hover:border-emerald-400 hover:shadow-md hover:shadow-emerald-500/10 dark:border-emerald-800/50 dark:from-emerald-950/50 dark:to-emerald-900/30 dark:hover:border-emerald-700/70"
             >
-              <p className="flex items-center gap-1 text-[11px] font-medium text-emerald-700">
+              <p className="flex items-center gap-1.5 text-[11px] font-semibold tracking-wide text-emerald-600 uppercase dark:text-emerald-400">
                 <Wallet className="h-3.5 w-3.5" />
                 E-Payment Balance
               </p>
-              <p className="mt-0.5 text-lg font-bold leading-none text-emerald-800">
+              <p className="mt-1 text-[18px] font-extrabold leading-none tracking-tight text-emerald-800 dark:text-emerald-200">
                 {isWalletLoading ? "Memuat..." : formatIdr(walletBalanceCents ?? 0)}
               </p>
             </Link>
@@ -544,7 +610,7 @@ export function AppSidebar({ user, ownerOnboardingStatus = null }: AppSidebarPro
             onClick={() => {
               void handleOpenBillingCheckout();
             }}
-            className="group relative mx-3 mb-3 w-[calc(100%-1.5rem)] overflow-hidden rounded-2xl border border-primary/20 bg-gradient-to-br from-primary/10 to-primary/5 px-4 py-3 text-left transition-all hover:border-primary/30 hover:shadow-md hover:shadow-primary/5"
+            className="group relative mx-3 mb-3 w-[calc(100%-1.5rem)] overflow-hidden rounded-2xl border border-primary/20 bg-gradient-to-br from-primary/10 to-primary/5 px-4 py-3 text-left transition-all hover:border-primary/30 hover:shadow-md hover:shadow-primary/5 group-data-[collapsible=icon]:hidden"
           >
             <div className="absolute inset-0 bg-gradient-to-r from-primary/0 via-primary/5 to-primary/0 opacity-0 transition-opacity group-hover:opacity-100" />
             <div className="relative z-10">
@@ -562,7 +628,7 @@ export function AppSidebar({ user, ownerOnboardingStatus = null }: AppSidebarPro
           </button>
         ) : null}
         {billingReminderMessage && !isOwnerRole ? (
-          <div className="mx-3 mb-3 w-[calc(100%-1.5rem)] rounded-2xl border border-amber-500/20 bg-gradient-to-br from-amber-500/10 to-amber-500/5 px-4 py-3 text-left">
+          <div className="mx-3 mb-3 w-[calc(100%-1.5rem)] rounded-2xl border border-amber-500/20 bg-gradient-to-br from-amber-500/10 to-amber-500/5 px-4 py-3 text-left group-data-[collapsible=icon]:hidden">
             <p className="flex items-center gap-2 text-[13px] font-bold text-amber-700">
               <AlertTriangle className="h-4 w-4" />
               Masa Trial Segera Habis
@@ -572,15 +638,34 @@ export function AppSidebar({ user, ownerOnboardingStatus = null }: AppSidebarPro
             </p>
           </div>
         ) : null}
-        {ownerOnboardingStatus && !ownerOnboardingStatus.isComplete ? (
-          <div className="mx-2">
+        {ownerOnboardingStatus && !ownerOnboardingStatus.isComplete && !isOnboardingCardDismissed ? (
+          <div className="mx-2 group-data-[collapsible=icon]:hidden">
+            <div className="mb-1 flex justify-end pr-1">
+              <button
+                type="button"
+                onClick={dismissOnboardingCard}
+                aria-label="Tutup card setup workspace"
+                className="inline-flex h-6 w-6 items-center justify-center rounded-md border border-border/60 bg-background/80 text-muted-foreground/70 transition hover:text-foreground"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
             <SidebarOnboardingCard status={ownerOnboardingStatus} />
           </div>
         ) : null}
-        <div className="mx-3 mb-2 group-data-[collapsible=icon]:hidden">
+        {!isCommunityCardDismissed ? (
+          <div className="relative mx-3 mb-2 group-data-[collapsible=icon]:hidden">
+            <button
+              type="button"
+              onClick={dismissCommunityCard}
+              aria-label="Tutup card komunitas"
+              className="absolute right-2 top-2 z-10 inline-flex h-6 w-6 items-center justify-center rounded-md border border-emerald-500/20 bg-white/80 text-emerald-700/80 backdrop-blur transition hover:bg-white hover:text-emerald-700"
+            >
+              <X className="h-4 w-4" />
+            </button>
           <button
             onClick={() => setIsCommunityDialogOpen(true)}
-            className="group relative w-full overflow-hidden rounded-2xl border border-emerald-500/20 bg-gradient-to-br from-emerald-500/10 to-emerald-500/5 px-4 py-3 text-left transition-all hover:border-emerald-500/40 hover:shadow-lg hover:shadow-emerald-500/10"
+            className="group relative w-full overflow-hidden rounded-2xl border border-emerald-500/20 bg-gradient-to-br from-emerald-500/10 to-emerald-500/5 px-4 py-3 pr-11 text-left transition-all hover:border-emerald-500/40 hover:shadow-lg hover:shadow-emerald-500/10"
           >
             <div className="absolute inset-0 bg-gradient-to-r from-emerald-500/0 via-emerald-500/10 to-emerald-500/0 opacity-0 transition-opacity duration-500 group-hover:opacity-100" />
             <div className="relative z-10">
@@ -596,7 +681,8 @@ export function AppSidebar({ user, ownerOnboardingStatus = null }: AppSidebarPro
               </p>
             </div>
           </button>
-        </div>
+          </div>
+        ) : null}
         <NavUser user={user} />
       </SidebarFooter>
       <SidebarRail side="left" />
@@ -638,11 +724,11 @@ export function AppSidebar({ user, ownerOnboardingStatus = null }: AppSidebarPro
             <div className="py-2">
               <div className="flex flex-col items-center pb-6 pt-4">
                 {checkoutQrDataUrl && isQrisPayment ? (
-                  <div className="flex items-center justify-center rounded-[20px] border border-border/40 bg-white p-4 shadow-[0_8px_32px_-8px_rgba(0,0,0,0.08)]">
+                  <div className="flex items-center justify-center rounded-[20px] border border-border/40 bg-white p-4 shadow-[0_8px_32px_-8px_rgba(0,0,0,0.08)] dark:border-border/20 dark:bg-white dark:shadow-none">
                     <Image src={checkoutQrDataUrl} alt="QR pembayaran" width={280} height={280} unoptimized className="object-contain" />
                   </div>
                 ) : (
-                  <div className="flex h-[280px] w-[280px] items-center justify-center rounded-[20px] border border-dashed border-border/50 bg-muted/20">
+                  <div className="flex h-[280px] w-[280px] items-center justify-center rounded-[20px] border border-dashed border-border/50 bg-muted/30 dark:bg-muted/10">
                     <p className="text-[13px] font-medium text-muted-foreground text-center px-6">
                       Menyiapkan tautan bayar...<br />Dialihkan ke halaman billing jika gagal.
                     </p>
@@ -670,7 +756,7 @@ export function AppSidebar({ user, ownerOnboardingStatus = null }: AppSidebarPro
       </Dialog>
 
       <Dialog open={isCommunityDialogOpen} onOpenChange={setIsCommunityDialogOpen}>
-        <DialogContent className="sm:max-w-[380px] p-0 rounded-[28px] overflow-hidden gap-0 border border-emerald-500/20 bg-white shadow-2xl">
+        <DialogContent className="sm:max-w-[380px] p-0 rounded-[28px] overflow-hidden gap-0 border border-emerald-500/20 bg-white shadow-2xl dark:bg-zinc-900 dark:border-emerald-500/10">
           <div className="bg-gradient-to-br from-emerald-500 to-emerald-600 px-6 py-8 text-center text-white relative">
             <div className="absolute inset-0 opacity-20 bg-[radial-gradient(circle_at_top_right,_rgba(255,255,255,0.4),_transparent_60%)]"></div>
             <div className="relative z-10">
@@ -683,14 +769,14 @@ export function AppSidebar({ user, ownerOnboardingStatus = null }: AppSidebarPro
               </p>
             </div>
           </div>
-          
-          <div className="px-6 py-8 flex flex-col items-center bg-gradient-to-b from-emerald-500/5 to-transparent">
+
+          <div className="px-6 py-8 flex flex-col items-center bg-gradient-to-b from-emerald-500/5 to-transparent dark:from-emerald-500/10 dark:to-transparent">
             {communityQrDataUrl ? (
-              <div className="flex items-center justify-center rounded-[20px] border-2 border-emerald-100 bg-white p-3 shadow-xl shadow-emerald-900/5">
+              <div className="flex items-center justify-center rounded-[20px] border-2 border-emerald-100 bg-white p-3 shadow-xl shadow-emerald-900/5 dark:border-emerald-900/60">
                 <Image src={communityQrDataUrl} alt="QR Komunitas" width={220} height={220} unoptimized className="object-contain" />
               </div>
             ) : (
-              <div className="h-[220px] w-[220px] bg-emerald-50 animate-pulse rounded-[20px] border-2 border-emerald-100" />
+              <div className="h-[220px] w-[220px] animate-pulse rounded-[20px] border-2 border-emerald-200 bg-emerald-50 dark:border-emerald-900/60 dark:bg-emerald-950/40" />
             )}
 
             <div className="my-5 flex w-full items-center gap-3 px-4">

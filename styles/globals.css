@@ -11,7 +11,7 @@
   --app-sidebar-width-mobile: 18rem;
   --app-sidebar-width-icon: 3rem;
   --inbox-list-panel-width: 340px;
-  --background: 210 40% 98%;
+  --background: 0 0% 100%;
   --foreground: 222 47% 11%;
   --surface: 0 0% 100%;
   --card: 0 0% 100%;
@@ -116,34 +116,28 @@ body {
   }
 }
 
-/* Global radius cap: keep UI corners consistent across the app. */
-@layer utilities {
-  .rounded,
-  .rounded-sm,
-  .rounded-md,
-  .rounded-lg,
-  .rounded-xl,
-  .rounded-2xl,
-  .rounded-3xl,
-  .rounded-4xl,
-  .rounded-\[20px\],
-  .rounded-\[22px\],
-  .rounded-\[24px\],
-  .rounded-\[28px\],
-  .rounded-\[30px\],
-  .rounded-\[32px\] {
-    border-radius: 10px !important;
+/* ── Mobile: content sits flat on white background, no card frame ── */
+@media (max-width: 767px) {
+  .app-shell-main {
+    padding: 0 !important;
+    padding-bottom: 4rem !important;
   }
 
-  [class*="rounded-["]:not(.rounded-full):not([class~="rounded-full"]) {
-    border-radius: 10px !important;
+  .app-shell-surface {
+    border-radius: 0 !important;
+    border: none !important;
+    background: hsl(var(--background)) !important;
+    box-shadow: none !important;
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
   }
 }
 
-/* Inbox-specific UI polish */
+
 .inbox-scroll {
   scrollbar-width: thin;
-  scrollbar-color: hsl(var(--border)) transparent;
+  scrollbar-color: hsl(var(--border) / 0.5) transparent;
+  -webkit-overflow-scrolling: touch;
 }
 
 .inbox-scroll::-webkit-scrollbar {
@@ -249,12 +243,31 @@ body {
 .inbox-shimmer {
   background: linear-gradient(
     90deg,
-    hsl(var(--muted) / 0.38) 25%,
-    hsl(var(--muted) / 0.64) 37%,
-    hsl(var(--muted) / 0.38) 63%
+    hsl(var(--muted) / 0.3) 25%,
+    hsl(var(--primary) / 0.08) 37%,
+    hsl(var(--muted) / 0.3) 63%
   );
   background-size: 220% 100%;
-  animation: inbox-shimmer 1.2s linear infinite;
+  animation: inbox-shimmer 1.5s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+}
+
+@keyframes inbox-slide-in-right {
+  from {
+    opacity: 0;
+    transform: translateX(12px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+.inbox-slide-in-right {
+  animation: inbox-slide-in-right 240ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.touch-premium-tap {
+  @apply transition-transform active:scale-95 cursor-pointer;
 }
 
 /* ═══════════════════════════════════════════════════

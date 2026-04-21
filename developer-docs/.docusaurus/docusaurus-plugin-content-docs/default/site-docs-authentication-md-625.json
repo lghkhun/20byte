@@ -1,0 +1,26 @@
+{
+  "id": "authentication",
+  "title": "Authentication",
+  "description": "Gunakan API key dengan header Bearer:",
+  "source": "@site/docs/authentication.md",
+  "sourceDirName": ".",
+  "slug": "/authentication",
+  "permalink": "/authentication",
+  "draft": false,
+  "unlisted": false,
+  "tags": [],
+  "version": "current",
+  "frontMatter": {
+    "id": "authentication",
+    "title": "Authentication"
+  },
+  "sidebar": "apiSidebar",
+  "previous": {
+    "title": "Overview",
+    "permalink": "/"
+  },
+  "next": {
+    "title": "Messages",
+    "permalink": "/endpoints/endpoints-messages"
+  }
+}

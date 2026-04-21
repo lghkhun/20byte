@@ -1,0 +1,26 @@
+{
+  "id": "error-codes",
+  "title": "Error Codes",
+  "description": "| Code | Penjelasan |",
+  "source": "@site/docs/error-codes.md",
+  "sourceDirName": ".",
+  "slug": "/error-codes",
+  "permalink": "/error-codes",
+  "draft": false,
+  "unlisted": false,
+  "tags": [],
+  "version": "current",
+  "frontMatter": {
+    "id": "error-codes",
+    "title": "Error Codes"
+  },
+  "sidebar": "apiSidebar",
+  "previous": {
+    "title": "Payload Reference",
+    "permalink": "/payloads"
+  },
+  "next": {
+    "title": "Migrasi dari Woo-WA",
+    "permalink": "/migration-woowa"
+  }
+}

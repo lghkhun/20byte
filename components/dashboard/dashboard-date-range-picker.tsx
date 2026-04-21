@@ -3,11 +3,11 @@
 import * as React from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { addDays, format } from "date-fns";
-import { CalendarIcon } from "lucide-react";
+import { CalendarIcon, ChevronDown } from "lucide-react";
 import type { DateRange } from "react-day-picker";
 
-import { Button } from "@/components/ui/button";
 import { Calendar } from "@/components/ui/calendar";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
 
@@ -29,15 +29,29 @@ function differenceInDaysInclusive(from: Date, to: Date): number {
   return Math.max(1, Math.floor((to.getTime() - from.getTime()) / (24 * 60 * 60 * 1000)) + 1);
 }
 
+const PRESETS = [
+  { label: "7H", days: 7 },
+  { label: "30H", days: 30 },
+  { label: "90H", days: 90 }
+];
+
 export function DashboardDateRangePicker({ from, to }: DashboardDateRangePickerProps) {
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const [open, setOpen] = React.useState(false);
+  const [isMobile, setIsMobile] = React.useState(false);
   const [range, setRange] = React.useState<DateRange | undefined>({
     from: parseDateInput(from),
     to: parseDateInput(to)
   });
+
+  React.useEffect(() => {
+    const check = () => setIsMobile(window.innerWidth < 768);
+    check();
+    window.addEventListener("resize", check);
+    return () => window.removeEventListener("resize", check);
+  }, []);
 
   React.useEffect(() => {
     setRange({
@@ -47,19 +61,15 @@ export function DashboardDateRangePicker({ from, to }: DashboardDateRangePickerP
   }, [from, to]);
 
   const selectedDayCount = React.useMemo(() => {
-    if (!range?.from || !range?.to) {
-      return 0;
-    }
-
+    if (!range?.from || !range?.to) return 0;
     return differenceInDaysInclusive(range.from, range.to);
   }, [range]);
 
+  const activePreset = PRESETS.find((p) => p.days === selectedDayCount)?.days ?? null;
+
   function applyRange(nextRange: DateRange | undefined) {
     setRange(nextRange);
-    if (!nextRange?.from || !nextRange?.to) {
-      return;
-    }
-
+    if (!nextRange?.from || !nextRange?.to) return;
     const params = new URLSearchParams(searchParams.toString());
     params.set("from", toDateParam(nextRange.from));
     params.set("to", toDateParam(nextRange.to));
@@ -77,57 +87,77 @@ export function DashboardDateRangePicker({ from, to }: DashboardDateRangePickerP
     setOpen(false);
   }
 
+  const dateLabel = range?.from
+    ? range.to
+      ? `${format(range.from, "dd MMM yyyy")} – ${format(range.to, "dd MMM yyyy")}`
+      : format(range.from, "dd MMM yyyy")
+    : "Pilih tanggal";
+
+  const trigger = (
+    <button
+      type="button"
+      onClick={() => setOpen(true)}
+      className="flex h-9 w-full items-center gap-2 rounded-xl border border-border/70 bg-background/70 px-3 text-left text-sm transition hover:bg-muted/50 md:w-auto"
+    >
+      <CalendarIcon className="h-3.5 w-3.5 shrink-0 text-primary" />
+      <span className="flex-1 truncate text-[12px] font-medium text-foreground/80">{dateLabel}</span>
+      <ChevronDown className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+    </button>
+  );
+
+  const calendarContent = (
+    <Calendar
+      mode="range"
+      numberOfMonths={isMobile ? 1 : 2}
+      selected={range}
+      defaultMonth={range?.from}
+      onSelect={applyRange}
+      disabled={(date) => date > new Date() || date < new Date("1900-01-01")}
+    />
+  );
+
   return (
-    <div className="flex flex-wrap items-center gap-2">
-      {[7, 30, 90].map((days) => (
-        <Button
-          key={days}
-          type="button"
-          variant="outline"
-          className={cn(
-            "h-10 rounded-xl transition-colors",
-            selectedDayCount === days 
-              ? "border-emerald-600 bg-emerald-500 text-white hover:bg-emerald-600 hover:text-white" 
-              : "border-border/70 bg-background/70 hover:bg-muted/60 text-muted-foreground"
-          )}
-          onClick={() => applyPreset(days)}
-        >
-          {days} hari
-        </Button>
-      ))}
-      <Popover open={open} onOpenChange={setOpen}>
-        <PopoverTrigger asChild>
-          <Button
+    <div className="flex items-center gap-1.5">
+      {/* Preset pills — hidden on mobile */}
+      <div className="hidden items-center gap-1 rounded-xl border border-border/60 bg-muted/30 p-1 md:flex">
+        {PRESETS.map(({ label, days }) => (
+          <button
+            key={days}
             type="button"
-            variant="outline"
+            onClick={() => applyPreset(days)}
             className={cn(
-              "h-10 w-full min-w-0 justify-start rounded-xl border-border/70 bg-background/70 text-left font-normal sm:w-auto sm:min-w-[280px]",
-              !range?.from && "text-muted-foreground"
+              "rounded-lg px-2.5 py-1 text-[11px] font-bold tracking-wide transition-all",
+              activePreset === days
+                ? "bg-primary text-primary-foreground shadow-sm"
+                : "text-muted-foreground hover:bg-background hover:text-foreground"
             )}
           >
-            <CalendarIcon className="mr-2 h-4 w-4 text-primary" />
-            {range?.from ? (
-              range.to ? (
-                <>{format(range.from, "dd MMM yyyy")} - {format(range.to, "dd MMM yyyy")}</>
-              ) : (
-                format(range.from, "dd MMM yyyy")
-              )
-            ) : (
-              <span>Pilih rentang tanggal</span>
-            )}
-          </Button>
-        </PopoverTrigger>
-        <PopoverContent align="end" className="w-auto rounded-2xl border-border/70 p-0">
-          <Calendar
-            mode="range"
-            numberOfMonths={2}
-            selected={range}
-            defaultMonth={range?.from}
-            onSelect={applyRange}
-            disabled={(date) => date > new Date() || date < new Date("1900-01-01")}
-          />
-        </PopoverContent>
-      </Popover>
+            {label}
+          </button>
+        ))}
+      </div>
+
+      {/* Date range trigger */}
+      {isMobile ? (
+        <>
+          {trigger}
+          <Dialog open={open} onOpenChange={setOpen}>
+            <DialogContent className="flex w-auto max-w-[min(400px,calc(100vw-2rem))] flex-col gap-0 overflow-hidden rounded-[10px] p-0">
+              <DialogHeader className="border-b border-border/60 px-5 py-3.5">
+                <DialogTitle className="text-base">Pilih Rentang Tanggal</DialogTitle>
+              </DialogHeader>
+              <div className="flex justify-center p-3">{calendarContent}</div>
+            </DialogContent>
+          </Dialog>
+        </>
+      ) : (
+        <Popover open={open} onOpenChange={setOpen}>
+          <PopoverTrigger asChild>{trigger}</PopoverTrigger>
+          <PopoverContent align="end" className="w-auto rounded-2xl border-border/70 p-3">
+            {calendarContent}
+          </PopoverContent>
+        </Popover>
+      )}
     </div>
   );
 }

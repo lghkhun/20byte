@@ -15,8 +15,8 @@ import { MobileCrmOverlay } from "@/components/inbox/workspace/MobileCrmOverlay"
 import { useInboxWorkspacePreferences } from "@/components/inbox/workspace/useInboxWorkspacePreferences";
 import { InvoiceDrawer } from "@/components/invoices/InvoiceDrawer";
 import { Button } from "@/components/ui/button";
+import { SidebarTrigger } from "@/components/ui/sidebar";
 import { EmptyStatePanel, ErrorStatePanel } from "@/components/ui/state-panels";
-import { PanelRightClose, PanelRightOpen } from "lucide-react";
 import { notifySuccess, notifyWarning, notifyInfo } from "@/lib/ui/notify";
 import type { MessageItem } from "@/components/inbox/types";
 
@@ -452,22 +452,30 @@ export function InboxWorkspace() {
 
       {orgId ? (
         <div className="flex h-full min-h-0 flex-1 flex-col overflow-hidden">
-          <div className="mb-2 flex items-center gap-2 rounded-xl border border-border/80 bg-card/85 p-1.5 shadow-sm lg:hidden">
+          {/* Mobile top bar: SidebarTrigger + pane tabs — all on one row */}
+          <div className="mb-1.5 flex items-center gap-1.5 rounded-2xl border border-border/60 bg-card/90 p-1 shadow-sm backdrop-blur-sm lg:hidden">
+            <SidebarTrigger className="h-8 w-8 shrink-0 rounded-xl border border-border/60 bg-background/70 text-muted-foreground hover:bg-muted" />
             <Button
               type="button"
-              variant={mobilePane === "list" ? "secondary" : "ghost"}
               size="sm"
-              className="h-8 flex-1 rounded-lg"
               onClick={() => setMobilePane("list")}
+              className={`h-8 flex-1 rounded-xl text-[13px] font-semibold transition-all ${
+                mobilePane === "list"
+                  ? "bg-background text-foreground shadow-sm border border-border/60"
+                  : "bg-transparent text-muted-foreground hover:text-foreground"
+              }`}
             >
               Percakapan
             </Button>
             <Button
               type="button"
-              variant={mobilePane === "chat" ? "secondary" : "ghost"}
               size="sm"
-              className="h-8 flex-1 rounded-lg"
               onClick={() => setMobilePane("chat")}
+              className={`h-8 flex-1 rounded-xl text-[13px] font-semibold transition-all ${
+                mobilePane === "chat"
+                  ? "bg-background text-foreground shadow-sm border border-border/60"
+                  : "bg-transparent text-muted-foreground hover:text-foreground"
+              }`}
             >
               Chat
             </Button>
@@ -508,21 +516,6 @@ export function InboxWorkspace() {
             </div>
 
             <div className={`inbox-scroll min-h-0 min-w-0 max-h-full overflow-y-auto overscroll-contain ${mobilePane === "list" ? "hidden lg:block" : ""} ${mobilePane === "chat" ? "inbox-fade-slide" : ""}`}>
-              <div className="mb-2 flex items-center justify-between gap-2 lg:hidden">
-                <Button type="button" variant="ghost" size="sm" className="h-8" onClick={() => setMobilePane("list")}>
-                  Kembali ke percakapan
-                </Button>
-                <Button
-                  type="button"
-                  variant="secondary"
-                  size="sm"
-                  className="h-8 gap-1.5"
-                  onClick={() => setIsMobileCrmOpen((current) => !current)}
-                >
-                  {isMobileCrmOpen ? <PanelRightClose className="h-3.5 w-3.5" /> : <PanelRightOpen className="h-3.5 w-3.5" />}
-                  CRM
-                </Button>
-              </div>
               <ChatWindow
                 density={density}
                 conversation={selectedConversation}
@@ -537,7 +530,13 @@ export function InboxWorkspace() {
                 onSendText={sendTextMessage}
                 onSendAttachment={sendAttachmentMessage}
                 isCrmPanelOpen={isDesktopCrmOpen}
-                onToggleCrmPanel={() => setIsDesktopCrmOpen((current) => !current)}
+                onToggleCrmPanel={() => {
+                  if (typeof window !== "undefined" && window.innerWidth < 1024) {
+                    setIsMobileCrmOpen((current) => !current);
+                  } else {
+                    setIsDesktopCrmOpen((current) => !current);
+                  }
+                }}
                 onToggleConversationStatus={toggleSelectedConversationStatus}
                 onDeleteConversation={deleteSelectedConversation}
                 onRetryOutboundMessage={retryOutboundMessage}

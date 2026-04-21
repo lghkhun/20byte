@@ -81,6 +81,13 @@ type ProvisioningCheckoutPayload = {
       payableAmountCents?: number;
       providerFeeCents?: number | null;
     };
+    appliedCoupon?: {
+      code: string;
+      name: string;
+      discountCents: number;
+      subtotalCents: number;
+      finalAmountCents: number;
+    } | null;
   };
   error?: {
     message?: string;
@@ -159,11 +166,13 @@ export function BusinessSwitcher({
   const [organizations, setOrganizations] = useState<OrgSummary[]>([]);
   const [activeOrgId, setActiveOrgId] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [switchingOrgId, setSwitchingOrgId] = useState<string | null>(null);
 
   const [isPlanDialogOpen, setIsPlanDialogOpen] = useState(false);
   const [isPaymentDialogOpen, setIsPaymentDialogOpen] = useState(false);
   const [newBusinessName, setNewBusinessName] = useState("");
+  const [couponCode, setCouponCode] = useState("");
 
   const [planOptions, setPlanOptions] = useState<PricingPlan[]>([]);
   const [selectedPlanMonths, setSelectedPlanMonths] = useState<1 | 3 | 12>(1);
@@ -176,6 +185,8 @@ export function BusinessSwitcher({
   const [paymentNumber, setPaymentNumber] = useState<string | null>(null);
   const [paymentMethod, setPaymentMethod] = useState<string | null>(null);
   const [paymentTotalCents, setPaymentTotalCents] = useState<number>(0);
+  const [paymentCouponCode, setPaymentCouponCode] = useState<string | null>(null);
+  const [paymentCouponDiscountCents, setPaymentCouponDiscountCents] = useState(0);
   const [paymentExpiresAt, setPaymentExpiresAt] = useState<string | null>(null);
   const [paymentQrDataUrl, setPaymentQrDataUrl] = useState<string | null>(null);
   const [checkoutError, setCheckoutError] = useState<string | null>(null);
@@ -195,6 +206,7 @@ export function BusinessSwitcher({
 
   async function loadOrganizations() {
     setIsLoading(true);
+    setLoadError(null);
     try {
       const response = await fetch("/api/orgs", { cache: "no-store" });
       const payload = (await response.json().catch(() => null)) as OrganizationsPayload | null;
@@ -204,9 +216,10 @@ export function BusinessSwitcher({
       const rows = payload?.data?.organizations ?? [];
       setOrganizations(rows);
       setActiveOrgId(payload?.data?.activeOrgId ?? rows[0]?.id ?? null);
-    } catch {
-      setOrganizations([]);
-      setActiveOrgId(null);
+    } catch (error) {
+      // Jangan kosongkan data lama ketika fetch gagal sementara,
+      // agar business tidak terlihat "hilang" di UI.
+      setLoadError(error instanceof Error ? error.message : "Gagal memuat business.");
     } finally {
       setIsLoading(false);
     }
@@ -246,12 +259,15 @@ export function BusinessSwitcher({
     setPaymentMethod(null);
     setPaymentExpiresAt(null);
     setPaymentTotalCents(0);
+    setPaymentCouponCode(null);
+    setPaymentCouponDiscountCents(0);
     setPaymentQrDataUrl(null);
     setCheckoutError(null);
   }
 
   function resetAddBusinessFlow() {
     setNewBusinessName("");
+    setCouponCode("");
     setPlanOptions([]);
     setSelectedPlanMonths(1);
     setPricingError(null);
@@ -267,6 +283,17 @@ export function BusinessSwitcher({
 
   useEffect(() => {
     void loadOrganizations();
+  }, []);
+
+  useEffect(() => {
+    function handleFocus() {
+      void loadOrganizations();
+    }
+
+    window.addEventListener("focus", handleFocus);
+    return () => {
+      window.removeEventListener("focus", handleFocus);
+    };
   }, []);
 
   useEffect(() => {
@@ -420,7 +447,8 @@ export function BusinessSwitcher({
         body: JSON.stringify({
           businessName: newBusinessName,
           paymentMethod: "qris",
-          planMonths: selectedPlan.months
+          planMonths: selectedPlan.months,
+          couponCode: couponCode.trim() || undefined
         })
       });
       const payload = (await response.json().catch(() => null)) as ProvisioningCheckoutPayload | null;
@@ -438,6 +466,8 @@ export function BusinessSwitcher({
           payload?.data?.selectedPlan?.totalAmountCents ??
           selectedPlan.totalAmountCents
       );
+      setPaymentCouponCode(payload?.data?.appliedCoupon?.code ?? null);
+      setPaymentCouponDiscountCents(payload?.data?.appliedCoupon?.discountCents ?? 0);
       setCountdownNowMs(Date.now());
       setIsPollingOrder(true);
       setIsPlanDialogOpen(false);
@@ -451,21 +481,21 @@ export function BusinessSwitcher({
 
   return (
     <>
-      <div className="mx-3 mb-2 group-data-[collapsible=icon]:hidden">
+      <div className="group-data-[collapsible=icon]:hidden">
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <button
               type="button"
-              className="flex w-full items-center gap-3 rounded-xl border border-sidebar-border/60 bg-sidebar-accent/30 px-3 py-2 text-left hover:bg-sidebar-accent/60"
+              className="flex w-full items-center gap-3 rounded-xl border border-sidebar-border/60 bg-sidebar-accent/30 px-3 py-2.5 text-left transition-all hover:bg-sidebar-accent/60 hover:shadow-sm"
             >
               <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-sidebar-primary/15 text-sidebar-primary">
                 <Building2 className="h-4 w-4" />
               </span>
               <span className="min-w-0 flex-1">
                 <span className="block truncate text-sm font-semibold text-sidebar-foreground">
-                  {activeOrg?.name ?? (isLoading ? "Memuat business..." : "Belum ada business")}
+                  {activeOrg?.name ?? (isLoading ? "Memuat business..." : loadError ? "Gagal memuat business" : "Belum ada business")}
                 </span>
-                <span className="block truncate text-xs text-sidebar-foreground/70">{activeOrg?.role ?? ""}</span>
+                <span className="block truncate text-xs text-sidebar-foreground/70">{activeOrg?.role ?? (loadError ? "Klik untuk coba lagi" : "")}</span>
               </span>
               {switchingOrgId ? <Loader2 className="h-4 w-4 animate-spin" /> : <ChevronsUpDown className="h-4 w-4" />}
             </button>
@@ -512,7 +542,7 @@ export function BusinessSwitcher({
         }}
       >
         <DialogContent className="sm:max-w-[480px] p-0 rounded-[28px] overflow-hidden gap-0">
-          <div className="bg-muted/30 px-6 py-5 border-b border-border/50">
+          <div className="bg-gradient-to-br from-muted/40 to-muted/20 px-6 py-5 border-b border-border/50 dark:from-zinc-800/60 dark:to-zinc-800/30 dark:border-border/30">
             <DialogTitle className="text-[18px] font-bold text-foreground">Tambah business baru</DialogTitle>
             <DialogDescription className="text-[13px] font-medium leading-relaxed text-muted-foreground/80 mt-1">
               Isi nama business, pilih paket langganan, lalu lanjutkan pembayaran. Tanpa free trial.
@@ -552,16 +582,16 @@ export function BusinessSwitcher({
                         onClick={() => setSelectedPlanMonths(plan.months)}
                         className={`relative flex flex-col items-center justify-center gap-1.5 p-4 rounded-[20px] border transition-all ${
                           isSelected
-                            ? "border-primary bg-primary/5 shadow-md shadow-primary/10 ring-1 ring-primary"
-                            : "border-border/60 bg-card hover:border-primary/50 hover:bg-muted/10"
+                            ? "border-emerald-500 bg-emerald-500/8 shadow-md shadow-emerald-500/15 ring-1 ring-emerald-500 dark:border-emerald-500/70 dark:bg-emerald-500/10"
+                            : "border-border/60 bg-card hover:border-emerald-500/40 hover:bg-emerald-500/5 dark:border-border/40 dark:bg-zinc-800/50 dark:hover:border-emerald-500/30"
                         }`}
                       >
-                        <span className={`text-[13px] font-bold ${isSelected ? "text-primary" : "text-foreground"}`}>{plan.label}</span>
+                        <span className={`text-[13px] font-bold ${isSelected ? "text-emerald-600 dark:text-emerald-400" : "text-foreground"}`}>{plan.label}</span>
                         <span className={`text-[16px] font-bold tracking-tight ${isSelected ? "text-foreground" : "text-muted-foreground"}`}>
                           {formatIdr(plan.totalAmountCents)}
                         </span>
                         {discountPercent > 0 ? (
-                          <span className="rounded-full bg-emerald-500/10 px-2 py-0.5 mt-0.5 text-[10px] font-bold text-emerald-700">Hem.{discountPercent}%</span>
+                          <span className="rounded-full bg-emerald-500/10 px-2 py-0.5 mt-0.5 text-[10px] font-bold text-emerald-700 dark:bg-emerald-400/10 dark:text-emerald-400">Hem.{discountPercent}%</span>
                         ) : (
                           <span className="rounded-full px-2 py-0.5 mt-0.5 text-[10px] text-transparent select-none">-</span>
                         )}
@@ -570,28 +600,41 @@ export function BusinessSwitcher({
                   })}
                 </div>
 
-                <div className="rounded-2xl border border-border/50 bg-muted/20 p-5 shadow-inner">
-                  <p className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground/80">Kalkulasi Tagihan</p>
+                <div className="rounded-2xl border border-border/50 bg-muted/20 p-5 shadow-inner dark:border-border/30 dark:bg-zinc-800/40">
+                  <p className="text-[11px] font-bold uppercase tracking-widest text-muted-foreground/60">Kalkulasi Tagihan</p>
                   <div className="mt-4 space-y-2.5 text-[13px]">
                     <div className="flex items-center justify-between font-medium text-muted-foreground">
                       <span>Biaya Langganan ({selectedPlan?.months ?? 1} Bulan)</span>
                       <span>{formatIdr(selectedPlan?.rawBaseAmountCents ?? 0)}</span>
                     </div>
                     {(selectedPlan?.discountCents ?? 0) > 0 ? (
-                      <div className="flex items-center justify-between font-bold text-emerald-600">
+                      <div className="flex items-center justify-between font-bold text-emerald-600 dark:text-emerald-400">
                         <span>Diskon Spesial ({Math.round((selectedPlan?.discountBps ?? 0) / 100)}%)</span>
                         <span>-{formatIdr(selectedPlan?.discountCents ?? 0)}</span>
                       </div>
                     ) : null}
-                    <div className="flex items-center justify-between font-medium text-muted-foreground/80">
+                    <div className="flex items-center justify-between font-medium text-muted-foreground/70">
                       <span>Biaya Layanan Platform (2%)</span>
                       <span>{formatIdr(selectedPlan?.gatewayFeeCents ?? 0)}</span>
                     </div>
                   </div>
-                  <div className="mt-4 flex items-center justify-between border-t border-border/50 pt-4">
+                  <div className="mt-4 flex items-center justify-between border-t border-border/40 pt-4">
                     <span className="font-bold text-foreground">Grand Total</span>
-                    <span className="text-[20px] font-bold text-foreground">{formatIdr(selectedPlan?.totalAmountCents ?? 0)}</span>
+                    <span className="text-[20px] font-extrabold tracking-tight text-foreground">{formatIdr(selectedPlan?.totalAmountCents ?? 0)}</span>
                   </div>
+                </div>
+
+                <div className="space-y-2">
+                  <label className="text-sm font-medium text-foreground" htmlFor="new-business-coupon">
+                    Kode kupon (opsional)
+                  </label>
+                  <Input
+                    id="new-business-coupon"
+                    placeholder="Contoh: BIZHEMAT10"
+                    value={couponCode}
+                    onChange={(event) => setCouponCode(event.target.value.toUpperCase())}
+                    maxLength={40}
+                  />
                 </div>
               </>
             ) : null}
@@ -600,7 +643,7 @@ export function BusinessSwitcher({
             {checkoutError ? <p className="text-sm text-rose-600">{checkoutError}</p> : null}
 
             <Button
-              className="w-full h-12 rounded-[14px] font-bold shadow-md shadow-primary/20 text-[14px]"
+              className="w-full h-12 rounded-[14px] bg-emerald-600 hover:bg-emerald-500 text-white font-bold shadow-md shadow-emerald-600/25 text-[14px] transition-all disabled:opacity-50 disabled:cursor-not-allowed"
               disabled={isCreatingCheckout || !newBusinessName.trim() || !selectedPlan || isPricingLoading}
               onClick={() => void handleCreateProvisioningCheckout()}
             >
@@ -628,16 +671,16 @@ export function BusinessSwitcher({
           </DialogHeader>
 
           <div className="py-2 space-y-4">
-            <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-700">
+            <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2.5 text-sm font-medium text-emerald-700 dark:border-emerald-800/50 dark:bg-emerald-950/40 dark:text-emerald-400">
               Business akan otomatis dibuat setelah pembayaran terverifikasi.
             </div>
             <div className="flex flex-col items-center pb-2 pt-2">
               {paymentQrDataUrl && isQris ? (
-                <div className="flex items-center justify-center rounded-[20px] border border-border/40 bg-white p-4 shadow-[0_8px_32px_-8px_rgba(0,0,0,0.08)]">
+                <div className="flex items-center justify-center rounded-[20px] border border-border/40 bg-white p-4 shadow-[0_8px_32px_-8px_rgba(0,0,0,0.08)] dark:border-border/20">
                   <Image src={paymentQrDataUrl} alt="QR pembayaran business" width={280} height={280} unoptimized className="object-contain" />
                 </div>
               ) : (
-                <div className="flex h-[280px] w-[280px] items-center justify-center rounded-[20px] border border-dashed border-border/50 bg-muted/20">
+                <div className="flex h-[280px] w-[280px] items-center justify-center rounded-[20px] border border-dashed border-border/50 bg-muted/20 dark:bg-muted/10">
                   <p className="text-[13px] font-medium text-muted-foreground text-center px-6">Menyiapkan QR pembayaran...</p>
                 </div>
               )}
@@ -652,6 +695,12 @@ export function BusinessSwitcher({
                 <span className="text-[12px] font-semibold text-muted-foreground/80">Sisa waktu pembayaran:</span>
                 <span className="text-[13px] font-bold text-amber-600 tracking-tight">{formatCountdown(paymentExpiresAt, countdownNowMs)}</span>
               </div>
+              {paymentCouponCode && paymentCouponDiscountCents > 0 ? (
+                <div className="flex items-center justify-between">
+                  <span className="text-[12px] font-semibold text-emerald-600 dark:text-emerald-400">Kupon {paymentCouponCode}</span>
+                  <span className="text-[13px] font-bold text-emerald-600 dark:text-emerald-400">-{formatIdr(paymentCouponDiscountCents)}</span>
+                </div>
+              ) : null}
             </div>
 
             <Button
