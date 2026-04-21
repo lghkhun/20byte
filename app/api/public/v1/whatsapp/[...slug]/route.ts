@@ -111,20 +111,6 @@ async function enforceRateLimit(input: {
   }
 }
 
-export function isSendEndpointPath(method: string, path: string): boolean {
-  if (method !== "POST") {
-    return false;
-  }
-  return [
-    "messages/send",
-    "messages/send-async",
-    "messages/send-media-url",
-    "messages/send-media-url-async",
-    "groups/messages/send",
-    "groups/messages/send-media-url"
-  ].includes(path);
-}
-
 async function handleRequest(method: string, request: NextRequest, slug: string[]): Promise<Response> {
   const auth = await authenticatePublicWhatsAppApiKey(request.headers.get("authorization"));
   const orgId = auth.orgId;
