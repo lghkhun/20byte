@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { isSendEndpointPath } from "@/app/api/public/v1/whatsapp/[...slug]/route";
+import { isSendEndpointPath } from "@/app/api/public/v1/whatsapp/routeGuards";
 import {
   assertPublicApiKeyHashMatch,
   isPrivateOrLocalIp,
