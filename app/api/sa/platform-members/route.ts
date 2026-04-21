@@ -2,6 +2,7 @@ import type { NextRequest } from "next/server";
 
 import { errorResponse, successResponse } from "@/lib/api/http";
 import { requireApiSession } from "@/lib/auth/middleware";
+import { parsePlatformMemberEnabled } from "@/app/api/sa/platform-members/routeGuards";
 import { requireSuperadmin } from "@/server/services/platformAccessService";
 import { upsertPlatformMember } from "@/server/services/superadminService";
 import { ServiceError } from "@/server/services/serviceError";
@@ -10,13 +11,6 @@ type PlatformMemberRequest = {
   userId?: unknown;
   enabled?: unknown;
 };
-
-export function parsePlatformMemberEnabled(value: unknown): boolean {
-  if (typeof value !== "boolean") {
-    throw new ServiceError(400, "INVALID_ENABLED", "enabled must be a boolean.");
-  }
-  return value;
-}
 
 export async function POST(request: NextRequest) {
   const auth = requireApiSession(request);
