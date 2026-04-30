@@ -4,6 +4,7 @@ import assert from "node:assert/strict";
 import { NextRequest } from "next/server";
 
 import { POST as pakasirWebhookPost } from "@/app/api/billing/webhooks/pakasir/route";
+import { POST as louvinWebhookPost } from "@/app/api/billing/webhooks/louvin/route";
 import { POST as setPasswordPost } from "@/app/api/auth/set-password/route";
 import { parseSuperadminSubscriptionAction } from "@/server/services/superadminService";
 
@@ -20,24 +21,39 @@ function jsonRequest(url: string, body: unknown, headers?: Record<string, string
   );
 }
 
-test("pakasir webhook rejects invalid token when webhook token is configured", async () => {
-  process.env.PAKASIR_PROJECT_SLUG = "demo";
-  process.env.PAKASIR_API_KEY = "demo-key";
-  process.env.PAKASIR_WEBHOOK_TOKEN = "expected-token";
+test("louvin webhook rejects invalid token when webhook token is configured", async () => {
+  process.env.LOUVIN_API_KEY = "lv_demo";
+  process.env.LOUVIN_WEBHOOK_TOKEN = "expected-token";
 
-  const response = await pakasirWebhookPost(
-    jsonRequest("http://localhost/api/billing/webhooks/pakasir", {
-      order_id: "ORD-1",
-      amount: 100980,
-      status: "completed"
+  const response = await louvinWebhookPost(
+    jsonRequest("http://localhost/api/billing/webhooks/louvin", {
+      event: "payment.settled",
+      data: {
+        order_id: "SUB-1",
+        amount: 100980,
+        status: "settled"
+      }
     }, {
-      "x-pakasir-token": "wrong-token"
+      "x-louvin-token": "wrong-token"
     })
   );
 
   assert.equal(response.status, 401);
   const payload = (await response.json()) as { error?: { code?: string } };
   assert.equal(payload.error?.code, "INVALID_WEBHOOK_TOKEN");
+});
+
+test("pakasir webhook route is deprecated and returns 410", async () => {
+  const response = await pakasirWebhookPost(
+    jsonRequest("http://localhost/api/billing/webhooks/pakasir", {
+      order_id: "SUB-1",
+      amount: 100980,
+      status: "completed"
+    })
+  );
+  assert.equal(response.status, 410);
+  const payload = (await response.json()) as { error?: { code?: string } };
+  assert.equal(payload.error?.code, "WEBHOOK_DEPRECATED");
 });
 
 test("set-password returns invalid json error for malformed payload", async () => {

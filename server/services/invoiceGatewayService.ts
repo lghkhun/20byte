@@ -10,7 +10,7 @@ import {
   type Prisma
 } from "@prisma/client";
 
-import { getPakasirConfig } from "@/lib/env";
+import { getLouvinConfig } from "@/lib/env";
 import { prisma } from "@/lib/db/prisma";
 import { acquireIdempotencyLock } from "@/lib/redis/idempotency";
 import { publishInvoicePaidEvent, publishInvoiceUpdatedEvent } from "@/lib/ably/publisher";
@@ -19,21 +19,16 @@ import { writeAuditLogSafe } from "@/server/services/auditLogService";
 import { resolvePrimaryOrganizationIdForUser } from "@/server/services/organizationService";
 import { ServiceError } from "@/server/services/serviceError";
 
-const DEFAULT_VA_FEE_CENTS = 4_000;
-const SPECIAL_VA_FEE_CENTS = 3_000;
+const DEFAULT_VA_FEE_CENTS = 6_500;
+const SPECIAL_VA_FEE_CENTS = 6_500;
 const DEFAULT_QRIS_FEE_BPS = 200;
 
-const SPECIAL_VA_METHODS = new Set(["artha_graha_va", "sampoerna_va"]);
+const SPECIAL_VA_METHODS = new Set<string>([]);
 
 export const INVOICE_VA_METHODS = [
   "cimb_niaga_va",
   "bni_va",
-  "sampoerna_va",
-  "bnc_va",
-  "maybank_va",
   "permata_va",
-  "atm_bersama_va",
-  "artha_graha_va",
   "bri_va"
 ] as const;
 
@@ -49,25 +44,36 @@ export type OrgInvoicePaymentSettings = {
   paymentMethodsOrder: string[];
 };
 
-type PakasirCreateResponse = {
+type LouvinCreateResponse = {
+  success?: boolean;
+  transaction?: {
+    id?: string;
+    amount?: number;
+    fee?: number;
+    net_amount?: number;
+    status?: string;
+    reference?: string;
+  };
   payment?: {
     order_id?: string;
     amount?: number;
     fee?: number;
-    total_payment?: number;
-    payment_method?: string;
     payment_number?: string;
     expired_at?: string;
+    va_number?: string;
+    qr_string?: string;
   };
 };
 
-type PakasirDetailResponse = {
+type LouvinDetailResponse = {
+  success?: boolean;
   transaction?: {
+    id?: string;
     amount?: number;
-    order_id?: string;
+    net_amount?: number;
+    reference?: string;
     status?: string;
-    payment_method?: string;
-    completed_at?: string;
+    updated_at?: string;
   };
 };
 
@@ -292,43 +298,37 @@ async function createPakasirTransaction(input: {
   amount: number;
   method: string;
 }) {
-  const config = getPakasirConfig();
-  const response = await fetch(`${config.baseUrl}/api/transactioncreate/${encodeURIComponent(input.method)}`, {
+  const config = getLouvinConfig();
+  const response = await fetch(`${config.baseUrl}/create-transaction`, {
     method: "POST",
     headers: {
-      "Content-Type": "application/json"
+      "Content-Type": "application/json",
+      "x-api-key": config.apiKey
     },
     body: JSON.stringify({
-      project: config.slug,
-      order_id: input.orderId,
       amount: input.amount,
-      api_key: config.apiKey
+      payment_type: input.method,
+      reference: input.orderId
     })
   });
 
-  const payload = (await response.json().catch(() => null)) as PakasirCreateResponse | null;
+  const payload = (await response.json().catch(() => null)) as LouvinCreateResponse | null;
   if (!response.ok || !payload?.payment?.order_id) {
-    throw new ServiceError(502, "PAKASIR_CREATE_FAILED", "Failed to create payment transaction.");
+    throw new ServiceError(502, "LOUVIN_CREATE_FAILED", "Failed to create payment transaction.");
   }
 
   return payload;
 }
 
 async function fetchPakasirTransactionDetail(input: { orderId: string; amount: number }) {
-  const config = getPakasirConfig();
-  const params = new URLSearchParams({
-    project: config.slug,
-    amount: String(input.amount),
-    order_id: input.orderId,
-    api_key: config.apiKey
-  });
-
-  const response = await fetch(`${config.baseUrl}/api/transactiondetail?${params.toString()}`, {
+  const config = getLouvinConfig();
+  const params = new URLSearchParams({ id: input.orderId });
+  const response = await fetch(`${config.baseUrl}/check-status?${params.toString()}`, {
     method: "GET"
   });
-  const payload = (await response.json().catch(() => null)) as PakasirDetailResponse | null;
+  const payload = (await response.json().catch(() => null)) as LouvinDetailResponse | null;
   if (!response.ok || !payload?.transaction) {
-    throw new ServiceError(502, "PAKASIR_DETAIL_FAILED", "Failed to verify payment transaction.");
+    throw new ServiceError(502, "LOUVIN_DETAIL_FAILED", "Failed to verify payment transaction.");
   }
 
   return payload;
@@ -537,7 +537,7 @@ export async function createPublicInvoicePaymentAttempt(input: {
         orgId: invoice.orgId,
         invoiceId: invoice.id,
         orderId,
-        provider: "pakasir",
+        provider: "louvin",
         paymentMethod: method,
         feePolicy: settings.feePolicy,
         invoiceAmountCents: invoice.totalCents,
@@ -583,7 +583,7 @@ export async function createPublicInvoicePaymentAttempt(input: {
 }
 
 function isCompletedStatus(status: string | undefined): boolean {
-  return normalize(status).toLowerCase() === "completed";
+  return normalize(status).toLowerCase() === "settled";
 }
 
 export async function processInvoicePakasirWebhook(payload: {
@@ -596,10 +596,10 @@ export async function processInvoicePakasirWebhook(payload: {
   const incomingStatus = typeof payload.status === "string" ? payload.status : "";
 
   if (!orderId || !incomingAmount || !incomingStatus) {
-    throw new ServiceError(400, "INVALID_WEBHOOK_PAYLOAD", "Invalid Pakasir webhook payload for invoice.");
+    throw new ServiceError(400, "INVALID_WEBHOOK_PAYLOAD", "Invalid Louvin webhook payload for invoice.");
   }
 
-  const replayLockKey = `idmp:pakasir:webhook:invoice:${orderId}:${incomingStatus}:${incomingAmount}`;
+  const replayLockKey = `idmp:louvin:webhook:invoice:${orderId}:${incomingStatus}:${incomingAmount}`;
   const lockAcquired = await acquireIdempotencyLock(replayLockKey, 60 * 60 * 24);
   if (!lockAcquired) {
     return { skipped: true, reason: "replay" as const };
@@ -653,7 +653,7 @@ export async function processInvoicePakasirWebhook(payload: {
     throw new ServiceError(400, "INVOICE_WEBHOOK_VERIFY_FAILED", "Webhook verification failed for invoice payment.");
   }
 
-  const paidAt = transaction?.completed_at ? new Date(transaction.completed_at) : new Date();
+  const paidAt = transaction?.updated_at ? new Date(transaction.updated_at) : new Date();
 
   const updated = await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
     const latestAttempt = await tx.invoicePaymentAttempt.findUnique({
@@ -785,7 +785,7 @@ export async function processInvoicePakasirWebhook(payload: {
 
   await writeAuditLogSafe({
     orgId: updated.orgId,
-    actorUserId: "system:pakasir-webhook",
+    actorUserId: "system:louvin-webhook",
     action: "invoice.gateway_paid",
     entityType: "invoice",
     entityId: updated.invoiceId,
@@ -1003,10 +1003,10 @@ export async function processTopupPakasirWebhook(payload: {
   const incomingStatus = typeof payload.status === "string" ? payload.status : "";
 
   if (!orderId || !incomingAmount || !incomingStatus) {
-    throw new ServiceError(400, "INVALID_WEBHOOK_PAYLOAD", "Invalid Pakasir webhook payload for topup.");
+    throw new ServiceError(400, "INVALID_WEBHOOK_PAYLOAD", "Invalid Louvin webhook payload for topup.");
   }
 
-  const replayLockKey = `idmp:pakasir:webhook:topup:${orderId}:${incomingStatus}:${incomingAmount}`;
+  const replayLockKey = `idmp:louvin:webhook:topup:${orderId}:${incomingStatus}:${incomingAmount}`;
   const lockAcquired = await acquireIdempotencyLock(replayLockKey, 60 * 60 * 24);
   if (!lockAcquired) {
     return { skipped: true, reason: "replay" as const };
@@ -1044,7 +1044,7 @@ export async function processTopupPakasirWebhook(payload: {
     throw new ServiceError(400, "TOPUP_WEBHOOK_VERIFY_FAILED", "Webhook verification failed for topup.");
   }
 
-  const paidAt = transaction?.completed_at ? new Date(transaction.completed_at) : new Date();
+  const paidAt = transaction?.updated_at ? new Date(transaction.updated_at) : new Date();
   const result = await prisma.$transaction(async (tx) => {
     const current = await tx.orgWalletTopup.findUnique({
       where: { orderId },
@@ -1098,7 +1098,7 @@ export async function processTopupPakasirWebhook(payload: {
         balanceAfterCents: nextBalance,
         referenceType: "wallet_topup",
         referenceId: current.id,
-        note: "Topup wallet via Pakasir"
+        note: "Topup wallet via Louvin"
       }
     });
 

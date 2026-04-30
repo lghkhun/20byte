@@ -25,6 +25,11 @@ type OptionalEnvKey =
   | "PAKASIR_DEFAULT_METHOD"
   | "PAKASIR_WEBHOOK_PATH"
   | "PAKASIR_WEBHOOK_TOKEN"
+  | "LOUVIN_API_KEY"
+  | "LOUVIN_BASE_URL"
+  | "LOUVIN_DEFAULT_METHOD"
+  | "LOUVIN_WEBHOOK_PATH"
+  | "LOUVIN_WEBHOOK_TOKEN"
   | "SUPERADMIN_EMAILS";
 
 export type AppEnv = Record<RequiredEnvKey, string> &
@@ -61,6 +66,11 @@ const OPTIONAL_ENV_KEYS: OptionalEnvKey[] = [
   "PAKASIR_DEFAULT_METHOD",
   "PAKASIR_WEBHOOK_PATH",
   "PAKASIR_WEBHOOK_TOKEN",
+  "LOUVIN_API_KEY",
+  "LOUVIN_BASE_URL",
+  "LOUVIN_DEFAULT_METHOD",
+  "LOUVIN_WEBHOOK_PATH",
+  "LOUVIN_WEBHOOK_TOKEN",
   "SUPERADMIN_EMAILS"
 ];
 
@@ -141,6 +151,34 @@ export function getPakasirConfig() {
 
   return {
     slug,
+    apiKey,
+    baseUrl: baseUrl.replace(/\/+$/, ""),
+    defaultMethod,
+    webhookPath,
+    webhookToken
+  };
+}
+
+export function getLouvinConfig() {
+  const normalizeLooseQuoted = (value: string | undefined): string => {
+    const trimmed = value?.trim() ?? "";
+    if (!trimmed) {
+      return "";
+    }
+    return trimmed.replace(/^['"]+|['"]+$/g, "");
+  };
+
+  const apiKey = normalizeLooseQuoted(process.env.LOUVIN_API_KEY);
+  const baseUrl = normalizeLooseQuoted(process.env.LOUVIN_BASE_URL) || "https://api.louvin.dev";
+  const defaultMethod = normalizeLooseQuoted(process.env.LOUVIN_DEFAULT_METHOD) || "qris";
+  const webhookPath = normalizeLooseQuoted(process.env.LOUVIN_WEBHOOK_PATH) || "/api/billing/webhooks/louvin";
+  const webhookToken = normalizeLooseQuoted(process.env.LOUVIN_WEBHOOK_TOKEN);
+
+  if (!apiKey) {
+    throw new Error("Missing required environment variable: LOUVIN_API_KEY");
+  }
+
+  return {
     apiKey,
     baseUrl: baseUrl.replace(/\/+$/, ""),
     defaultMethod,

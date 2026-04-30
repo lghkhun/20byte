@@ -66,15 +66,10 @@ type SettingsPayload = {
 };
 
 const VA_METHODS: Array<{ value: string; label: string; feeLabel: string; logoUrl?: string }> = [
-  { value: "cimb_niaga_va", label: "Virtual Account CIMB", feeLabel: "Rp4.000", logoUrl: "/logos/cimb.svg" },
-  { value: "bni_va", label: "Virtual Account BNI", feeLabel: "Rp4.000", logoUrl: "/logos/bni.svg" },
-  { value: "sampoerna_va", label: "Virtual Account Sampoerna", feeLabel: "Rp3.000", logoUrl: "/logos/sampoerna.svg" },
-  { value: "bnc_va", label: "Virtual Account BNC", feeLabel: "Rp4.000", logoUrl: "/logos/bnc.svg" },
-  { value: "maybank_va", label: "Virtual Account Maybank", feeLabel: "Rp4.000", logoUrl: "/logos/maybank.svg" },
-  { value: "permata_va", label: "Virtual Account Permata", feeLabel: "Rp4.000", logoUrl: "/logos/permata.svg" },
-  { value: "atm_bersama_va", label: "Virtual Account ATM Bersama", feeLabel: "Rp4.000", logoUrl: "/logos/atm_bersama.svg" },
-  { value: "artha_graha_va", label: "Virtual Account Artha Graha", feeLabel: "Rp3.000", logoUrl: "/logos/artha.svg" },
-  { value: "bri_va", label: "Virtual Account BRI", feeLabel: "Rp4.000", logoUrl: "/logos/bri.svg" }
+  { value: "cimb_niaga_va", label: "Virtual Account CIMB", feeLabel: "Rp6.500", logoUrl: "/logos/cimb.svg" },
+  { value: "bni_va", label: "Virtual Account BNI", feeLabel: "Rp6.500", logoUrl: "/logos/bni.svg" },
+  { value: "permata_va", label: "Virtual Account Permata", feeLabel: "Rp6.500", logoUrl: "/logos/permata.svg" },
+  { value: "bri_va", label: "Virtual Account BRI", feeLabel: "Rp6.500", logoUrl: "/logos/bri.svg" }
 ];
 
 export function InvoicePaymentMethodSettings() {

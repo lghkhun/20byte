@@ -528,20 +528,25 @@ export async function getSuperadminOverview() {
   let failedLast24h = 0;
   let replayLast24h = 0;
   for (const item of webhookLogs24h) {
-    if (item.action === "pakasir.webhook.received") {
+    if (item.action === "pakasir.webhook.received" || item.action === "louvin.webhook.received") {
       receivedLast24h += 1;
       webhookReceivedByOrder.set(item.targetId, (webhookReceivedByOrder.get(item.targetId) ?? 0) + 1);
       continue;
     }
-    if (item.action === "pakasir.webhook.completed") {
+    if (item.action === "pakasir.webhook.completed" || item.action === "louvin.webhook.completed") {
       completedLast24h += 1;
       continue;
     }
-    if (item.action === "pakasir.webhook.replay_skipped") {
+    if (item.action === "pakasir.webhook.replay_skipped" || item.action === "louvin.webhook.replay_skipped") {
       replayLast24h += 1;
       continue;
     }
-    if (item.action === "pakasir.webhook.verification_failed" || item.action === "pakasir.webhook.charge_not_found") {
+    if (
+      item.action === "pakasir.webhook.verification_failed" ||
+      item.action === "pakasir.webhook.charge_not_found" ||
+      item.action === "louvin.webhook.verification_failed" ||
+      item.action === "louvin.webhook.charge_not_found"
+    ) {
       failedLast24h += 1;
     }
   }

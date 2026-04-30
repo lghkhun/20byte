@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 
 import { BillingChargeStatus, Prisma, Role, SubscriptionStatus } from "@prisma/client";
 
-import { getPakasirConfig } from "@/lib/env";
+import { getLouvinConfig } from "@/lib/env";
 import { prisma } from "@/lib/db/prisma";
 import { acquireIdempotencyLock } from "@/lib/redis/idempotency";
 import { normalizeCheckoutCouponCode, resolveCouponForCheckout, type ResolvedCheckoutCoupon } from "@/server/services/platformCouponService";
@@ -14,7 +14,7 @@ const RENEWAL_DAYS = 28;
 const DEFAULT_BASE_AMOUNT_CENTS = 99_000;
 const DEFAULT_GATEWAY_FEE_BPS = 200;
 const DEFAULT_CURRENCY = "IDR";
-const WEBHOOK_ACTOR_USER_ID = "system:pakasir-webhook";
+const WEBHOOK_ACTOR_USER_ID = "system:louvin-webhook";
 const BUSINESS_PROVISIONING_ORDER_PREFIX = "BIZ";
 let lastProvisioningOrderTs = 0;
 let lastProvisioningOrderSeq = 0;
@@ -61,12 +61,12 @@ export type BillingPlanPricing = {
 
 async function writeWebhookAuditLog(input: {
   action:
-    | "pakasir.webhook.received"
-    | "pakasir.webhook.replay_skipped"
-    | "pakasir.webhook.charge_not_found"
-    | "pakasir.webhook.already_paid"
-    | "pakasir.webhook.verification_failed"
-    | "pakasir.webhook.completed";
+    | "louvin.webhook.received"
+    | "louvin.webhook.replay_skipped"
+    | "louvin.webhook.charge_not_found"
+    | "louvin.webhook.already_paid"
+    | "louvin.webhook.verification_failed"
+    | "louvin.webhook.completed";
   orderId: string;
   meta: Record<string, unknown>;
 }) {
@@ -89,13 +89,21 @@ type PakasirCreateResponse = {
   message?: string;
   status?: string | boolean;
   error?: string;
+  success?: boolean;
+  transaction?: {
+    id?: string;
+    amount?: number;
+    fee?: number;
+    net_amount?: number;
+    reference?: string;
+    status?: string;
+    updated_at?: string;
+  };
   payment?: {
-    project?: string;
     order_id?: string;
     amount?: number;
     fee?: number;
     total_payment?: number;
-    payment_method?: string;
     payment_number?: string;
     expired_at?: string;
   };
@@ -108,13 +116,14 @@ type PakasirPaymentPayload = {
 };
 
 type PakasirDetailResponse = {
+  success?: boolean;
   transaction?: {
+    id?: string;
     amount?: number;
-    order_id?: string;
-    project?: string;
+    net_amount?: number;
+    reference?: string;
     status?: string;
-    payment_method?: string;
-    completed_at?: string;
+    updated_at?: string;
   };
 };
 
@@ -700,17 +709,17 @@ async function createPakasirTransaction(input: {
   amount: number;
   method: string;
 }) {
-  const config = getPakasirConfig();
-  const response = await fetch(`${config.baseUrl}/api/transactioncreate/${encodeURIComponent(input.method)}`, {
+  const config = getLouvinConfig();
+  const response = await fetch(`${config.baseUrl}/create-transaction`, {
     method: "POST",
     headers: {
-      "Content-Type": "application/json"
+      "Content-Type": "application/json",
+      "x-api-key": config.apiKey
     },
     body: JSON.stringify({
-      project: config.slug,
-      order_id: input.orderId,
+      reference: input.orderId,
       amount: input.amount,
-      api_key: config.apiKey
+      payment_type: input.method
     })
   });
 
@@ -723,7 +732,7 @@ async function createPakasirTransaction(input: {
       payload: parsedPayload,
       rawBody
     });
-    const error = new ServiceError(502, "PAKASIR_CREATE_FAILED", message) as ServiceError & {
+    const error = new ServiceError(502, "LOUVIN_CREATE_FAILED", message) as ServiceError & {
       metaJson?: Record<string, unknown>;
     };
     error.metaJson = {
@@ -755,7 +764,7 @@ export async function createBillingCheckout(input: {
 
   await requireOrgOwner(input.actorUserId, orgId);
   const subscription = await getOrgSubscriptionOrThrow(orgId);
-  const config = getPakasirConfig();
+  const config = getLouvinConfig();
   const paymentMethod = normalizePaymentMethod(input.paymentMethod, config.defaultMethod);
   const planMonths = resolveBillingPlanMonths(input.planMonths);
   const selectedPlan = calculateBillingPlanPricing({
@@ -796,8 +805,8 @@ export async function createBillingCheckout(input: {
         gatewayFeeCents,
         totalAmountCents,
         paymentMethod,
-        gatewayProvider: "pakasir",
-        gatewayProjectSlug: config.slug,
+        gatewayProvider: "louvin",
+        gatewayProjectSlug: "louvin",
         gatewayRawJson: JSON.stringify({
           create: gatewayPayload,
           checkoutMeta: {
@@ -938,7 +947,7 @@ export async function createBusinessProvisioningCheckout(input: {
 }) {
   await requireAnyOwnedOrganization(input.actorUserId);
   const businessName = parseProvisioningBusinessName(input.businessName);
-  const config = getPakasirConfig();
+  const config = getLouvinConfig();
   const paymentMethod = normalizePaymentMethod(input.paymentMethod, config.defaultMethod);
   const planMonths = resolveBillingPlanMonths(input.planMonths);
   const selectedPlan = calculateBillingPlanPricing({
@@ -968,7 +977,7 @@ export async function createBusinessProvisioningCheckout(input: {
       await prisma.platformAuditLog.create({
         data: {
           actorUserId: input.actorUserId,
-          action: "pakasir.provisioning.checkout_failed",
+          action: "louvin.provisioning.checkout_failed",
           targetType: "business_provisioning",
           targetId: orderId,
           metaJson: JSON.stringify({
@@ -1003,8 +1012,8 @@ export async function createBusinessProvisioningCheckout(input: {
         gatewayFeeCents: selectedPlan.gatewayFeeCents,
         totalAmountCents: finalTotalAmountCents,
         paymentMethod,
-        gatewayProvider: "pakasir",
-        gatewayProjectSlug: config.slug,
+        gatewayProvider: "louvin",
+        gatewayProjectSlug: "louvin",
         gatewayRawJson: JSON.stringify({
           create: gatewayPayload,
           checkoutMeta: {
@@ -1106,20 +1115,14 @@ async function fetchPakasirTransactionDetail(input: {
   orderId: string;
   amount: number;
 }): Promise<PakasirDetailResponse> {
-  const config = getPakasirConfig();
-  const params = new URLSearchParams({
-    project: config.slug,
-    amount: String(input.amount),
-    order_id: input.orderId,
-    api_key: config.apiKey
-  });
-
-  const response = await fetch(`${config.baseUrl}/api/transactiondetail?${params.toString()}`, {
+  const config = getLouvinConfig();
+  const params = new URLSearchParams({ id: input.orderId });
+  const response = await fetch(`${config.baseUrl}/check-status?${params.toString()}`, {
     method: "GET"
   });
   const payload = (await response.json().catch(() => null)) as PakasirDetailResponse | null;
   if (!response.ok || !payload?.transaction) {
-    throw new ServiceError(502, "PAKASIR_DETAIL_FAILED", "Failed to verify payment transaction.");
+    throw new ServiceError(502, "LOUVIN_DETAIL_FAILED", "Failed to verify payment transaction.");
   }
 
   return payload;
@@ -1208,12 +1211,12 @@ async function completeBusinessProvisioningOrder(input: {
     amount: input.amount
   });
   const transaction = detail.transaction;
-  const isCompleted = transaction?.status?.toLowerCase() === "completed";
+  const isCompleted = transaction?.status?.toLowerCase() === "settled";
   const isAmountMatch = Number(transaction?.amount) === order.totalAmountCents;
 
   if (!isCompleted || !isAmountMatch) {
     await writeWebhookAuditLog({
-      action: "pakasir.webhook.verification_failed",
+      action: "louvin.webhook.verification_failed",
       orderId: input.orderId,
       meta: {
         amount: input.amount,
@@ -1227,7 +1230,7 @@ async function completeBusinessProvisioningOrder(input: {
     throw new ServiceError(400, "PAYMENT_VERIFICATION_FAILED", "Payment verification failed.");
   }
 
-  const paidAt = transaction?.completed_at ? new Date(transaction.completed_at) : new Date();
+  const paidAt = transaction?.updated_at ? new Date(transaction.updated_at) : new Date();
   const existingGatewayRaw = parseGatewayRawAsRecord(order.gatewayRawJson);
   const createPayload = existingGatewayRaw?.create ?? existingGatewayRaw ?? null;
   const checkoutMeta = extractNestedObjectField(existingGatewayRaw, "checkoutMeta");
@@ -1291,7 +1294,7 @@ async function completeBusinessProvisioningOrder(input: {
   }
 
   await writeWebhookAuditLog({
-    action: "pakasir.webhook.completed",
+    action: "louvin.webhook.completed",
     orderId: input.orderId,
     meta: {
       amount: input.amount,
@@ -1315,11 +1318,11 @@ export async function processPakasirWebhook(input: {
   const status = typeof input.status === "string" ? input.status.toLowerCase() : "";
 
   if (!orderId || !Number.isFinite(amount) || amount <= 0 || !status) {
-    throw new ServiceError(400, "INVALID_WEBHOOK_PAYLOAD", "Invalid Pakasir webhook payload.");
+    throw new ServiceError(400, "INVALID_WEBHOOK_PAYLOAD", "Invalid Louvin webhook payload.");
   }
 
   await writeWebhookAuditLog({
-    action: "pakasir.webhook.received",
+    action: "louvin.webhook.received",
     orderId,
     meta: {
       amount,
@@ -1327,11 +1330,11 @@ export async function processPakasirWebhook(input: {
     }
   });
 
-  const replayLockKey = `idmp:pakasir:webhook:${orderId}:${status}:${amount}`;
+  const replayLockKey = `idmp:louvin:webhook:${orderId}:${status}:${amount}`;
   const lockAcquired = await acquireIdempotencyLock(replayLockKey, 60 * 60 * 24);
   if (!lockAcquired) {
     await writeWebhookAuditLog({
-      action: "pakasir.webhook.replay_skipped",
+      action: "louvin.webhook.replay_skipped",
       orderId,
       meta: {
         amount,
@@ -1357,7 +1360,7 @@ export async function processPakasirWebhook(input: {
     }
 
     await writeWebhookAuditLog({
-      action: "pakasir.webhook.charge_not_found",
+      action: "louvin.webhook.charge_not_found",
       orderId,
       meta: {
         amount,
@@ -1369,7 +1372,7 @@ export async function processPakasirWebhook(input: {
 
   if (charge.status === BillingChargeStatus.PAID) {
     await writeWebhookAuditLog({
-      action: "pakasir.webhook.already_paid",
+      action: "louvin.webhook.already_paid",
       orderId,
       meta: {
         amount,
@@ -1382,12 +1385,12 @@ export async function processPakasirWebhook(input: {
 
   const detail = await fetchPakasirTransactionDetail({ orderId, amount });
   const transaction = detail.transaction;
-  const isCompleted = transaction?.status?.toLowerCase() === "completed";
+  const isCompleted = transaction?.status?.toLowerCase() === "settled";
   const isAmountMatch = Number(transaction?.amount) === charge.totalAmountCents;
 
   if (!isCompleted || !isAmountMatch) {
     await writeWebhookAuditLog({
-      action: "pakasir.webhook.verification_failed",
+      action: "louvin.webhook.verification_failed",
       orderId,
       meta: {
         amount,
@@ -1401,7 +1404,7 @@ export async function processPakasirWebhook(input: {
     throw new ServiceError(400, "PAYMENT_VERIFICATION_FAILED", "Payment verification failed.");
   }
 
-  const paidAt = transaction?.completed_at ? new Date(transaction.completed_at) : new Date();
+  const paidAt = transaction?.updated_at ? new Date(transaction.updated_at) : new Date();
   const existingGatewayRaw = parseGatewayRawAsRecord(charge.gatewayRawJson);
   const createPayload = existingGatewayRaw?.create ?? existingGatewayRaw ?? null;
   const checkoutMeta = extractNestedObjectField(existingGatewayRaw, "checkoutMeta");
@@ -1423,7 +1426,7 @@ export async function processPakasirWebhook(input: {
   await activateSubscriptionFromPaidCharge(charge.orgId, paidAt, renewalDays);
 
   await writeWebhookAuditLog({
-    action: "pakasir.webhook.completed",
+    action: "louvin.webhook.completed",
     orderId,
     meta: {
       amount,
