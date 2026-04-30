@@ -67,10 +67,31 @@ type SettingsPayload = {
 
 const VA_METHODS: Array<{ value: string; label: string; feeLabel: string; logoUrl?: string }> = [
   { value: "cimb_niaga_va", label: "Virtual Account CIMB", feeLabel: "Rp6.500", logoUrl: "/logos/cimb.svg" },
-  { value: "bni_va", label: "Virtual Account BNI", feeLabel: "Rp6.500", logoUrl: "/logos/bni.svg" },
-  { value: "permata_va", label: "Virtual Account Permata", feeLabel: "Rp6.500", logoUrl: "/logos/permata.svg" },
-  { value: "bri_va", label: "Virtual Account BRI", feeLabel: "Rp6.500", logoUrl: "/logos/bri.svg" }
+  { value: "bni_va", label: "Virtual Account BNI", feeLabel: "Rp6.500", logoUrl: "/logos/bni.png" },
+  { value: "permata_va", label: "Virtual Account Permata", feeLabel: "Rp6.500", logoUrl: "/logos/permata.png" },
+  { value: "bri_va", label: "Virtual Account BRI", feeLabel: "Rp6.500", logoUrl: "/logos/bri.png" }
 ];
+
+const getBankLogoUrl = (bankValue: string): string | undefined => {
+  const logos: Record<string, string> = {
+    bni: "/logos/bni.png",
+    bri: "/logos/bri.png",
+    permata: "/logos/permata.png",
+    cimb: "/logos/cimb.svg",
+    mandiri: "/logos/mandiri.svg",
+    bca: "/logos/bca.svg",
+    bsi: "/logos/bsi.svg",
+    danamon: "/logos/danamon.svg",
+    btn: "/logos/btn.svg",
+    mega: "/logos/mega.png",
+    maybank: "/logos/maybank.png",
+    dki: "/logos/dki.svg",
+    sampoerna: "/logos/sampoerna.svg",
+    bnc: "/logos/bnc.svg",
+    artha: "/logos/artha.svg"
+  };
+  return logos[bankValue.toLowerCase()] || undefined;
+};
 
 export function InvoicePaymentMethodSettings() {
   const [enableBankTransfer, setEnableBankTransfer] = useState(true);
@@ -211,7 +232,7 @@ export function InvoicePaymentMethodSettings() {
       rows.push({
         id: `bank_${bank.id}`,
         label: `Bank Transfer ${bank.bankName.toUpperCase()}`,
-        logoUrl: `/logos/${bank.bankName.toLowerCase()}.svg`,
+        logoUrl: getBankLogoUrl(bank.bankName),
         autoConfirm: false
       });
     }
@@ -292,8 +313,12 @@ export function InvoicePaymentMethodSettings() {
                   {bankAccounts.map((account) => (
                     <TableRow key={account.id} className="group">
                       <TableCell className="pl-5">
-                         <div className="h-8 w-14 rounded border border-border/60 bg-white flex items-center justify-center p-1 font-bold text-[10px] text-muted-foreground uppercase overflow-hidden">
-                           {account.bankName}
+                         <div className="h-8 w-14 rounded-md border border-slate-200/60 dark:border-white/10 bg-white flex items-center justify-center p-1.5 font-bold text-[10px] text-slate-500 uppercase overflow-hidden shadow-sm">
+                           {getBankLogoUrl(account.bankName) ? (
+                              <Image src={`${getBankLogoUrl(account.bankName)}?v=2`} alt={account.bankName} width={40} height={20} unoptimized className="w-full h-full object-contain" />
+                           ) : (
+                              account.bankName
+                           )}
                          </div>
                       </TableCell>
                       <TableCell className="font-semibold text-foreground text-sm">Bank Transfer {account.bankName.toUpperCase()}</TableCell>
@@ -329,7 +354,7 @@ export function InvoicePaymentMethodSettings() {
                 <TableBody>
                   <TableRow>
                      <TableCell className="pl-5">
-                       <div className="h-8 w-14 rounded border border-border/60 bg-white flex items-center justify-center p-1 font-bold text-xs text-blue-600">
+                       <div className="h-8 w-14 rounded-md border border-slate-200/60 dark:border-white/10 bg-white flex items-center justify-center p-1.5 font-bold text-xs text-blue-600 shadow-sm">
                          <Image src="/logos/qris.svg?v=2" alt="QRIS" width={40} height={20} unoptimized className="w-full h-full object-contain" />
                        </div>
                      </TableCell>
@@ -344,7 +369,7 @@ export function InvoicePaymentMethodSettings() {
                   {VA_METHODS.map((method) => (
                     <TableRow key={method.value}>
                       <TableCell className="pl-5">
-                         <div className="h-8 w-14 rounded border border-border/60 bg-white flex items-center justify-center p-1.5 font-bold text-[10px] text-muted-foreground uppercase overflow-hidden">
+                         <div className="h-8 w-14 rounded-md border border-slate-200/60 dark:border-white/10 bg-white flex items-center justify-center p-1.5 font-bold text-[10px] text-slate-500 uppercase overflow-hidden shadow-sm">
                            {method.logoUrl ? (
                               <Image src={`${method.logoUrl}?v=2`} alt={method.label} width={40} height={20} unoptimized className="w-full h-full object-contain" />
                            ) : (
@@ -396,7 +421,7 @@ export function InvoicePaymentMethodSettings() {
                         <div className="flex h-5 w-5 items-center justify-center rounded-full border-2 border-orange-500">
                            <div className="h-2.5 w-2.5 rounded-full bg-orange-500" />
                         </div>
-                        <div className="h-6 w-10 flex-shrink-0 rounded border border-border/40 bg-white flex items-center justify-center p-1 font-bold text-[8px] text-muted-foreground uppercase">
+                        <div className="h-8 w-14 flex-shrink-0 rounded-md border border-slate-200/60 dark:border-white/10 bg-white flex items-center justify-center p-1.5 font-bold text-[10px] text-slate-500 uppercase shadow-sm">
                            {item.logoUrl ? (
                               <Image src={`${item.logoUrl}?v=2`} alt={item.label} width={40} height={20} unoptimized className="w-full h-full object-contain" />
                            ) : (

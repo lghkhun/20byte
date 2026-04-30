@@ -174,13 +174,13 @@ export function ConversationListPanel({
         </div>
 
         {/* Filter tabs */}
-        <div className="flex items-center gap-1 rounded-xl border border-border/60 bg-muted/30 p-1">
+        <div className="flex items-center gap-1 rounded-xl border border-border/60 bg-muted/30 p-1 overflow-x-auto [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]">
           {tabItems.map((item) => (
             <button
               key={item.key}
               type="button"
               onClick={item.onClick}
-              className={`flex flex-1 items-center justify-center gap-1.5 rounded-lg py-1.5 text-[12px] font-semibold transition-all active:scale-95 ${
+              className={`flex flex-1 shrink-0 whitespace-nowrap items-center justify-center gap-1.5 rounded-lg px-3 py-1.5 text-[12px] font-semibold transition-all active:scale-95 ${
                 item.isActive
                   ? "bg-background text-emerald-600 shadow-sm dark:text-emerald-400"
                   : "text-muted-foreground hover:text-foreground"

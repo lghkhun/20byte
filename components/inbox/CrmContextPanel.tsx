@@ -10,7 +10,9 @@ import {
   NotebookPen,
   Workflow,
   X,
-  Trash2
+  Trash2,
+  LayoutGrid,
+  List
 } from "lucide-react";
 
 import { ActivityTimelineSection } from "@/components/inbox/crm/ActivityTimelineSection";
@@ -216,6 +218,11 @@ export function CrmContextPanel({
   const [leadSettingsError, setLeadSettingsError] = useState<string | null>(null);
   const [isSavingLeadSettings, setIsSavingLeadSettings] = useState(false);
   const [avatarError, setAvatarError] = useState(false);
+  
+  const [isAllMediaModalOpen, setIsAllMediaModalOpen] = useState(false);
+  const [allMediaActiveTab, setAllMediaActiveTab] = useState<"media" | "documents" | "links">("media");
+  const [allMediaViewMode, setAllMediaViewMode] = useState<"grid" | "list">("grid");
+
   const assignModalContainerRef = useRef<HTMLDivElement | null>(null);
   const assignModalCloseButtonRef = useRef<HTMLButtonElement | null>(null);
   const cachedCustomerAvatarUrl = useLocalImageCache(conversation?.customerAvatarUrl, {
@@ -977,7 +984,7 @@ export function CrmContextPanel({
               </div>
             ) : (
               <div className="grid grid-cols-2 gap-2">
-                {mediaOnlyItems.map((item) => (
+                {mediaOnlyItems.slice(0, 6).map((item) => (
                   <button
                     key={item.id}
                     type="button"
@@ -1030,7 +1037,7 @@ export function CrmContextPanel({
               </div>
             ) : (
               <div className="grid grid-cols-2 gap-2">
-                {documentItems.map((item) => (
+                {documentItems.slice(0, 6).map((item) => (
                   <button
                     key={item.id}
                     type="button"
@@ -1063,7 +1070,7 @@ export function CrmContextPanel({
               </div>
             ) : (
               <div className="grid grid-cols-1 gap-2">
-                {links.map((link) => (
+                {links.slice(0, 4).map((link) => (
                   <button
                     key={link}
                     type="button"
@@ -1087,6 +1094,22 @@ export function CrmContextPanel({
               </div>
             )
           ) : null}
+
+          {((activeMediaTab === "media" && mediaOnlyItems.length > 6) ||
+            (activeMediaTab === "documents" && documentItems.length > 6) ||
+            (activeMediaTab === "links" && links.length > 4)) && (
+            <Button
+              type="button"
+              variant="outline"
+              className="w-full h-8 mt-2 text-xs font-semibold shadow-sm"
+              onClick={() => {
+                setAllMediaActiveTab(activeMediaTab);
+                setIsAllMediaModalOpen(true);
+              }}
+            >
+              Lihat Lainnya
+            </Button>
+          )}
         </div>
       </AccordionCard>
 
@@ -1180,6 +1203,134 @@ export function CrmContextPanel({
               >
                 {isSavingAssignment ? "Saving..." : "Assign"}
               </Button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {isAllMediaModalOpen ? (
+        <div
+          className="fixed inset-0 z-[80] flex items-center justify-center bg-black/65 p-4 backdrop-blur-sm"
+          role="dialog"
+          aria-modal="true"
+        >
+          <div className="flex h-full max-h-[85vh] w-full max-w-3xl flex-col rounded-[24px] border border-border/80 bg-card shadow-2xl">
+            <div className="flex shrink-0 items-center justify-between border-b border-border/70 p-5">
+              <div>
+                <h3 className="text-lg font-bold text-foreground">Semua Media, Dokumen & Tautan</h3>
+                <p className="text-[13px] text-muted-foreground">Kelola semua file dan tautan dalam percakapan ini.</p>
+              </div>
+              <div className="flex items-center gap-3">
+                <div className="flex items-center gap-1 rounded-lg border border-border/70 bg-muted/30 p-1">
+                   <button onClick={() => setAllMediaViewMode("grid")} className={`rounded p-1.5 transition-colors ${allMediaViewMode === "grid" ? "bg-background text-primary shadow-sm" : "text-muted-foreground hover:bg-muted"}`} title="Grid View"><LayoutGrid className="h-4 w-4" /></button>
+                   <button onClick={() => setAllMediaViewMode("list")} className={`rounded p-1.5 transition-colors ${allMediaViewMode === "list" ? "bg-background text-primary shadow-sm" : "text-muted-foreground hover:bg-muted"}`} title="List View"><List className="h-4 w-4" /></button>
+                </div>
+                <Button type="button" variant="ghost" size="icon" className="rounded-full bg-muted/50 hover:bg-muted" onClick={() => setIsAllMediaModalOpen(false)}>
+                  <X className="h-5 w-5" />
+                </Button>
+              </div>
+            </div>
+
+            <div className="flex flex-1 flex-col overflow-hidden">
+              <div className="shrink-0 border-b border-border/50 px-5 pt-3">
+                <div className="flex gap-6">
+                   <button className={`pb-3 text-sm font-semibold transition-colors ${allMediaActiveTab === "media" ? "border-b-2 border-primary text-primary" : "border-b-2 border-transparent text-muted-foreground hover:text-foreground"}`} onClick={() => setAllMediaActiveTab("media")}>Media ({mediaOnlyItems.length})</button>
+                   <button className={`pb-3 text-sm font-semibold transition-colors ${allMediaActiveTab === "documents" ? "border-b-2 border-primary text-primary" : "border-b-2 border-transparent text-muted-foreground hover:text-foreground"}`} onClick={() => setAllMediaActiveTab("documents")}>Dokumen ({documentItems.length})</button>
+                   <button className={`pb-3 text-sm font-semibold transition-colors ${allMediaActiveTab === "links" ? "border-b-2 border-primary text-primary" : "border-b-2 border-transparent text-muted-foreground hover:text-foreground"}`} onClick={() => setAllMediaActiveTab("links")}>Tautan ({links.length})</button>
+                </div>
+              </div>
+
+              <div className="flex-1 overflow-y-auto p-5">
+                {allMediaActiveTab === "media" && (
+                  mediaOnlyItems.length === 0 ? (
+                    <div className="py-10 text-center text-sm text-muted-foreground">Tidak ada media.</div>
+                  ) : (
+                    <div className={allMediaViewMode === "grid" ? "grid grid-cols-2 gap-4 sm:grid-cols-4" : "flex flex-col gap-3"}>
+                      {mediaOnlyItems.map(item => (
+                        <button
+                          key={item.id}
+                          type="button"
+                          className={allMediaViewMode === "grid" ? "group overflow-hidden rounded-xl border border-border/80 bg-background text-left hover:bg-accent/30" : "group flex items-center gap-4 rounded-xl border border-border/80 bg-background p-3 text-left hover:bg-accent/30"}
+                          onClick={() => {
+                            setPreviewMediaUrl(item.safeMediaUrl ?? null);
+                            setPreviewMediaType(item.type === "VIDEO" ? "VIDEO" : "IMAGE");
+                            setPreviewMediaTitle(item.fileName ?? `${item.type} attachment`);
+                          }}
+                        >
+                          <div className={allMediaViewMode === "grid" ? "relative aspect-[4/3] bg-muted/40" : "relative h-14 w-14 shrink-0 overflow-hidden rounded-lg bg-muted/40"}>
+                            {item.type === "IMAGE" ? (
+                              <img src={item.safeMediaUrl ?? ""} alt={item.fileName ?? "media"} className="h-full w-full object-cover transition group-hover:scale-[1.02]" loading="lazy" referrerPolicy="no-referrer" onError={(e) => { e.currentTarget.style.display = "none"; }} />
+                            ) : (
+                              <video src={item.safeMediaUrl ?? ""} className="h-full w-full object-cover" muted />
+                            )}
+                          </div>
+                          <div className={allMediaViewMode === "grid" ? "p-3" : "flex-1 min-w-0"}>
+                            <p className="truncate text-sm font-medium text-foreground">{item.fileName ?? `${item.type} attachment`}</p>
+                            <p className="mt-1 text-xs text-muted-foreground">{formatDateTime(item.createdAt)}</p>
+                          </div>
+                        </button>
+                      ))}
+                    </div>
+                  )
+                )}
+
+                {allMediaActiveTab === "documents" && (
+                  documentItems.length === 0 ? (
+                    <div className="py-10 text-center text-sm text-muted-foreground">Tidak ada dokumen.</div>
+                  ) : (
+                    <div className={allMediaViewMode === "grid" ? "grid grid-cols-2 gap-4 sm:grid-cols-3" : "flex flex-col gap-3"}>
+                      {documentItems.map(item => (
+                        <button
+                          key={item.id}
+                          type="button"
+                          className={allMediaViewMode === "grid" ? "rounded-xl border border-border/80 bg-background p-4 text-left hover:bg-accent/30" : "flex items-center gap-4 rounded-xl border border-border/80 bg-background p-3 text-left hover:bg-accent/30"}
+                          onClick={() => {
+                            setPreviewMediaUrl(item.safeMediaUrl ?? null);
+                            setPreviewMediaType("DOCUMENT");
+                            setPreviewMediaTitle(item.fileName ?? "Document");
+                          }}
+                        >
+                          <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-lg bg-muted/70 text-muted-foreground">
+                            <FileText className="h-6 w-6" />
+                          </div>
+                          <div className={allMediaViewMode === "grid" ? "mt-3" : "flex-1 min-w-0"}>
+                             <p className="line-clamp-2 text-sm font-medium text-foreground">{item.fileName ?? "Document"}</p>
+                             <p className="mt-1 text-xs text-muted-foreground">{formatDateTime(item.createdAt)}</p>
+                          </div>
+                        </button>
+                      ))}
+                    </div>
+                  )
+                )}
+
+                {allMediaActiveTab === "links" && (
+                  links.length === 0 ? (
+                    <div className="py-10 text-center text-sm text-muted-foreground">Tidak ada tautan.</div>
+                  ) : (
+                    <div className={allMediaViewMode === "grid" ? "grid grid-cols-1 gap-3 sm:grid-cols-2" : "flex flex-col gap-3"}>
+                      {links.map(link => (
+                         <button
+                           key={link}
+                           type="button"
+                           className="flex items-center gap-3 rounded-xl border border-border/80 bg-background p-4 text-left hover:bg-accent/30"
+                           onClick={() => {
+                              setPreviewMediaUrl(link);
+                              setPreviewMediaType("LINK");
+                              setPreviewMediaTitle(link);
+                           }}
+                         >
+                           <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-muted/70 text-muted-foreground">
+                             <Link2 className="h-5 w-5" />
+                           </div>
+                           <span className="line-clamp-2 break-all text-sm text-primary underline underline-offset-2">
+                             {link}
+                           </span>
+                         </button>
+                      ))}
+                    </div>
+                  )
+                )}
+              </div>
             </div>
           </div>
         </div>
