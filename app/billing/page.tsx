@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { CreditCard, History } from "lucide-react";
 import { fetchJsonCached, invalidateFetchCache } from "@/lib/client/fetchCache";
+import { resolveCheckoutPaymentMethod } from "@/lib/payment/checkoutFallback";
 
 type PricingPlan = {
   months: 1 | 3 | 12;
@@ -220,7 +221,13 @@ export default function BillingPage() {
       const latestPending = chargeItems.find((charge) => charge.status === "PENDING" && charge.paymentNumber);
       if (latestPending && hasNotExpired(latestPending.expiredAt)) {
         setPaymentNumber(latestPending.paymentNumber);
-        setPaymentMethod(latestPending.paymentMethod);
+        setPaymentMethod(
+          resolveCheckoutPaymentMethod({
+            paymentMethod: latestPending.paymentMethod,
+            paymentNumber: latestPending.paymentNumber,
+            fallbackMethod: "qris"
+          })
+        );
         setPaymentTotalCents(latestPending.payableAmountCents ?? latestPending.totalAmountCents);
         setPaymentProviderFeeCents(latestPending.providerFeeCents ?? null);
         setPaymentExpiresAt(latestPending.expiredAt);
@@ -254,7 +261,12 @@ export default function BillingPage() {
     planOptions[0] ??
     null;
   const status = subscriptionPayload?.subscription?.status ?? "-";
-  const isQrisPayment = (paymentMethod ?? "").toLowerCase() === "qris";
+  const isQrisPayment =
+    resolveCheckoutPaymentMethod({
+      paymentMethod,
+      paymentNumber,
+      fallbackMethod: "qris"
+    }) === "qris";
 
   useEffect(() => {
     if (!planOptions.length) {
@@ -322,7 +334,13 @@ export default function BillingPage() {
 
       if (!paymentNumber) {
         setPaymentNumber(parsed.paymentNumber);
-        setPaymentMethod(parsed.paymentMethod);
+        setPaymentMethod(
+          resolveCheckoutPaymentMethod({
+            paymentMethod: parsed.paymentMethod,
+            paymentNumber: parsed.paymentNumber,
+            fallbackMethod: "qris"
+          })
+        );
         setPaymentTotalCents(parsed.totalAmountCents);
         setPaymentProviderFeeCents(parsed.providerFeeCents ?? null);
         setPaymentExpiresAt(parsed.expiredAt);
@@ -395,7 +413,11 @@ export default function BillingPage() {
       }
 
       setPaymentNumber(payload?.data?.payment?.payment_number ?? null);
-      const nextPaymentMethod = payload?.data?.payment?.payment_method ?? null;
+      const nextPaymentMethod = resolveCheckoutPaymentMethod({
+        paymentMethod: payload?.data?.payment?.payment_method ?? null,
+        paymentNumber: payload?.data?.payment?.payment_number ?? null,
+        fallbackMethod: "qris"
+      });
       setPaymentMethod(nextPaymentMethod);
       setPaymentTotalCents(
         payload?.data?.paymentSummary?.payableAmountCents ??

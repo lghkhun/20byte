@@ -17,6 +17,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
 import { invalidateOrganizationsCache } from "@/lib/client/orgsCache";
+import { resolveCheckoutPaymentMethod } from "@/lib/payment/checkoutFallback";
 
 type OrgSummary = {
   id: string;
@@ -202,7 +203,12 @@ export function BusinessSwitcher({
     [planOptions, selectedPlanMonths]
   );
 
-  const isQris = (paymentMethod ?? "").toLowerCase() === "qris";
+  const isQris =
+    resolveCheckoutPaymentMethod({
+      paymentMethod,
+      paymentNumber,
+      fallbackMethod: "qris"
+    }) === "qris";
 
   async function loadOrganizations() {
     setIsLoading(true);
@@ -458,7 +464,13 @@ export function BusinessSwitcher({
 
       setOrderId(payload?.data?.order?.id ?? null);
       setPaymentNumber(payload?.data?.payment?.payment_number ?? null);
-      setPaymentMethod(payload?.data?.payment?.payment_method ?? "qris");
+      setPaymentMethod(
+        resolveCheckoutPaymentMethod({
+          paymentMethod: payload?.data?.payment?.payment_method ?? null,
+          paymentNumber: payload?.data?.payment?.payment_number ?? null,
+          fallbackMethod: "qris"
+        }) ?? "qris"
+      );
       setPaymentExpiresAt(payload?.data?.payment?.expired_at ?? null);
       setPaymentTotalCents(
         payload?.data?.paymentSummary?.payableAmountCents ??
@@ -681,7 +693,11 @@ export function BusinessSwitcher({
                 </div>
               ) : (
                 <div className="flex h-[280px] w-[280px] items-center justify-center rounded-[20px] border border-dashed border-border/50 bg-muted/20 dark:bg-muted/10">
-                  <p className="text-[13px] font-medium text-muted-foreground text-center px-6">Menyiapkan QR pembayaran...</p>
+                  {paymentNumber ? (
+                    <p className="break-all px-6 text-center text-[12px] font-medium text-foreground">{paymentNumber}</p>
+                  ) : (
+                    <p className="px-6 text-center text-[13px] font-medium text-muted-foreground">Menyiapkan QR pembayaran...</p>
+                  )}
                 </div>
               )}
             </div>

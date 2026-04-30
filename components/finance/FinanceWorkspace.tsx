@@ -1,9 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import Image from "next/image";
-import { ArrowDownToLine, Plus, Wallet } from "lucide-react";
-import QRCode from "qrcode";
+import { ArrowDownToLine, Wallet } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -115,24 +113,6 @@ function formatDate(value: string | null): string {
   }).format(date);
 }
 
-function formatCountdown(value: string | null | undefined, nowMs: number): string {
-  if (!value) {
-    return "-";
-  }
-  const expiresAtMs = new Date(value).getTime();
-  if (!Number.isFinite(expiresAtMs)) {
-    return "-";
-  }
-  const remainingMs = Math.max(0, expiresAtMs - nowMs);
-  const totalSeconds = Math.floor(remainingMs / 1000);
-  const hours = Math.floor(totalSeconds / 3600);
-  const minutes = Math.floor((totalSeconds % 3600) / 60);
-  const seconds = totalSeconds % 60;
-  return `${hours.toString().padStart(2, "0")}:${minutes.toString().padStart(2, "0")}:${seconds
-    .toString()
-    .padStart(2, "0")}`;
-}
-
 function normalizeMethod(value: string): string {
   return value.replace(/_/g, " ").toUpperCase();
 }
@@ -158,7 +138,6 @@ export function FinanceWorkspace() {
       setWithdrawAmount(balanceCents.toString());
     }
   }, [showWithdrawDialog, balanceCents]);
-  const [nowMs, setNowMs] = useState(Date.now());
 
   const loadData = useCallback(async () => {
     setIsLoading(true);

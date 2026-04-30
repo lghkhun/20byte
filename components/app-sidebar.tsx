@@ -24,6 +24,7 @@ import {
   SidebarRail
 } from "@/components/ui/sidebar";
 import { fetchJsonCached, invalidateFetchCache } from "@/lib/client/fetchCache";
+import { resolveCheckoutPaymentMethod } from "@/lib/payment/checkoutFallback";
 import { dismissNotify, notifyLoading } from "@/lib/ui/notify";
 import type { OwnerOnboardingStatus } from "@/server/services/onboardingService";
 
@@ -302,7 +303,12 @@ export function AppSidebar({ user, ownerOnboardingStatus = null }: AppSidebarPro
   );
 
   const isOwnerRole = user?.primaryOrgRole === "OWNER";
-  const isQrisPayment = (checkoutPaymentMethod ?? "").toLowerCase() === "qris";
+  const isQrisPayment =
+    resolveCheckoutPaymentMethod({
+      paymentMethod: checkoutPaymentMethod,
+      paymentNumber: checkoutPaymentNumber,
+      fallbackMethod: "qris"
+    }) === "qris";
 
   useEffect(() => {
     if (!user || !isOwnerRole) {
@@ -460,7 +466,13 @@ export function AppSidebar({ user, ownerOnboardingStatus = null }: AppSidebarPro
     expiredAt: string | null;
   }) {
     setCheckoutPaymentNumber(input.paymentNumber);
-    setCheckoutPaymentMethod(input.paymentMethod);
+    setCheckoutPaymentMethod(
+      resolveCheckoutPaymentMethod({
+        paymentMethod: input.paymentMethod,
+        paymentNumber: input.paymentNumber,
+        fallbackMethod: "qris"
+      })
+    );
     setCheckoutPaymentTotalCents(input.totalAmountCents);
     setCheckoutProviderFeeCents(input.providerFeeCents);
     setCheckoutPaymentExpiresAt(input.expiredAt);
@@ -729,9 +741,13 @@ export function AppSidebar({ user, ownerOnboardingStatus = null }: AppSidebarPro
                   </div>
                 ) : (
                   <div className="flex h-[280px] w-[280px] items-center justify-center rounded-[20px] border border-dashed border-border/50 bg-muted/30 dark:bg-muted/10">
-                    <p className="text-[13px] font-medium text-muted-foreground text-center px-6">
-                      Menyiapkan tautan bayar...<br />Dialihkan ke halaman billing jika gagal.
-                    </p>
+                    {checkoutPaymentNumber ? (
+                      <p className="break-all px-6 text-center text-[12px] font-medium text-foreground">{checkoutPaymentNumber}</p>
+                    ) : (
+                      <p className="px-6 text-center text-[13px] font-medium text-muted-foreground">
+                        Menyiapkan tautan bayar...<br />Dialihkan ke halaman billing jika gagal.
+                      </p>
+                    )}
                   </div>
                 )}
               </div>

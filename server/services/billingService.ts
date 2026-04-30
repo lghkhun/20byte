@@ -5,6 +5,7 @@ import { BillingChargeStatus, Prisma, Role, SubscriptionStatus } from "@prisma/c
 import { getLouvinConfig } from "@/lib/env";
 import { prisma } from "@/lib/db/prisma";
 import { acquireIdempotencyLock } from "@/lib/redis/idempotency";
+import { isLikelyQrisPayload } from "@/lib/payment/checkoutFallback";
 import { normalizeCheckoutCouponCode, resolveCouponForCheckout, type ResolvedCheckoutCoupon } from "@/server/services/platformCouponService";
 import { ServiceError } from "@/server/services/serviceError";
 
@@ -105,7 +106,9 @@ type PakasirCreateResponse = {
     fee?: number;
     total_payment?: number;
     payment_number?: string;
+    payment_method?: string;
     expired_at?: string;
+    qr_string?: string;
   };
 };
 
@@ -162,6 +165,47 @@ function parseJsonSafely(value: string): Record<string, unknown> | null {
   } catch {
     return null;
   }
+}
+
+export type NormalizedGatewayPayment = {
+  paymentNumber: string | null;
+  paymentMethod: string;
+  expiredAt: Date | null;
+  rawExpiredAt: string | null;
+};
+
+export function normalizeLouvinCreatePayment(input: {
+  payment: PakasirCreateResponse["payment"] | null | undefined;
+  fallbackMethod: string;
+  trace: string;
+}): NormalizedGatewayPayment {
+  const payment = input.payment ?? {};
+  const paymentNumber = ((payment.payment_number ?? "").trim() || (payment.qr_string ?? "").trim()) || null;
+  const paymentMethod = (payment.payment_method ?? "").trim().toLowerCase() || input.fallbackMethod;
+  const rawExpiredAt = payment.expired_at?.trim() || null;
+  const expiredAt = rawExpiredAt ? new Date(rawExpiredAt) : null;
+  const validExpiredAt = expiredAt && !Number.isNaN(expiredAt.getTime()) ? expiredAt : null;
+
+  if (!payment.payment_method || (!payment.payment_number && payment.qr_string)) {
+    // observability non-fatal for gateway payload inconsistencies
+    console.warn(
+      JSON.stringify({
+        level: "warn",
+        event: "louvin.checkout_payload_fallback",
+        trace: input.trace,
+        usedFallbackMethod: !payment.payment_method,
+        usedFallbackPaymentNumber: !payment.payment_number && Boolean(payment.qr_string),
+        inferredQrisPayload: isLikelyQrisPayload(paymentNumber)
+      })
+    );
+  }
+
+  return {
+    paymentNumber,
+    paymentMethod,
+    expiredAt: validExpiredAt,
+    rawExpiredAt
+  };
 }
 
 export function resolvePakasirCreateFailureMessage(input: {
@@ -790,6 +834,11 @@ export async function createBillingCheckout(input: {
     amount: totalAmountCents,
     method: paymentMethod
   });
+  const normalizedPayment = normalizeLouvinCreatePayment({
+    payment: gatewayPayload.payment,
+    fallbackMethod: paymentMethod,
+    trace: "billing_checkout"
+  });
   const paymentSummary = resolvePakasirPaymentSummary({
     payment: gatewayPayload.payment ?? null,
     fallbackRequestedAmountCents: totalAmountCents
@@ -804,7 +853,7 @@ export async function createBillingCheckout(input: {
         baseAmountCents,
         gatewayFeeCents,
         totalAmountCents,
-        paymentMethod,
+        paymentMethod: normalizedPayment.paymentMethod,
         gatewayProvider: "louvin",
         gatewayProjectSlug: "louvin",
         gatewayRawJson: JSON.stringify({
@@ -823,8 +872,8 @@ export async function createBillingCheckout(input: {
             finalAmountCents: totalAmountCents
           }
         }),
-        paymentNumber: gatewayPayload.payment?.payment_number ?? null,
-        expiredAt: gatewayPayload.payment?.expired_at ? new Date(gatewayPayload.payment.expired_at) : null,
+        paymentNumber: normalizedPayment.paymentNumber,
+        expiredAt: normalizedPayment.expiredAt,
         createdByUserId: input.actorUserId,
         appliedCouponCode: appliedCoupon?.code ?? null,
         couponDiscountCents: appliedCoupon?.discountCents ?? 0,
@@ -860,7 +909,12 @@ export async function createBillingCheckout(input: {
 
   return {
     charge,
-    payment: gatewayPayload.payment ?? null,
+    payment: {
+      ...(gatewayPayload.payment ?? {}),
+      payment_number: normalizedPayment.paymentNumber ?? undefined,
+      payment_method: normalizedPayment.paymentMethod,
+      expired_at: normalizedPayment.rawExpiredAt ?? undefined
+    },
     paymentSummary,
     selectedPlan,
     appliedCoupon
@@ -996,6 +1050,11 @@ export async function createBusinessProvisioningCheckout(input: {
     }
     throw error;
   }
+  const normalizedPayment = normalizeLouvinCreatePayment({
+    payment: gatewayPayload.payment,
+    fallbackMethod: paymentMethod,
+    trace: "business_provisioning_checkout"
+  });
   const paymentSummary = resolvePakasirPaymentSummary({
     payment: gatewayPayload.payment ?? null,
     fallbackRequestedAmountCents: finalTotalAmountCents
@@ -1011,7 +1070,7 @@ export async function createBusinessProvisioningCheckout(input: {
         baseAmountCents: selectedPlan.netBaseAmountCents,
         gatewayFeeCents: selectedPlan.gatewayFeeCents,
         totalAmountCents: finalTotalAmountCents,
-        paymentMethod,
+        paymentMethod: normalizedPayment.paymentMethod,
         gatewayProvider: "louvin",
         gatewayProjectSlug: "louvin",
         gatewayRawJson: JSON.stringify({
@@ -1030,8 +1089,8 @@ export async function createBusinessProvisioningCheckout(input: {
             finalAmountCents: finalTotalAmountCents
           }
         }),
-        paymentNumber: gatewayPayload.payment?.payment_number ?? null,
-        expiredAt: gatewayPayload.payment?.expired_at ? new Date(gatewayPayload.payment.expired_at) : null,
+        paymentNumber: normalizedPayment.paymentNumber,
+        expiredAt: normalizedPayment.expiredAt,
         appliedCouponCode: appliedCoupon?.code ?? null,
         couponDiscountCents: appliedCoupon?.discountCents ?? 0,
         couponSnapshotJson: appliedCoupon
@@ -1073,7 +1132,12 @@ export async function createBusinessProvisioningCheckout(input: {
 
   return {
     order: mapProvisioningOrderView(provisioningOrder),
-    payment: gatewayPayload.payment ?? null,
+    payment: {
+      ...(gatewayPayload.payment ?? {}),
+      payment_number: normalizedPayment.paymentNumber ?? undefined,
+      payment_method: normalizedPayment.paymentMethod,
+      expired_at: normalizedPayment.rawExpiredAt ?? undefined
+    },
     paymentSummary,
     selectedPlan,
     appliedCoupon

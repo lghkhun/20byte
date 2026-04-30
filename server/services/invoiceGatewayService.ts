@@ -12,6 +12,7 @@ import {
 
 import { getLouvinConfig } from "@/lib/env";
 import { prisma } from "@/lib/db/prisma";
+import { isLikelyQrisPayload } from "@/lib/payment/checkoutFallback";
 import { acquireIdempotencyLock } from "@/lib/redis/idempotency";
 import { publishInvoicePaidEvent, publishInvoiceUpdatedEvent } from "@/lib/ably/publisher";
 import { syncConversationCrmStageFromInvoice } from "@/server/services/crmPipelineService";
@@ -56,6 +57,7 @@ type LouvinCreateResponse = {
   };
   payment?: {
     order_id?: string;
+    payment_method?: string;
     amount?: number;
     fee?: number;
     payment_number?: string;
@@ -172,6 +174,41 @@ function parseBankAccountsJson(raw: string | null | undefined): BankAccountSnaps
   } catch {
     return [];
   }
+}
+
+type NormalizedGatewayPayment = {
+  paymentNumber: string | null;
+  paymentMethod: string;
+  expiredAt: Date | null;
+  rawExpiredAt: string | null;
+};
+
+function normalizeGatewayPayment(input: {
+  payment: LouvinCreateResponse["payment"] | null | undefined;
+  fallbackMethod: string;
+  trace: string;
+}): NormalizedGatewayPayment {
+  const payment = input.payment ?? {};
+  const paymentNumber = ((payment.payment_number ?? "").trim() || (payment.qr_string ?? "").trim() || (payment.va_number ?? "").trim()) || null;
+  const paymentMethod = (payment.payment_method ?? "").trim().toLowerCase() || input.fallbackMethod;
+  const rawExpiredAt = payment.expired_at?.trim() || null;
+  const date = rawExpiredAt ? new Date(rawExpiredAt) : null;
+  const expiredAt = date && !Number.isNaN(date.getTime()) ? date : null;
+
+  if (!payment.payment_method || (!payment.payment_number && (payment.qr_string || payment.va_number))) {
+    console.warn(
+      JSON.stringify({
+        level: "warn",
+        event: "louvin.payment_payload_fallback",
+        trace: input.trace,
+        usedFallbackMethod: !payment.payment_method,
+        usedFallbackPaymentNumber: !payment.payment_number && Boolean(payment.qr_string || payment.va_number),
+        inferredQrisPayload: isLikelyQrisPayload(paymentNumber)
+      })
+    );
+  }
+
+  return { paymentNumber, paymentMethod, expiredAt, rawExpiredAt };
 }
 
 export async function getOrgInvoicePaymentSettings(orgId: string): Promise<OrgInvoicePaymentSettings> {
@@ -515,10 +552,14 @@ export async function createPublicInvoicePaymentAttempt(input: {
     amount: customerPayableCents,
     method
   });
+  const normalizedPayment = normalizeGatewayPayment({
+    payment: gatewayPayload.payment,
+    fallbackMethod: method,
+    trace: "public_invoice_payment_attempt"
+  });
 
-  const payment = gatewayPayload.payment ?? {};
-  const paymentNumber = typeof payment.payment_number === "string" ? payment.payment_number : "";
-  const expiredAt = payment.expired_at ? new Date(payment.expired_at) : null;
+  const paymentNumber = normalizedPayment.paymentNumber ?? "";
+  const expiredAt = normalizedPayment.expiredAt;
 
   const attempt = await prisma.$transaction(async (tx) => {
     await tx.invoicePaymentAttempt.updateMany({
@@ -538,7 +579,7 @@ export async function createPublicInvoicePaymentAttempt(input: {
         invoiceId: invoice.id,
         orderId,
         provider: "louvin",
-        paymentMethod: method,
+        paymentMethod: normalizedPayment.paymentMethod,
         feePolicy: settings.feePolicy,
         invoiceAmountCents: invoice.totalCents,
         feeCents,
@@ -836,6 +877,11 @@ export async function createWalletTopup(input: {
     amount: amountCents,
     method: paymentMethod
   });
+  const normalizedPayment = normalizeGatewayPayment({
+    payment: gatewayPayload.payment,
+    fallbackMethod: paymentMethod,
+    trace: "wallet_topup_checkout"
+  });
 
   const created = await prisma.orgWalletTopup.create({
     data: {
@@ -844,10 +890,10 @@ export async function createWalletTopup(input: {
       amountCents,
       feeCents: 0,
       customerPayableCents: amountCents,
-      paymentMethod,
-      paymentNumber: gatewayPayload.payment?.payment_number ?? null,
+      paymentMethod: normalizedPayment.paymentMethod,
+      paymentNumber: normalizedPayment.paymentNumber,
       status: WalletTopupStatus.PENDING,
-      expiresAt: gatewayPayload.payment?.expired_at ? new Date(gatewayPayload.payment.expired_at) : null,
+      expiresAt: normalizedPayment.expiredAt,
       gatewayRawJson: JSON.stringify({ create: gatewayPayload }),
       createdByUserId: input.actorUserId
     },

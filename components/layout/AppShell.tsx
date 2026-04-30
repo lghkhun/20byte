@@ -12,6 +12,7 @@ import { Button } from "@/components/ui/button";
 import { ThemeToggle } from "@/components/ui/theme-toggle";
 import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar";
 import { fetchJsonCached, invalidateFetchCache } from "@/lib/client/fetchCache";
+import { resolveCheckoutPaymentMethod } from "@/lib/payment/checkoutFallback";
 import type { OwnerOnboardingStatus } from "@/server/services/onboardingService";
 
 type AppShellProps = {
@@ -247,7 +248,12 @@ export function AppShell({ user, ownerOnboardingStatus = null, children }: AppSh
   const [checkoutPaymentExpiresAt, setCheckoutPaymentExpiresAt] = useState<string | null>(null);
   const [checkoutQrDataUrl, setCheckoutQrDataUrl] = useState<string | null>(null);
   const [checkoutNowMs, setCheckoutNowMs] = useState(() => Date.now());
-  const isQrisPayment = (checkoutPaymentMethod ?? "").toLowerCase() === "qris";
+  const isQrisPayment =
+    resolveCheckoutPaymentMethod({
+      paymentMethod: checkoutPaymentMethod,
+      paymentNumber: checkoutPaymentNumber,
+      fallbackMethod: "qris"
+    }) === "qris";
   const lastLockStateRef = useRef<{ checkedAt: number; state: LockModalState | null } | null>(null);
 
   const isPublicInvoiceRoute = pathname.startsWith("/i/");
@@ -409,7 +415,13 @@ export function AppShell({ user, ownerOnboardingStatus = null, children }: AppSh
 
       if (latestPending) {
         setCheckoutPaymentNumber(latestPending.paymentNumber);
-        setCheckoutPaymentMethod(latestPending.paymentMethod);
+        setCheckoutPaymentMethod(
+          resolveCheckoutPaymentMethod({
+            paymentMethod: latestPending.paymentMethod,
+            paymentNumber: latestPending.paymentNumber,
+            fallbackMethod: "qris"
+          })
+        );
         setCheckoutPaymentTotalCents(latestPending.payableAmountCents ?? latestPending.totalAmountCents);
         setCheckoutPaymentExpiresAt(latestPending.expiredAt);
         setCheckoutNowMs(Date.now());
@@ -430,7 +442,13 @@ export function AppShell({ user, ownerOnboardingStatus = null, children }: AppSh
       }
 
       setCheckoutPaymentNumber(payload?.data?.payment?.payment_number ?? null);
-      setCheckoutPaymentMethod(payload?.data?.payment?.payment_method ?? null);
+      setCheckoutPaymentMethod(
+        resolveCheckoutPaymentMethod({
+          paymentMethod: payload?.data?.payment?.payment_method ?? null,
+          paymentNumber: payload?.data?.payment?.payment_number ?? null,
+          fallbackMethod: "qris"
+        })
+      );
       setCheckoutPaymentTotalCents(
         payload?.data?.paymentSummary?.payableAmountCents ??
           payload?.data?.payment?.total_payment ??
@@ -567,7 +585,7 @@ export function AppShell({ user, ownerOnboardingStatus = null, children }: AppSh
                             <Image src={checkoutQrDataUrl} alt="QR pembayaran" width={240} height={240} unoptimized className="object-contain" />
                           </div>
                         ) : (
-                          <p className="text-sm font-semibold text-foreground">Kode bayar: {checkoutPaymentNumber}</p>
+                          <p className="break-all text-sm font-semibold text-foreground">Kode bayar: {checkoutPaymentNumber}</p>
                         )}
                       </div>
                       <div className="mt-3 space-y-1.5 text-sm">
