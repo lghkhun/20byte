@@ -4,7 +4,7 @@ import type { NextRequest, NextResponse } from "next/server";
 import { getAuthSecret } from "@/lib/env";
 
 export const SESSION_COOKIE_NAME = "session_token";
-const SESSION_TTL_SECONDS = 60 * 60 * 24 * 7;
+const SESSION_TTL_SECONDS = 60 * 60 * 24 * 3;
 
 export type SessionPayload = {
   userId: string;
